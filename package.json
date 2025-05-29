@@ -1,14 +1,28 @@
 {
   "name": "teamxray",
   "displayName": "MCP Team X-Ray",
-  "description": "Analyze team expertise using GitHub MCP commands and AI analysis",
+  "description": "Human discovery through code analysis - reveal team expertise, communication styles, and hidden strengths using GitHub MCP integration",
   "version": "0.0.1",
   "publisher": "alacolombiadev",
+  "author": {
+    "name": "alacolombiadev"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AndreaGriffiths11/mcp-team-xray"
+  },
+  "bugs": {
+    "url": "https://github.com/AndreaGriffiths11/mcp-team-xray/issues"
+  },
+  "homepage": "https://github.com/AndreaGriffiths11/mcp-team-xray#readme",
   "engines": {
     "vscode": "^1.100.0"
   },
   "categories": [
-    "Other"
+    "Other",
+    "Data Science",
+    "Machine Learning"
   ],
   "keywords": [
     "team",
@@ -17,8 +31,16 @@
     "mcp",
     "ai",
     "analysis",
-    "collaboration"
+    "collaboration",
+    "human-discovery",
+    "copilot",
+    "team-insights"
   ],
+  "galleryBanner": {
+    "color": "#007ACC",
+    "theme": "dark"
+  },
+  "icon": "resources/icon.png",
   "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {

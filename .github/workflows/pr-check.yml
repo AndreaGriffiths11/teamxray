@@ -1,0 +1,110 @@
+name: PR Quality Check
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  quality-check:
+    name: Code Quality & Extension Validation
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout PR code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: TypeScript type checking
+      run: npx tsc --noEmit
+      
+    - name: ESLint code quality
+      run: npm run lint
+      
+    - name: Build extension
+      run: npm run compile
+      
+    - name: Validate extension package
+      run: |
+        npm install -g @vscode/vsce
+        vsce package --no-dependencies
+        
+    - name: Check package.json validity
+      run: |
+        node -e "
+          const pkg = require('./package.json');
+          if (!pkg.publisher) throw new Error('Missing publisher in package.json');
+          if (!pkg.version) throw new Error('Missing version in package.json');
+          if (!pkg.engines?.vscode) throw new Error('Missing vscode engine requirement');
+          console.log('✅ Package.json validation passed');
+        "
+        
+    - name: Validate MCP configuration
+      run: |
+        if [ ! -f ".vscode/mcp.json" ]; then
+          echo "❌ Missing .vscode/mcp.json configuration"
+          exit 1
+        fi
+        echo "✅ MCP configuration found"
+        
+    - name: Check for sensitive data
+      run: |
+        # Check for potential secrets or API keys
+        if grep -r "ghp_\|github_pat_\|sk-" src/ --exclude-dir=node_modules || true; then
+          echo "⚠️  Potential secrets detected in source code"
+          echo "Please ensure no API keys are committed"
+        fi
+        
+    - name: Extension size check
+      run: |
+        VSIX_SIZE=$(stat -c%s *.vsix)
+        MAX_SIZE=$((50 * 1024 * 1024))  # 50MB limit
+        if [ $VSIX_SIZE -gt $MAX_SIZE ]; then
+          echo "❌ Extension package too large: $(($VSIX_SIZE / 1024 / 1024))MB (max 50MB)"
+          exit 1
+        fi
+        echo "✅ Extension size OK: $(($VSIX_SIZE / 1024 / 1024))MB"
+        
+    - name: Comment PR with results
+      uses: actions/github-script@v7
+      if: always()
+      with:
+        script: |
+          const fs = require('fs');
+          const vsixFiles = fs.readdirSync('.').filter(f => f.endsWith('.vsix'));
+          const vsixFile = vsixFiles[0] || 'Not generated';
+          
+          const body = `## 🔍 Extension Quality Check Results
+          
+          ### ✅ Validation Status
+          - **TypeScript Compilation**: ${{ job.status == 'success' && '✅ Passed' || '❌ Failed' }}
+          - **ESLint Quality Check**: ${{ job.status == 'success' && '✅ Passed' || '❌ Failed' }}
+          - **Extension Packaging**: ${{ job.status == 'success' && '✅ Passed' || '❌ Failed' }}
+          - **Configuration Check**: ${{ job.status == 'success' && '✅ Passed' || '❌ Failed' }}
+          
+          ### 📦 Extension Details
+          - **Generated VSIX**: \`${vsixFile}\`
+          - **Publisher**: Ready for marketplace submission
+          - **MCP Integration**: Configured for GitHub MCP Server
+          
+          ### 🎯 Next Steps
+          ${job.status == 'success' 
+            ? '✨ This PR is ready to merge! The extension builds successfully and passes all quality checks.' 
+            : '🔧 Please fix the issues above before merging.'}
+          `;
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: body
+          });
