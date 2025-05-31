@@ -71,6 +71,80 @@ Discover who naturally gravitates toward:
 2. Run "Team X-Ray: Analyze Team Expertise"
 3. Browse comprehensive team insights in the sidebar
 
+## Developer Setup
+
+### Prerequisites
+- **Node.js 18+** and **npm**
+- **VS Code 1.100.0+**
+- **Git** with a GitHub repository to analyze
+
+### Local Development
+
+1. **Clone and Install**
+   ```bash
+   git clone https://github.com/your-username/mcp-team-xray.git
+   cd mcp-team-xray
+   npm install
+   ```
+
+2. **Set Up GitHub Token**
+   ```bash
+   # Create a GitHub Personal Access Token with repo access
+   # Add to your shell profile (.zshrc, .bashrc, etc.)
+   export GITHUB_TOKEN="your_github_token_here"
+   
+   # Or set in VS Code settings.json:
+   {
+     "teamxray.githubToken": "your_github_token_here"
+   }
+   ```
+
+3. **Build and Test**
+   ```bash
+   # Build the extension
+   npm run compile
+   
+   # Run in debug mode
+   # Press F5 in VS Code to launch Extension Development Host
+   # Open a GitHub repository in the new window to test
+   ```
+
+4. **Package for Distribution** *(Optional)*
+   ```bash
+   # Install VSCE (Visual Studio Code Extension manager)
+   npm install -g @vscode/vsce
+   
+   # Package the extension
+   npm run package
+   
+   # Creates teamxray-{version}.vsix file
+   ```
+
+### Testing the Extension
+
+1. **Press F5** in VS Code to launch the Extension Development Host
+2. **Open a GitHub repository** in the new VS Code window
+3. **Test core commands**:
+   - `Ctrl+Shift+P` → "Team X-Ray: Analyze Team Expertise"
+   - Right-click any file → "Find Subject Matter Expert"
+   - Check the Team X-Ray sidebar panel
+
+### Development Commands
+
+```bash
+npm run compile        # Compile TypeScript
+npm run watch         # Watch mode for development
+npm run package       # Create .vsix package
+npm run lint          # Run ESLint
+```
+
+### Troubleshooting
+
+- **"No GitHub token"**: Set `GITHUB_TOKEN` environment variable or VS Code setting
+- **"MCP connection failed"**: Extension falls back to local Git analysis
+- **"No analysis data"**: Ensure you're in a Git repository with commit history
+- **Debug logs**: Check "Team X-Ray" output channel in VS Code
+
 ## How It Works
 
 MCP Team X-Ray combines multiple data sources for human-centered analysis:
