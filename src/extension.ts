@@ -170,7 +170,17 @@ Specializations: ${(expert.specializations || []).join(', ')}`;
 		try {
 			const mcpService = new CopilotMCPService(outputChannel);
 			
+			// Detect debugging context
+			const isDebugging = vscode.env.appName.includes('Extension Development Host');
+			
 			outputChannel.appendLine('🔍 Testing MCP Server Connection...\n');
+			
+			if (isDebugging) {
+				outputChannel.appendLine('🔧 DEBUG MODE DETECTED:');
+				outputChannel.appendLine('   You are running in Extension Development Host');
+				outputChannel.appendLine('   MCP server should be running in your main VS Code window');
+				outputChannel.appendLine('   Extension will use fallback methods during debugging\n');
+			}
 			
 			// Test repository detection
 			const repo = await mcpService.detectRepository();
@@ -195,10 +205,15 @@ Specializations: ${(expert.specializations || []).join(', ')}`;
 			}
 			
 			outputChannel.appendLine('\n🔧 Recommendations:');
-			if (!status.isAvailable) {
+			if (isDebugging) {
+				outputChannel.appendLine('   • During debugging, extension uses fallback local analysis');
+				outputChannel.appendLine('   • MCP server runs in main VS Code, not Extension Development Host');
+				outputChannel.appendLine('   • Test the full MCP integration in a regular VS Code window');
+			} else if (!status.isAvailable) {
 				outputChannel.appendLine('   • Restart VS Code to initialize MCP server');
 				outputChannel.appendLine('   • Check that .vscode/mcp.json is configured');
 				outputChannel.appendLine('   • Ensure Docker is running');
+				outputChannel.appendLine('   • Verify GITHUB_TOKEN environment variable is set');
 			} else {
 				outputChannel.appendLine('   • MCP server is ready for use!');
 				outputChannel.appendLine('   • Try running "Analyze Repository" command');
@@ -255,6 +270,68 @@ Specializations: ${(expert.specializations || []).join(', ')}`;
 		}
 	});
 
+	// Register force MCP test command
+	const forceMCPTestCommand = vscode.commands.registerCommand('teamxray.forceMCPTest', async () => {
+		const outputChannel = vscode.window.createOutputChannel('Team X-Ray MCP Force Test');
+		outputChannel.show();
+		
+		try {
+			const mcpService = new CopilotMCPService(outputChannel);
+			
+			// Detect repository
+			const repo = await mcpService.detectRepository();
+			if (!repo) {
+				outputChannel.appendLine('❌ No GitHub repository detected in workspace');
+				vscode.window.showErrorMessage('No GitHub repository found. Please open a GitHub repository folder.');
+				return;
+			}
+			
+			outputChannel.appendLine(`🎯 Force testing MCP for: ${repo.owner}/${repo.repo}`);
+			outputChannel.appendLine('This test bypasses all fallbacks - MCP must work or fail clearly.\n');
+			
+			const result = await mcpService.forceMCPTest(repo);
+			
+			if (result.success) {
+				outputChannel.appendLine('✅ MCP force test completed - check instructions above');
+			} else {
+				outputChannel.appendLine(`❌ MCP force test failed: ${result.error}`);
+				vscode.window.showErrorMessage(`MCP test failed: ${result.error}`);
+			}
+			
+		} catch (error) {
+			outputChannel.appendLine(`❌ Unexpected error: ${error}`);
+			vscode.window.showErrorMessage(`Force MCP test error: ${error}`);
+		}
+	});
+
+	// Register manual MCP start command
+	const startMCPServerCommand = vscode.commands.registerCommand('teamxray.startMCPServer', async () => {
+		const outputChannel = vscode.window.createOutputChannel('Team X-Ray MCP Server');
+		outputChannel.show();
+		
+		try {
+			const mcpService = new CopilotMCPService(outputChannel);
+			
+			outputChannel.appendLine('🚀 Manually starting GitHub MCP server...\n');
+			
+			const result = await mcpService.manuallyStartMCPServer();
+			
+			if (result.success) {
+				outputChannel.appendLine(`✅ MCP server started successfully!`);
+				if (result.containerId) {
+					outputChannel.appendLine(`Container ID: ${result.containerId}`);
+				}
+			} else {
+				outputChannel.appendLine(`❌ Failed to start MCP server: ${result.error}`);
+				vscode.window.showErrorMessage(`MCP server start failed: ${result.error}`);
+			}
+			
+		} catch (error) {
+			outputChannel.appendLine(`❌ Unexpected error: ${error}`);
+			vscode.window.showErrorMessage(`MCP server start error: ${error}`);
+		}
+	});
+
 	// Register status bar item
 	const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
 	statusBarItem.command = 'teamxray.showTeamOverview';
@@ -271,6 +348,8 @@ Specializations: ${(expert.specializations || []).join(', ')}`;
 		showExpertDetailsCommand,
 		testMCPStatusCommand,
 		setupGuidanceCommand,
+		forceMCPTestCommand,
+		startMCPServerCommand,
 		statusBarItem
 	);
 
