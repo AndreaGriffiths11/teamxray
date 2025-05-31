@@ -4,7 +4,9 @@ node_modules
 .vscode-test/
 *.vsix
 
-# Environment files with sensitive credentials
+# Environment files (contain sensitive tokens)
 .env
+.env.*
+!.env.example
 .github/.env
 **/.env

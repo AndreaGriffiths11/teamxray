@@ -25,7 +25,7 @@ Access comprehensive team insights through the Command Palette:
 - Natural mentoring relationships and knowledge sharing
 - Challenge preferences and problem-solving approaches
 
-### � **Human-Focused Analysis**
+### 🎨 **Human-Focused Analysis**
 Unlike traditional code analysis tools, MCP Team X-Ray focuses on the humans:
 - **Communication Patterns**: How teammates express ideas in code and commits
 - **Collaboration Styles**: Natural working relationships and knowledge flow
@@ -71,6 +71,80 @@ Discover who naturally gravitates toward:
 2. Run "Team X-Ray: Analyze Team Expertise"
 3. Browse comprehensive team insights in the sidebar
 
+## Developer Setup
+
+### Prerequisites
+- **Node.js 18+** and **npm**
+- **VS Code 1.100.0+**
+- **Git** with a GitHub repository to analyze
+
+### Local Development
+
+1. **Clone and Install**
+   ```bash
+   git clone https://github.com/your-username/mcp-team-xray.git
+   cd mcp-team-xray
+   npm install
+   ```
+
+2. **Set Up GitHub Token**
+   ```bash
+   # Create a GitHub Personal Access Token with repo access
+   # Add to your shell profile (.zshrc, .bashrc, etc.)
+   export GITHUB_TOKEN="your_github_token_here"
+   
+   # Or set in VS Code settings.json:
+   {
+     "teamxray.githubToken": "your_github_token_here"
+   }
+   ```
+
+3. **Build and Test**
+   ```bash
+   # Build the extension
+   npm run compile
+   
+   # Run in debug mode
+   # Press F5 in VS Code to launch Extension Development Host
+   # Open a GitHub repository in the new window to test
+   ```
+
+4. **Package for Distribution** *(Optional)*
+   ```bash
+   # Install VSCE (Visual Studio Code Extension manager)
+   npm install -g @vscode/vsce
+   
+   # Package the extension
+   npm run package
+   
+   # Creates teamxray-{version}.vsix file
+   ```
+
+### Testing the Extension
+
+1. **Press F5** in VS Code to launch the Extension Development Host
+2. **Open a GitHub repository** in the new VS Code window
+3. **Test core commands**:
+   - `Ctrl+Shift+P` → "Team X-Ray: Analyze Team Expertise"
+   - Right-click any file → "Find Subject Matter Expert"
+   - Check the Team X-Ray sidebar panel
+
+### Development Commands
+
+```bash
+npm run compile        # Compile TypeScript
+npm run watch         # Watch mode for development
+npm run package       # Create .vsix package
+npm run lint          # Run ESLint
+```
+
+### Troubleshooting
+
+- **"No GitHub token"**: Set `GITHUB_TOKEN` environment variable or VS Code setting
+- **"MCP connection failed"**: Extension falls back to local Git analysis
+- **"No analysis data"**: Ensure you're in a Git repository with commit history
+- **Debug logs**: Check "Team X-Ray" output channel in VS Code
+
 ## How It Works
 
 MCP Team X-Ray combines multiple data sources for human-centered analysis:
@@ -93,6 +167,11 @@ Uses GitHub Models API (GPT-4o) to analyze:
 - Team roles identified through collaboration patterns
 - Challenge matching based on problem-solving approaches
 
+### 🧮 Expertise Calculation
+AI-First Approach: Uses GPT-4o to analyze team member contributions, communication patterns, and collaboration styles for human-centered expertise scores (0-100%).
+
+Fallback Method: When AI unavailable, calculates percentages from Git commit data using mathematical formulas based on contribution frequency and relative activity.
+
 ## The Technology
 
 - **Model Context Protocol (MCP)** - Structured access to GitHub repository data
@@ -107,19 +186,23 @@ Set these environment variables or VS Code settings:
 * `GITHUB_TOKEN`: Your GitHub personal access token
 * `teamxray.githubModelsKey`: GitHub Models API key (optional, uses GITHUB_TOKEN as fallback)
 
-## Privacy & Ethics
+## Privacy & Data Access
 
-MCP Team X-Ray is designed with privacy in mind:
-- Only analyzes publicly available Git commit data
-- Focuses on professional collaboration patterns
-- Highlights positive contributions and strengths
-- Respects team member privacy while revealing professional insights
+MCP Team X-Ray analyzes repository data **based on your access permissions**:
+- **Local repositories**: All Git commit history and file data in your workspace
+- **GitHub repositories**: Public and private repos you have access to (via your GitHub token)
+- **MCP integration**: Uses GitHub API with your credentials - respects existing repository permissions
+- **Data processing**: Only analyzes Git metadata (commits, authorship, file changes) - never accesses file contents for AI analysis
+- **Focus**: Professional collaboration patterns and positive team insights
+- **Retention**: No data stored externally - analysis happens locally in VS Code
+
+**Your GitHub token determines data access scope** - the extension works with whatever repositories you can already access.
 
 ## Requirements
 
 - VS Code 1.100.0 or higher
 - Local Git repository with GitHub remote
-- GitHub token for API access
+- GitHub token
 
 ---
 

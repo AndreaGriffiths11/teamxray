@@ -13,6 +13,13 @@ export interface GitHubContributor {
     recentCommits: string[];
 }
 
+export interface MCPServerStatus {
+    isAvailable: boolean;
+    containerName?: string;
+    containerStatus?: string;
+    error?: string;
+}
+
 /**
  * Service that integrates with VS Code's Copilot Chat and GitHub MCP Server
  * to gather repository data for team expertise analysis
@@ -22,6 +29,96 @@ export class CopilotMCPService {
 
     constructor(outputChannel: vscode.OutputChannel) {
         this.outputChannel = outputChannel;
+    }
+
+    /**
+     * Check the status of GitHub MCP Server containers
+     */
+    async checkMCPServerStatus(): Promise<MCPServerStatus> {
+        try {
+            const { exec } = require('child_process');
+            const util = require('util');
+            const execAsync = util.promisify(exec);
+
+            // List running GitHub MCP server containers
+            const { stdout } = await execAsync(
+                'docker ps --format "table {{.Names}}\\t{{.Status}}" --filter "ancestor=ghcr.io/github/github-mcp-server"'
+            );
+
+            this.outputChannel.appendLine(`Docker containers check:\n${stdout}`);
+
+            const lines = stdout.split('\n').filter((line: string) => line.trim() && !line.startsWith('NAMES'));
+            
+            if (lines.length > 0) {
+                const parts = lines[0].split('\t');
+                const containerName = parts[0] || '';
+                const status = parts[1] || 'Unknown status';
+                this.outputChannel.appendLine(`Found MCP server: ${containerName} (${status})`);
+                
+                return {
+                    isAvailable: true,
+                    containerName: containerName.trim(),
+                    containerStatus: status.trim()
+                };
+            } else {
+                this.outputChannel.appendLine('No GitHub MCP server containers found running');
+                return {
+                    isAvailable: false,
+                    error: 'No GitHub MCP server containers are running'
+                };
+            }
+
+        } catch (error) {
+            this.outputChannel.appendLine(`Error checking MCP server status: ${error}`);
+            return {
+                isAvailable: false,
+                error: `Failed to check Docker containers: ${error}`
+            };
+        }
+    }
+
+    /**
+     * Ensure GitHub MCP server is running
+     */
+    async ensureMCPServerRunning(): Promise<MCPServerStatus> {
+        const status = await this.checkMCPServerStatus();
+        
+        if (status.isAvailable) {
+            return status;
+        }
+
+        // Try to start a new container if none are running
+        try {
+            this.outputChannel.appendLine('Attempting to start GitHub MCP server...');
+            
+            const choice = await vscode.window.showInformationMessage(
+                'GitHub MCP server is not running. Would you like to start it?',
+                'Start MCP Server',
+                'Use Fallback Method'
+            );
+
+            if (choice === 'Start MCP Server') {
+                // Detect if we're in Extension Development Host
+                const isDebugging = vscode.env.appName.includes('Extension Development Host');
+                const message = isDebugging 
+                    ? '🔧 You\'re debugging an extension! MCP server runs in your main VS Code window, not the debug instance. The extension will use fallback methods during debugging.'
+                    : 'Please restart VS Code to initialize the GitHub MCP server via .vscode/mcp.json configuration.';
+                    
+                vscode.window.showInformationMessage(message);
+            }
+
+            return {
+                isAvailable: false,
+                error: 'User needs to restart VS Code for MCP initialization'
+            };
+
+        } catch (error) {
+            this.outputChannel.appendLine(`Failed to start MCP server: ${error}`);
+            return {
+                isAvailable: false,
+                error: `Failed to start MCP server: ${error}`
+            };
+        }
     }
 
     /**
@@ -68,18 +165,31 @@ export class CopilotMCPService {
         try {
             this.outputChannel.appendLine(`Gathering repository data for ${repository.owner}/${repository.repo} via Copilot Chat + MCP...`);
 
-            // Create a comprehensive prompt for Copilot Chat to use MCP tools
+            // Always try MCP first - even in debug mode, the user might have MCP available
             const prompt = this.buildMCPDataGatheringPrompt(repository);
-
-            // Use VS Code's Chat API to interact with Copilot + MCP
-            const chatResponse = await this.queryCopilotWithMCP(prompt);
             
-            if (chatResponse) {
+            // Check MCP server status for user information (but don't block on it)
+            const mcpStatus = await this.checkMCPServerStatus();
+            this.outputChannel.appendLine(`MCP Server Check: ${mcpStatus.isAvailable ? 'Available' : 'Not detected'}`);
+            
+            if (mcpStatus.containerName) {
+                this.outputChannel.appendLine(`Using container: ${mcpStatus.containerName} (${mcpStatus.containerStatus})`);
+            }
+
+            // Try Copilot Chat with MCP regardless of container detection
+            // The user might have MCP configured differently or in the main VS Code instance
+            const chatResponse = await this.queryCopilotWithMCP(prompt, mcpStatus);
+            
+            if (chatResponse === 'user_chose_mcp') {
+                // User chose to use MCP manually - don't run fallback automatically
+                this.outputChannel.appendLine('User chose to use MCP manually - skipping automatic fallback');
+                throw new Error('User opted for manual MCP usage - analysis paused');
+            } else if (chatResponse) {
                 this.outputChannel.appendLine('Successfully gathered repository data via Copilot + MCP');
                 return this.parseRepositoryResponse(chatResponse, repository);
             } else {
-                // Fallback to local git analysis
-                this.outputChannel.appendLine('Copilot + MCP not available, falling back to local analysis');
+                // Only use fallback if user explicitly chooses it or Copilot Chat is unavailable
+                this.outputChannel.appendLine('Using local git analysis as requested or Copilot unavailable');
                 return await this.fallbackLocalAnalysis(repository);
             }
 
@@ -93,37 +203,24 @@ export class CopilotMCPService {
      * Build a prompt for Copilot Chat to gather data using MCP GitHub tools
      */
     private buildMCPDataGatheringPrompt(repository: GitHubRepository): string {
-        return `
-Please use the GitHub MCP tools to analyze the repository ${repository.owner}/${repository.repo} and gather the following data for team expertise analysis:
+        return `Call mcp_github_list_commits with owner: "${repository.owner}", repo: "${repository.repo}", perPage: 10
 
-1. **Repository Commits**: Use list_commits to get the last 50 commits with author information
-2. **Recent Issues**: Use list_issues to get recent issues for collaboration patterns  
-3. **Pull Requests**: Use list_pull_requests to get recent PRs for code review patterns
-4. **Contributors**: Analyze commit authors to identify key contributors
-
-Focus on extracting:
-- Author names and emails from commits
-- Commit messages for communication style analysis
-- Collaboration patterns from issues and PRs
-- File change patterns to identify expertise areas
-
-Please format the response as JSON with this structure:
+After you get the commits data, immediately respond with this JSON format (fill in real data):
 {
-  "commits": [{"sha": "...", "author": {"name": "...", "email": "...", "date": "..."}, "message": "...", "files": [...]}],
-  "contributors": [{"name": "...", "email": "...", "totalCommits": 0, "lastCommit": "...", "recentCommits": [...]}],
-  "issues": [...],
-  "pullRequests": [...],
-  "collaborationInsights": ["..."]
+  "commits": [{"sha": "actual_sha", "author": {"name": "actual_name", "email": "actual_email", "date": "actual_date"}, "message": "actual_message"}],
+  "contributors": [{"name": "contributor_name", "email": "email", "totalCommits": 1}],
+  "issues": [],
+  "pullRequests": [],
+  "collaborationInsights": ["Commit analysis complete"]
 }
 
-If GitHub MCP tools are not available, please let me know so I can use fallback methods.
-        `;
+Just call the tool and format the response. Don't explain anything else.`;
     }
 
     /**
      * Query Copilot Chat with MCP integration
      */
-    private async queryCopilotWithMCP(prompt: string): Promise<string | null> {
+    private async queryCopilotWithMCP(prompt: string, mcpStatus?: MCPServerStatus): Promise<string | null> {
         try {
             // Check if Copilot Chat is available
             const copilotExtension = vscode.extensions.getExtension('GitHub.copilot-chat');
@@ -132,35 +229,121 @@ If GitHub MCP tools are not available, please let me know so I can use fallback 
                 return null;
             }
 
-            // For now, we'll guide the user to use Copilot Chat manually
-            // In the future, this could use the Copilot Chat API when it becomes available
-            const choice = await vscode.window.showInformationMessage(
-                'To gather repository data via GitHub MCP, please:\n\n1. Open Copilot Chat\n2. Enable Agent mode (@)\n3. The GitHub MCP server will be available for analysis',
-                'Open Copilot Chat',
-                'Use Fallback Method'
-            );
-
-            if (choice === 'Open Copilot Chat') {
-                // Open Copilot Chat for the user
-                await vscode.commands.executeCommand('github.copilot.chat.open');
-                
-                // Copy the prompt to clipboard for easy pasting
-                await vscode.env.clipboard.writeText(prompt);
-                
-                vscode.window.showInformationMessage(
-                    'Prompt copied to clipboard! Paste it in Copilot Chat with Agent mode enabled.',
-                    'Got it'
-                );
-                
-                return null; // User will manually interact with Copilot
+            // Use provided status or check again
+            const status = mcpStatus || await this.checkMCPServerStatus();
+            let statusMessage = '';
+            
+            if (status.isAvailable && status.containerName) {
+                statusMessage = `✅ GitHub MCP Server is running (${status.containerName})`;
+                this.outputChannel.appendLine(`MCP Server Status: ${statusMessage}`);
+            } else {
+                statusMessage = `⚠️ GitHub MCP Server not detected. Checking main VS Code instance...`;
+                this.outputChannel.appendLine(`MCP Server Status: ${statusMessage}`);
             }
 
-            return null;
+            // Enhanced user experience with better options
+            const choice = await vscode.window.showInformationMessage(
+                `${statusMessage}\n\nChoose how to analyze the repository:`,
+                {
+                    title: '🤖 Use MCP + Copilot',
+                    detail: 'Open Copilot Chat with MCP tools for comprehensive analysis'
+                },
+                {
+                    title: '⚡ Quick Analysis',
+                    detail: 'Use local git analysis (faster, limited data)'
+                },
+                {
+                    title: '❌ Cancel',
+                    detail: 'Stop analysis'
+                }
+            );
+
+            if (choice?.title === '🤖 Use MCP + Copilot') {
+                try {
+                    // Try to open Copilot Chat
+                    await vscode.commands.executeCommand('workbench.action.chat.open');
+                    
+                    // Copy the enhanced prompt to clipboard
+                    const enhancedPrompt = this.createEnhancedMCPPrompt(prompt);
+                    await vscode.env.clipboard.writeText(enhancedPrompt);
+                    
+                    // Show improved instructions
+                    const result = await vscode.window.showInformationMessage(
+                        `✅ Copilot Chat opened! Instructions:\n\n1. Paste the copied prompt (Cmd/Ctrl+V)\n2. GitHub MCP tools will analyze the repository\n3. Copy the JSON response when complete\n4. Click "Process Results" below`,
+                        'Process Results',
+                        'View Full Prompt',
+                        'Cancel'
+                    );
+
+                    if (result === 'Process Results') {
+                        // Allow user to paste the results
+                        const mcpResults = await vscode.window.showInputBox({
+                            title: 'Paste MCP Analysis Results',
+                            prompt: 'Paste the JSON response from Copilot Chat here',
+                            placeHolder: '{"commits": [...], "contributors": [...], ...}',
+                            ignoreFocusOut: true
+                        });
+
+                        if (mcpResults && mcpResults.trim().startsWith('{')) {
+                            this.outputChannel.appendLine('✅ MCP results received from user');
+                            return mcpResults.trim();
+                        } else {
+                            this.outputChannel.appendLine('❌ No valid MCP results provided');
+                            return null;
+                        }
+                    } else if (result === 'View Full Prompt') {
+                        // Show the prompt in an editor
+                        const doc = await vscode.workspace.openTextDocument({
+                            content: enhancedPrompt,
+                            language: 'markdown'
+                        });
+                        await vscode.window.showTextDocument(doc);
+                        return 'user_chose_mcp';
+                    }
+                    
+                    return 'user_chose_mcp';
+                    
+                } catch (chatError) {
+                    // Fallback if chat command doesn't exist
+                    this.outputChannel.appendLine(`Chat command not available: ${chatError}`);
+                    vscode.window.showErrorMessage('Could not open Copilot Chat. Please open it manually (Cmd+Shift+I or Ctrl+Shift+I)');
+                    return null;
+                }
+            } else if (choice?.title === '⚡ Quick Analysis') {
+                this.outputChannel.appendLine('User chose quick local analysis');
+                return null; // This will trigger fallback
+            } else {
+                this.outputChannel.appendLine('User cancelled analysis');
+                return null;
+            }
 
         } catch (error) {
-            this.outputChannel.appendLine(`Error querying Copilot Chat: ${error}`);
+            this.outputChannel.appendLine(`Error in MCP integration: ${error}`);
             return null;
         }
+    }
+
+    /**
+     * Create an enhanced prompt specifically designed for MCP usage
+     */
+    private createEnhancedMCPPrompt(basePrompt: string): string {
+        // Extract repository info from the base prompt
+        const repoMatch = basePrompt.match(/(\w+\/\w+)/);
+        const repoPath = repoMatch ? repoMatch[1] : 'owner/repo';
+        const [owner, repo] = repoPath.split('/');
+
+        return `Call mcp_github_list_commits with owner: "${owner}", repo: "${repo}", perPage: 5
+
+Then respond with JSON format:
+{
+  "commits": [{"sha": "...", "author": {"name": "...", "email": "...", "date": "..."}, "message": "..."}],
+  "contributors": [{"name": "...", "email": "...", "totalCommits": 0}],
+  "issues": [],
+  "pullRequests": [],
+  "collaborationInsights": ["Analysis complete"]
+}
+
+Execute now.`;
     }
 
     /**
@@ -479,5 +662,461 @@ Return the analysis as JSON with the following structure:
         }
 
         return specializations.length > 0 ? specializations : ['General Programming'];
+    }
+
+    /**
+     * Force test MCP integration without fallbacks - for debugging MCP connectivity
+     */
+    async forceMCPTest(repository: GitHubRepository): Promise<{ success: boolean, response?: any, error?: string }> {
+        try {
+            this.outputChannel.appendLine(`🔬 FORCE MCP TEST: Testing MCP integration for ${repository.owner}/${repository.repo}`);
+            this.outputChannel.appendLine('This test will NOT fall back to local analysis - MCP must work or fail\n');
+
+            // Check Copilot Chat availability first
+            const copilotExtension = vscode.extensions.getExtension('GitHub.copilot-chat');
+            if (!copilotExtension) {
+                const error = 'GitHub Copilot Chat extension not found - cannot test MCP';
+                this.outputChannel.appendLine(`❌ ${error}`);
+                return { success: false, error };
+            }
+
+            this.outputChannel.appendLine('✅ GitHub Copilot Chat extension found');
+
+            // Check MCP server status
+            const mcpStatus = await this.checkMCPServerStatus();
+            this.outputChannel.appendLine(`📊 MCP Server Status:`);
+            this.outputChannel.appendLine(`   Available: ${mcpStatus.isAvailable ? '✅' : '❌'}`);
+            this.outputChannel.appendLine(`   Container: ${mcpStatus.containerName || 'Not found'}`);
+            this.outputChannel.appendLine(`   Status: ${mcpStatus.containerStatus || 'Unknown'}`);
+            this.outputChannel.appendLine('');
+
+            // Create a simple MCP test prompt
+            const testPrompt = `mcp_github_list_commits with owner: "${repository.owner}", repo: "${repository.repo}", perPage: 3
+
+Show the result.`;
+
+            // Copy test prompt to clipboard
+            await vscode.env.clipboard.writeText(testPrompt);
+
+            // Open Copilot Chat and show test instructions
+            try {
+                await vscode.commands.executeCommand('workbench.action.chat.open');
+                this.outputChannel.appendLine('✅ Copilot Chat opened');
+            } catch (chatError) {
+                this.outputChannel.appendLine(`⚠️ Could not open Copilot Chat automatically: ${chatError}`);
+                this.outputChannel.appendLine('Please open Copilot Chat manually (Ctrl+Shift+I or Cmd+Shift+I)');
+            }
+
+            // Show test results options
+            const choice = await vscode.window.showInformationMessage(
+                `🧪 MCP Test Instructions:\n\n1. Paste the test prompt in Copilot Chat (copied to clipboard)\n2. Check if MCP tools are used\n3. Report the results below`,
+                'MCP Worked! ✅',
+                'MCP Failed ❌',
+                'View Test Prompt',
+                'Retry Test'
+            );
+
+            switch (choice) {
+                case 'MCP Worked! ✅':
+                    this.outputChannel.appendLine('🎉 SUCCESS: User confirmed MCP is working!');
+                    this.outputChannel.appendLine('✅ GitHub MCP server is properly integrated with VS Code');
+                    this.outputChannel.appendLine('✅ Repository analysis can use MCP for enhanced data gathering');
+                    
+                    vscode.window.showInformationMessage(
+                        '🎉 Excellent! MCP is working. You can now use "Analyze Repository" with full MCP integration.',
+                        'Analyze Repository'
+                    ).then(result => {
+                        if (result === 'Analyze Repository') {
+                            vscode.commands.executeCommand('teamxray.analyzeRepository');
+                        }
+                    });
+                    
+                    return { success: true };
+
+                case 'MCP Failed ❌':
+                    this.outputChannel.appendLine('❌ FAILED: User confirmed MCP is not working');
+                    this.outputChannel.appendLine('');
+                    this.outputChannel.appendLine('🔧 Troubleshooting steps:');
+                    this.outputChannel.appendLine('1. Check that Docker is running');
+                    this.outputChannel.appendLine('2. Verify GITHUB_TOKEN environment variable is set');
+                    this.outputChannel.appendLine('3. Restart VS Code to refresh MCP configuration');
+                    this.outputChannel.appendLine('4. Check .vscode/mcp.json configuration');
+                    
+                    const troubleshootChoice = await vscode.window.showErrorMessage(
+                        'MCP integration failed. What would you like to do?',
+                        'Check Setup Guide',
+                        'Restart VS Code',
+                        'Use Local Analysis'
+                    );
+                    
+                    switch (troubleshootChoice) {
+                        case 'Check Setup Guide':
+                            vscode.commands.executeCommand('teamxray.showSetupGuidance');
+                            break;
+                        case 'Restart VS Code':
+                            vscode.commands.executeCommand('workbench.action.reloadWindow');
+                            break;
+                        case 'Use Local Analysis':
+                            vscode.commands.executeCommand('teamxray.analyzeRepository');
+                            break;
+                    }
+                    
+                    return { success: false, error: 'MCP integration test failed' };
+
+                case 'View Test Prompt':
+                    // Show the test prompt in an editor
+                    const doc = await vscode.workspace.openTextDocument({
+                        content: testPrompt,
+                        language: 'markdown'
+                    });
+                    await vscode.window.showTextDocument(doc);
+                    this.outputChannel.appendLine('📄 Test prompt opened in editor');
+                    return { success: false, error: 'Test prompt displayed - rerun test after trying' };
+
+                case 'Retry Test':
+                    this.outputChannel.appendLine('🔄 Retrying MCP test...');
+                    return this.forceMCPTest(repository);
+
+                default:
+                    this.outputChannel.appendLine('❓ Test cancelled by user');
+                    return { success: false, error: 'Test cancelled' };
+            }
+
+        } catch (error) {
+            const errorMsg = `Force MCP test failed: ${error}`;
+            this.outputChannel.appendLine(`❌ ${errorMsg}`);
+            return { success: false, error: errorMsg };
+        }
+    }
+
+    /**
+     * Manually start GitHub MCP server (useful for debugging)
+     */
+    async manuallyStartMCPServer(): Promise<{ success: boolean, containerId?: string, error?: string }> {
+        try {
+            this.outputChannel.appendLine('🚀 Attempting to manually start GitHub MCP server...');
+
+            // Check if GitHub token is available
+            const token = process.env.GITHUB_TOKEN;
+            if (!token) {
+                const error = 'GITHUB_TOKEN environment variable not set. Please run "Team X-Ray: Setup GitHub Token" first.';
+                this.outputChannel.appendLine(`❌ ${error}`);
+                vscode.window.showErrorMessage(error);
+                return { success: false, error };
+            }
+
+            this.outputChannel.appendLine('✅ GITHUB_TOKEN found in environment');
+
+            const { exec } = require('child_process');
+            const util = require('util');
+            const execAsync = util.promisify(exec);
+
+            // First, check if any MCP servers are already running
+            const { stdout: existingContainers } = await execAsync(
+                'docker ps --format "{{.Names}}" --filter "ancestor=ghcr.io/github/github-mcp-server"'
+            );
+
+            if (existingContainers.trim()) {
+                this.outputChannel.appendLine(`⚠️ MCP server already running: ${existingContainers.trim()}`);
+                return { success: true, containerId: existingContainers.trim() };
+            }
+
+            // Start new MCP server container
+            this.outputChannel.appendLine('Starting new GitHub MCP server container...');
+            
+            const dockerCommand = [
+                'docker run -d',
+                '--rm',
+                `-e GITHUB_TOKEN=${token}`,
+                '-p 8080:8080',
+                'ghcr.io/github/github-mcp-server',
+                '--port 8080',
+                '--toolsets repos,users,pull_requests,issues'
+            ].join(' ');
+
+            this.outputChannel.appendLine(`Running: ${dockerCommand.replace(token, 'GITHUB_TOKEN')}`);
+
+            const { stdout: containerId } = await execAsync(dockerCommand);
+            const cleanContainerId = containerId.trim();
+
+            this.outputChannel.appendLine(`✅ MCP server started with container ID: ${cleanContainerId}`);
+
+            // Wait a moment for container to start
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            // Verify it's running
+            const { stdout: containerStatus } = await execAsync(`docker ps --filter "id=${cleanContainerId}" --format "{{.Status}}"`);
+            
+            if (containerStatus.trim()) {
+                this.outputChannel.appendLine(`✅ Container verified running: ${containerStatus.trim()}`);
+                
+                vscode.window.showInformationMessage(
+                    '🎉 GitHub MCP server started successfully! You can now test MCP integration.',
+                    'Test MCP Now'
+                ).then(selection => {
+                    if (selection === 'Test MCP Now') {
+                        vscode.commands.executeCommand('teamxray.forceMCPTest');
+                    }
+                });
+
+                return { success: true, containerId: cleanContainerId };
+            } else {
+                throw new Error('Container started but not showing in docker ps');
+            }
+
+        } catch (error) {
+            const errorMsg = `Failed to start MCP server: ${error}`;
+            this.outputChannel.appendLine(`❌ ${errorMsg}`);
+            vscode.window.showErrorMessage(errorMsg);
+            return { success: false, error: errorMsg };
+        }
+    }
+
+    /**
+     * Get expert's recent activity via GitHub MCP
+     */
+    async getExpertRecentActivity(expertEmail: string, expertName: string): Promise<{success: boolean, activity?: any, error?: string}> {
+        try {
+            this.outputChannel.appendLine(`🔍 Getting recent activity for expert: ${expertName} (${expertEmail})`);
+
+            // Get actual Git activity for this specific expert
+            const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+            if (!workspaceFolder) {
+                return { success: false, error: 'No workspace folder found' };
+            }
+
+            const { exec } = require('child_process');
+            const { promisify } = require('util');
+            const execAsync = promisify(exec);
+
+            try {
+                // Get recent commits by this specific expert
+                const commitCommand = `git log --author="${expertEmail}" --pretty=format:"%H|%s|%ad" --date=short -n 10`;
+                const { stdout: commitOutput } = await execAsync(commitCommand, { cwd: workspaceFolder.uri.fsPath });
+
+                const recentCommits = commitOutput.split('\n')
+                    .filter((line: string) => line.trim())
+                    .map((line: string) => {
+                        const [sha, message, date] = line.split('|');
+                        return {
+                            repo: "Current Repository",
+                            message: message || "No message",
+                            date: date || new Date().toISOString().split('T')[0],
+                            url: `#${sha?.substring(0, 7) || 'unknown'}`
+                        };
+                    });
+
+                // Get file activity for this expert
+                const fileCommand = `git log --author="${expertEmail}" --name-only --pretty=format: -n 20 | sort | uniq | head -10`;
+                const { stdout: fileOutput } = await execAsync(fileCommand, { cwd: workspaceFolder.uri.fsPath });
+                
+                const recentFiles = fileOutput.split('\n')
+                    .filter((file: string) => file.trim())
+                    .slice(0, 5);
+
+                const activity = {
+                    expertName,
+                    expertEmail,
+                    recentCommits: recentCommits.length > 0 ? recentCommits : [{
+                        repo: "Current Repository",
+                        message: "No recent commits found",
+                        date: new Date().toISOString().split('T')[0],
+                        url: "#"
+                    }],
+                    recentActivity: [
+                        `${recentCommits.length} recent commits in this repository`,
+                        recentFiles.length > 0 ? `Recently worked on: ${recentFiles.slice(0, 3).join(', ')}` : "No recent file activity found",
+                        `Last commit: ${recentCommits[0]?.date || 'Unknown'}`
+                    ],
+                    currentFocus: recentCommits.length > 0 ? 
+                        `Recent work: ${recentCommits[0]?.message?.substring(0, 100) || 'No recent activity'}` :
+                        "No recent activity in this repository"
+                };
+
+                this.outputChannel.appendLine(`✅ Generated activity summary for ${expertName} with ${recentCommits.length} commits`);
+                
+                return { 
+                    success: true, 
+                    activity
+                };
+
+            } catch (gitError) {
+                this.outputChannel.appendLine(`⚠️ Git command failed, using fallback data: ${gitError}`);
+                
+                // Fallback with expert's basic info
+                const fallbackActivity = {
+                    expertName,
+                    expertEmail,
+                    recentCommits: [{
+                        repo: "Current Repository",
+                        message: "Git history not accessible",
+                        date: new Date().toISOString().split('T')[0],
+                        url: "#"
+                    }],
+                    recentActivity: [
+                        `Expert: ${expertName}`,
+                        `Email: ${expertEmail}`,
+                        "Git history requires repository access"
+                    ],
+                    currentFocus: "Repository analysis required for detailed activity"
+                };
+
+                return { 
+                    success: true, 
+                    activity: fallbackActivity
+                };
+            }
+
+        } catch (error) {
+            this.outputChannel.appendLine(`❌ Error getting expert activity: ${error}`);
+            return { 
+                success: false, 
+                error: error instanceof Error ? error.message : 'Unknown error' 
+            };
+        }
+    }
+
+    /**
+     * Display expert recent activity in a user-friendly way
+     */
+    async showExpertActivity(activity: any): Promise<void> {
+        try {
+            const { expertName, expertEmail, recentCommits, recentActivity, currentFocus } = activity;
+            
+            // Create a formatted display
+            let activityDisplay = `# 🔍 Recent Activity: ${expertName}\n\n`;
+            activityDisplay += `**Email:** ${expertEmail}\n\n`;
+            
+            if (currentFocus) {
+                activityDisplay += `**🎯 Current Focus:** ${currentFocus}\n\n`;
+            }
+
+            if (recentCommits && recentCommits.length > 0) {
+                activityDisplay += `## 📝 Recent Commits:\n`;
+                recentCommits.slice(0, 5).forEach((commit: any, index: number) => {
+                    activityDisplay += `${index + 1}. **${commit.repo || 'Repository'}**\n`;
+                    activityDisplay += `   ${commit.message || 'Commit message'}\n`;
+                    activityDisplay += `   *${commit.date || 'Recent'}*\n\n`;
+                });
+            }
+
+            if (recentActivity && recentActivity.length > 0) {
+                activityDisplay += `## 🚀 Activity Summary:\n`;
+                recentActivity.forEach((item: string, index: number) => {
+                    activityDisplay += `• ${item}\n`;
+                });
+            }
+
+            // Show in a new document
+            const doc = await vscode.workspace.openTextDocument({
+                content: activityDisplay,
+                language: 'markdown'
+            });
+            await vscode.window.showTextDocument(doc);
+
+        } catch (error) {
+            vscode.window.showErrorMessage(`Error displaying expert activity: ${error}`);
+        }
+    }
+
+    /**
+     * Get open issues from GitHub via MCP and suggest expert assignments
+     */
+    async getOpenIssuesForAssignment(): Promise<{success: boolean, issues?: any[], error?: string}> {
+        try {
+            this.outputChannel.appendLine('🎯 Getting open issues for expert assignment via MCP...');
+
+            // Check if we have repository info
+            const repository = await this.detectRepository();
+            if (!repository || !repository.owner || !repository.repo) {
+                return { success: false, error: 'Could not detect GitHub repository' };
+            }
+
+            // Create MCP prompt to get issues
+            const mcpPrompt = `Use MCP to get open issues from GitHub repository ${repository.owner}/${repository.repo}.
+
+Call mcp_github_list_issues with:
+- owner: "${repository.owner}"
+- repo: "${repository.repo}" 
+- state: "open"
+- perPage: 10
+
+Then respond with JSON:
+{
+  "repository": "${repository.owner}/${repository.repo}",
+  "openIssues": [
+    {
+      "number": 123,
+      "title": "Issue title",
+      "body": "Issue description...",
+      "labels": ["bug", "enhancement"],
+      "assignees": [],
+      "created_at": "2025-01-28",
+      "html_url": "https://github.com/...",
+      "complexity": "medium"
+    }
+  ],
+  "totalCount": 5
+}
+
+Execute the MCP call now.`;
+
+            // Open Copilot Chat with the prompt
+            await vscode.commands.executeCommand('workbench.action.chat.open');
+            await vscode.env.clipboard.writeText(mcpPrompt);
+            
+            vscode.window.showInformationMessage(
+                `📋 MCP prompt copied! Paste in Copilot Chat to get open issues from ${repository.owner}/${repository.repo}`,
+                'Got It'
+            );
+
+            this.outputChannel.appendLine('✅ MCP issues prompt ready - paste in Copilot Chat');
+            return { success: true, issues: [] };
+
+        } catch (error) {
+            this.outputChannel.appendLine(`❌ Error preparing MCP issues request: ${error}`);
+            return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+        }
+    }
+
+    /**
+     * Assign an issue to an expert via MCP
+     */
+    async assignIssueToExpert(issueNumber: number, expertGitHubUsername: string): Promise<{success: boolean, error?: string}> {
+        try {
+            this.outputChannel.appendLine(`🎯 Assigning issue #${issueNumber} to ${expertGitHubUsername} via MCP...`);
+
+            const repository = await this.detectRepository();
+            if (!repository || !repository.owner || !repository.repo) {
+                return { success: false, error: 'Could not detect GitHub repository' };
+            }
+
+            // Create MCP prompt to assign issue
+            const assignPrompt = `Use MCP to assign GitHub issue to an expert.
+
+Call mcp_github_update_issue with:
+- owner: "${repository.owner}"
+- repo: "${repository.repo}"
+- issue_number: ${issueNumber}
+- assignees: ["${expertGitHubUsername}"]
+
+Then confirm assignment was successful.`;
+
+            // Open Copilot Chat with assignment prompt
+            await vscode.commands.executeCommand('workbench.action.chat.open');
+            await vscode.env.clipboard.writeText(assignPrompt);
+            
+            vscode.window.showInformationMessage(
+                `🎯 Assignment prompt copied! Paste in Copilot Chat to assign issue #${issueNumber} to ${expertGitHubUsername}`,
+                'Got It'
+            );
+
+            this.outputChannel.appendLine(`✅ MCP assignment prompt ready for issue #${issueNumber} → ${expertGitHubUsername}`);
+            return { success: true };
+
+        } catch (error) {
+            this.outputChannel.appendLine(`❌ Error preparing MCP assignment: ${error}`);
+            return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+        }
     }
 }

@@ -76,6 +76,14 @@ MCP Team X-Ray transforms GitHub Copilot into a lens that reveals the **humans b
 - Implement comprehensive error handling with user-friendly messages
 - Add extensive logging to `outputChannel` for debugging
 
+### Security Guidelines
+- **🔒 NEVER display contents of .env files in chat or output**
+- **🔒 NEVER expose API keys, tokens, or credentials in any form**
+- Always check if .env files exist without reading their contents
+- Warn about not committing sensitive files to version control
+- Use environment variables securely without revealing their values
+- When handling sensitive files, reference them by name only
+
 ### Human-Focused Features
 - **Always prioritize human insights over technical metrics**
 - Look for collaboration patterns, not just code contributions

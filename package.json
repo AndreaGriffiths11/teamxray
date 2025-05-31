@@ -98,11 +98,7 @@
       "properties": {
         "teamxray.githubToken": {
           "type": "string",
-          "description": "GitHub token for MCP commands access"
-        },
-        "teamxray.githubModelsKey": {
-          "type": "string",
-          "description": "GitHub Models API key for AI analysis"
+          "description": "GitHub token for MCP access and API calls"
         }
       }
     }
