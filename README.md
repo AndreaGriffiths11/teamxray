@@ -25,7 +25,7 @@ Access comprehensive team insights through the Command Palette:
 - Natural mentoring relationships and knowledge sharing
 - Challenge preferences and problem-solving approaches
 
-### � **Human-Focused Analysis**
+### 🎨 **Human-Focused Analysis**
 Unlike traditional code analysis tools, MCP Team X-Ray focuses on the humans:
 - **Communication Patterns**: How teammates express ideas in code and commits
 - **Collaboration Styles**: Natural working relationships and knowledge flow
@@ -93,6 +93,29 @@ Uses GitHub Models API (GPT-4o) to analyze:
 - Team roles identified through collaboration patterns
 - Challenge matching based on problem-solving approaches
 
+### 🧮 **Expertise Percentage Calculation**
+
+Team member expertise percentages are calculated using a **dual-approach system** that prioritizes human insights:
+
+#### **🎯 AI-Powered Analysis (Primary Method)**
+When GitHub Models API is available, GPT-4o analyzes multiple human factors:
+- **Technical Contributions**: Quality and depth of code changes
+- **Communication Excellence**: Commit message clarity and collaboration signals
+- **Mentoring Patterns**: Evidence of knowledge sharing and team support
+- **Problem-Solving Style**: Approach to different types of challenges
+- **Team Collaboration**: Cross-functional work and leadership indicators
+
+*Result: 0-100% based on holistic human assessment, not just code metrics*
+
+#### **📈 Mathematical Fallback (Local Mode)**
+When AI analysis is unavailable, uses Git commit data:
+- **Repository Level**: `30% base + (2% × commit count)` *(max 90%)*
+- **File Level**: `(Individual commits ÷ Top contributor commits) × 100%` *(max 100%)*
+
+*Example: 15 commits = 30% + (15 × 2%) = 60% expertise*
+
+The AI approach reveals **the humans behind the code** - identifying mentors, problem-solvers, and collaboration catalysts that pure metrics would miss.
+
 ## The Technology
 
 - **Model Context Protocol (MCP)** - Structured access to GitHub repository data
@@ -107,19 +130,23 @@ Set these environment variables or VS Code settings:
 * `GITHUB_TOKEN`: Your GitHub personal access token
 * `teamxray.githubModelsKey`: GitHub Models API key (optional, uses GITHUB_TOKEN as fallback)
 
-## Privacy & Ethics
+## Privacy & Data Access
 
-MCP Team X-Ray is designed with privacy in mind:
-- Only analyzes publicly available Git commit data
-- Focuses on professional collaboration patterns
-- Highlights positive contributions and strengths
-- Respects team member privacy while revealing professional insights
+MCP Team X-Ray analyzes repository data **based on your access permissions**:
+- **Local repositories**: All Git commit history and file data in your workspace
+- **GitHub repositories**: Public and private repos you have access to (via your GitHub token)
+- **MCP integration**: Uses GitHub API with your credentials - respects existing repository permissions
+- **Data processing**: Only analyzes Git metadata (commits, authorship, file changes) - never accesses file contents for AI analysis
+- **Focus**: Professional collaboration patterns and positive team insights
+- **Retention**: No data stored externally - analysis happens locally in VS Code
+
+**Your GitHub token determines data access scope** - the extension works with whatever repositories you can already access.
 
 ## Requirements
 
 - VS Code 1.100.0 or higher
 - Local Git repository with GitHub remote
-- GitHub token for API access
+- GitHub token
 
 ---
 
