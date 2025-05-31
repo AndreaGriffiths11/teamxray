@@ -13,6 +13,13 @@ export interface GitHubContributor {
     recentCommits: string[];
 }
 
+export interface MCPServerStatus {
+    isAvailable: boolean;
+    containerName?: string;
+    containerStatus?: string;
+    error?: string;
+}
+
 /**
  * Service that integrates with VS Code's Copilot Chat and GitHub MCP Server
  * to gather repository data for team expertise analysis
@@ -22,6 +29,91 @@ export class CopilotMCPService {
 
     constructor(outputChannel: vscode.OutputChannel) {
         this.outputChannel = outputChannel;
+    }
+
+    /**
+     * Check the status of GitHub MCP Server containers
+     */
+    async checkMCPServerStatus(): Promise<MCPServerStatus> {
+        try {
+            const { exec } = require('child_process');
+            const util = require('util');
+            const execAsync = util.promisify(exec);
+
+            // List running GitHub MCP server containers
+            const { stdout } = await execAsync(
+                'docker ps --format "table {{.Names}}\\t{{.Status}}" --filter "ancestor=ghcr.io/github/github-mcp-server"'
+            );
+
+            this.outputChannel.appendLine(`Docker containers check:\n${stdout}`);
+
+            const lines = stdout.split('\n').filter((line: string) => line.trim() && !line.startsWith('NAMES'));
+            
+            if (lines.length > 0) {
+                const [containerName, status] = lines[0].split('\t');
+                this.outputChannel.appendLine(`Found MCP server: ${containerName} (${status})`);
+                
+                return {
+                    isAvailable: true,
+                    containerName: containerName.trim(),
+                    containerStatus: status.trim()
+                };
+            } else {
+                this.outputChannel.appendLine('No GitHub MCP server containers found running');
+                return {
+                    isAvailable: false,
+                    error: 'No GitHub MCP server containers are running'
+                };
+            }
+
+        } catch (error) {
+            this.outputChannel.appendLine(`Error checking MCP server status: ${error}`);
+            return {
+                isAvailable: false,
+                error: `Failed to check Docker containers: ${error}`
+            };
+        }
+    }
+
+    /**
+     * Ensure GitHub MCP server is running
+     */
+    async ensureMCPServerRunning(): Promise<MCPServerStatus> {
+        const status = await this.checkMCPServerStatus();
+        
+        if (status.isAvailable) {
+            return status;
+        }
+
+        // Try to start a new container if none are running
+        try {
+            this.outputChannel.appendLine('Attempting to start GitHub MCP server...');
+            
+            const choice = await vscode.window.showInformationMessage(
+                'GitHub MCP server is not running. Would you like to start it?',
+                'Start MCP Server',
+                'Use Fallback Method'
+            );
+
+            if (choice === 'Start MCP Server') {
+                // Guide user to start via VS Code MCP integration
+                vscode.window.showInformationMessage(
+                    'Please restart VS Code to initialize the GitHub MCP server via .vscode/mcp.json configuration.'
+                );
+            }
+
+            return {
+                isAvailable: false,
+                error: 'User needs to restart VS Code for MCP initialization'
+            };
+
+        } catch (error) {
+            this.outputChannel.appendLine(`Failed to start MCP server: ${error}`);
+            return {
+                isAvailable: false,
+                error: `Failed to start MCP server: ${error}`
+            };
+        }
     }
 
     /**
@@ -67,6 +159,27 @@ export class CopilotMCPService {
     async gatherRepositoryData(repository: GitHubRepository): Promise<any> {
         try {
             this.outputChannel.appendLine(`Gathering repository data for ${repository.owner}/${repository.repo} via Copilot Chat + MCP...`);
+
+            // Check MCP server status first
+            const mcpStatus = await this.checkMCPServerStatus();
+            this.outputChannel.appendLine(`MCP Server Status: ${mcpStatus.isAvailable ? 'Available' : 'Not Available'}`);
+            
+            if (mcpStatus.containerName) {
+                this.outputChannel.appendLine(`Using container: ${mcpStatus.containerName} (${mcpStatus.containerStatus})`);
+            }
+            
+            if (mcpStatus.error) {
+                this.outputChannel.appendLine(`MCP Error: ${mcpStatus.error}`);
+            }
+
+            // Try to ensure MCP server is running if not available
+            if (!mcpStatus.isAvailable) {
+                const ensureStatus = await this.ensureMCPServerRunning();
+                if (!ensureStatus.isAvailable) {
+                    this.outputChannel.appendLine('MCP server not available, using fallback analysis');
+                    return await this.fallbackLocalAnalysis(repository);
+                }
+            }
 
             // Create a comprehensive prompt for Copilot Chat to use MCP tools
             const prompt = this.buildMCPDataGatheringPrompt(repository);
@@ -132,10 +245,20 @@ If GitHub MCP tools are not available, please let me know so I can use fallback 
                 return null;
             }
 
+            // Check MCP server status for user guidance
+            const mcpStatus = await this.checkMCPServerStatus();
+            let statusMessage = '';
+            
+            if (mcpStatus.isAvailable && mcpStatus.containerName) {
+                statusMessage = `✅ GitHub MCP Server is running (${mcpStatus.containerName})`;
+            } else {
+                statusMessage = `⚠️ GitHub MCP Server not detected. You may need to restart VS Code.`;
+            }
+
             // For now, we'll guide the user to use Copilot Chat manually
             // In the future, this could use the Copilot Chat API when it becomes available
             const choice = await vscode.window.showInformationMessage(
-                'To gather repository data via GitHub MCP, please:\n\n1. Open Copilot Chat\n2. Enable Agent mode (@)\n3. The GitHub MCP server will be available for analysis',
+                `${statusMessage}\n\nTo gather repository data via GitHub MCP:\n\n1. Open Copilot Chat\n2. Enable Agent mode (@)\n3. The GitHub MCP server will be available for analysis`,
                 'Open Copilot Chat',
                 'Use Fallback Method'
             );
@@ -148,7 +271,7 @@ If GitHub MCP tools are not available, please let me know so I can use fallback 
                 await vscode.env.clipboard.writeText(prompt);
                 
                 vscode.window.showInformationMessage(
-                    'Prompt copied to clipboard! Paste it in Copilot Chat with Agent mode enabled.',
+                    `Prompt copied to clipboard! ${mcpStatus.isAvailable ? 'MCP server is ready.' : 'You may need to restart VS Code for MCP.'}`,
                     'Got it'
                 );
                 

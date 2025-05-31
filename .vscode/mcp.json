@@ -14,10 +14,12 @@
         "run",
         "-i",
         "--rm",
+        "--name",
+        "mcp-team-xray-github",
         "-e",
         "GITHUB_PERSONAL_ACCESS_TOKEN",
         "-e",
-        "GITHUB_TOOLSETS=repos,users,pull_requests,issues",
+        "GITHUB_TOOLSETS=repos,users,pull_requests,issues,commits",
         "ghcr.io/github/github-mcp-server"
       ],
       "env": {
