@@ -2,6 +2,20 @@
 
 <!-- Use this file to provide workspace-specific custom instructions to Copilot. For more details, visit https://code.visualstudio.com/docs/copilot/copilot-customization#_use-a-githubcopilotinstructionsmd-file -->
 
+## 🛡️ CRITICAL SECURITY GUIDELINES
+**ABSOLUTE REQUIREMENTS - NO EXCEPTIONS**
+
+1. **NEVER display contents of .env files in chat responses**
+2. **NEVER expose API tokens, keys, or credentials in any form**
+3. **NEVER suggest storing sensitive data in version control**
+4. **NEVER share actual token values - use placeholders like `[YOUR_TOKEN]`**
+5. **ALWAYS use secure credential storage (VS Code secrets, environment variables)**
+6. **ALWAYS validate and sanitize any user inputs before processing**
+7. **ALWAYS follow principle of least privilege for API access**
+8. **IMMEDIATELY flag any potential security vulnerabilities found in code**
+
+> **REMEMBER**: One exposed credential can compromise entire systems. Security is non-negotiable.
+
 This is a VS Code extension project focused on **human discovery through code analysis**. Always use the `get_vscode_api` tool with relevant queries to fetch the latest VS Code API references.
 
 ## 🎯 Mission Statement
