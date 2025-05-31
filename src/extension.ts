@@ -89,7 +89,7 @@ export function activate(context: vscode.ExtensionContext) {
 				});
 
 				if (selected) {
-					// Show expert details
+					// Show expert details with activity option
 					const expert = selected.expert;
 					const message = `${expert.name} (${expert.email})
 Expertise: ${expert.expertise}%
@@ -97,12 +97,22 @@ Contributions: ${expert.contributions}
 Last Commit: ${expert.lastCommit instanceof Date ? expert.lastCommit.toLocaleDateString() : 'Unknown'}
 Specializations: ${(expert.specializations || []).join(', ')}`;
 
-					vscode.window.showInformationMessage(message, 'Copy Email').then(choice => {
-						if (choice === 'Copy Email') {
+					const choice = await vscode.window.showInformationMessage(
+						message, 
+						'Copy Email', 
+						'Get Recent Activity',
+						'Close'
+					);
+
+					switch (choice) {
+						case 'Copy Email':
 							vscode.env.clipboard.writeText(expert.email);
 							vscode.window.showInformationMessage('Email copied to clipboard!');
-						}
-					});
+							break;
+						case 'Get Recent Activity':
+							await getExpertRecentActivity(expert);
+							break;
+					}
 				}
 			} else {
 				vscode.window.showInformationMessage('No experts found for this file.');
@@ -128,6 +138,53 @@ Specializations: ${(expert.specializations || []).join(', ')}`;
 		}
 	});
 
+	// Helper function to get expert recent activity via MCP
+	async function getExpertRecentActivity(expert: any) {
+		const outputChannel = vscode.window.createOutputChannel('Team X-Ray Expert Activity');
+		
+		try {
+			const mcpService = new CopilotMCPService(outputChannel);
+			
+			vscode.window.withProgress({
+				location: vscode.ProgressLocation.Notification,
+				title: `Getting recent activity for ${expert.name}...`,
+				cancellable: false
+			}, async (progress) => {
+				progress.report({ increment: 0, message: "Connecting to GitHub MCP..." });
+
+				const result = await mcpService.getExpertRecentActivity(expert.email, expert.name);
+				
+				if (result.success && result.activity) {
+					progress.report({ increment: 100, message: "Activity retrieved!" });
+					
+					// Display the activity using the MCP service
+					await mcpService.showExpertActivity(result.activity);
+					
+					vscode.window.showInformationMessage(`✅ Recent activity loaded for ${expert.name}`);
+				} else {
+					progress.report({ increment: 100, message: "Failed" });
+					
+					outputChannel.show();
+					outputChannel.appendLine(`❌ Failed to get activity for ${expert.name}: ${result.error}`);
+					
+					vscode.window.showWarningMessage(
+						`Could not get recent activity for ${expert.name}. ${result.error || 'Please check MCP configuration.'}`,
+						'View Logs'
+					).then(choice => {
+						if (choice === 'View Logs') {
+							outputChannel.show();
+						}
+					});
+				}
+			});
+			
+		} catch (error) {
+			outputChannel.show();
+			outputChannel.appendLine(`❌ Error getting expert activity: ${error}`);
+			vscode.window.showErrorMessage(`Error getting expert activity: ${error}`);
+		}
+	}
+
 	// Register tree view commands
 	const openFileFromTreeCommand = vscode.commands.registerCommand('teamxray.openFileFromTree', async (filePath: string) => {
 		if (filePath) {
@@ -144,7 +201,7 @@ Specializations: ${(expert.specializations || []).join(', ')}`;
 		}
 	});
 
-	const showExpertDetailsCommand = vscode.commands.registerCommand('teamxray.showExpertDetails', (expert: any) => {
+	const showExpertDetailsCommand = vscode.commands.registerCommand('teamxray.showExpertDetails', async (expert: any) => {
 		if (expert) {
 			const message = `${expert.name}
 Email: ${expert.email}
@@ -153,12 +210,22 @@ Contributions: ${expert.contributions}
 Last Commit: ${expert.lastCommit}
 Specializations: ${(expert.specializations || []).join(', ')}`;
 
-			vscode.window.showInformationMessage(message, 'Copy Email').then(choice => {
-				if (choice === 'Copy Email') {
+			const choice = await vscode.window.showInformationMessage(
+				message, 
+				'Copy Email', 
+				'Get Recent Activity',
+				'Close'
+			);
+
+			switch (choice) {
+				case 'Copy Email':
 					vscode.env.clipboard.writeText(expert.email);
 					vscode.window.showInformationMessage('Email copied to clipboard!');
-				}
-			});
+					break;
+				case 'Get Recent Activity':
+					await getExpertRecentActivity(expert);
+					break;
+			}
 		}
 	});
 
@@ -332,6 +399,189 @@ Specializations: ${(expert.specializations || []).join(', ')}`;
 		}
 	});
 
+	// Register test expert activity command
+	const testExpertActivityCommand = vscode.commands.registerCommand('teamxray.testExpertActivity', async () => {
+		const outputChannel = vscode.window.createOutputChannel('Team X-Ray Expert Activity Test');
+		outputChannel.show();
+		
+		try {
+			// Ask user for expert details to test
+			const expertEmail = await vscode.window.showInputBox({
+				title: 'Test Expert Activity - Enter Email',
+				prompt: 'Enter the email of the expert to look up',
+				placeHolder: 'user@example.com',
+				ignoreFocusOut: true
+			});
+			
+			if (!expertEmail) {
+				outputChannel.appendLine('❌ Test cancelled - no email provided');
+				return;
+			}
+			
+			const expertName = await vscode.window.showInputBox({
+				title: 'Test Expert Activity - Enter Name',
+				prompt: 'Enter the name of the expert (optional)',
+				placeHolder: expertEmail.split('@')[0],
+				value: expertEmail.split('@')[0],
+				ignoreFocusOut: true
+			});
+			
+			const name = expertName || expertEmail.split('@')[0];
+			
+			outputChannel.appendLine(`🧪 Testing expert activity lookup for: ${name} (${expertEmail})\n`);
+			
+			const mcpService = new CopilotMCPService(outputChannel);
+			
+			vscode.window.withProgress({
+				location: vscode.ProgressLocation.Notification,
+				title: `Testing activity lookup for ${name}...`,
+				cancellable: false
+			}, async (progress) => {
+				progress.report({ increment: 0, message: "Connecting to MCP..." });
+
+				const result = await mcpService.getExpertRecentActivity(expertEmail, name);
+				
+				if (result.success && result.activity) {
+					progress.report({ increment: 100, message: "Success!" });
+					
+					outputChannel.appendLine('✅ Expert activity test completed successfully!');
+					outputChannel.appendLine('Activity data retrieved and displayed.');
+					
+					// Display the activity
+					await mcpService.showExpertActivity(result.activity);
+					
+					vscode.window.showInformationMessage(`✅ Expert activity test completed for ${name}!`);
+				} else {
+					progress.report({ increment: 100, message: "Failed" });
+					
+					outputChannel.appendLine(`❌ Expert activity test failed: ${result.error}`);
+					vscode.window.showWarningMessage(`Expert activity test failed: ${result.error}`);
+				}
+			});
+			
+		} catch (error) {
+			outputChannel.appendLine(`❌ Test error: ${error}`);
+			vscode.window.showErrorMessage(`Expert activity test error: ${error}`);
+		}
+	});
+
+	// Test command for JSON extraction
+	const testJsonExtraction = vscode.commands.registerCommand('teamxray.testJsonExtraction', async () => {
+		const analyzer = new ExpertiseAnalyzer(context);
+		
+		// Sample AI response that matches the format we're seeing
+		const testResponse = `Based on the repository structure and the provided information, here's my analysis of the team:
+
+{
+  "experts": [
+    {
+      "name": "Test Developer",
+      "email": "test@example.com",
+      "expertise": 85,
+      "contributions": 42,
+      "lastCommit": "2025-01-28",
+      "specializations": ["TypeScript", "VS Code Extensions"],
+      "communicationStyle": "Clear and detailed",
+      "teamRole": "Extension developer",
+      "hiddenStrengths": ["Testing", "Documentation"],
+      "idealChallenges": ["Complex analysis"]
+    }
+  ],
+  "teamDynamics": {
+    "collaborationPatterns": ["Solo development"],
+    "communicationHighlights": ["Good documentation"],
+    "knowledgeSharing": ["Code comments"]
+  },
+  "insights": ["Test insight"],
+  "challengeMatching": {
+    "toughProblems": ["JSON parsing"],
+    "recommendedExperts": ["Test Developer"]
+  }
+}`;
+
+		try {
+			// Test the extraction method - we'll need to access it via the analyzer instance
+			// For now, let's just log that the test was triggered
+			vscode.window.showInformationMessage('JSON extraction test triggered - check output channel for results');
+			
+			// Test actual JSON parsing with simulated repository data
+			const mockRepoData = {
+				repository: 'test-repo',
+				files: ['test.ts'],
+				contributors: [],
+				commits: []
+			};
+			
+			// This will test our parsing logic
+			const result = (analyzer as any).parseAIResponse(testResponse, mockRepoData);
+			
+			if (result && result.expertProfiles && result.expertProfiles.length > 0) {
+				vscode.window.showInformationMessage(`✅ JSON parsing successful! Found ${result.expertProfiles.length} experts`);
+			} else {
+				vscode.window.showErrorMessage('❌ JSON parsing failed or returned no experts');
+			}
+		} catch (error) {
+			vscode.window.showErrorMessage(`❌ Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+		}
+	});
+
+	// Test MCP Issues command
+	const testMCPIssues = vscode.commands.registerCommand('teamxray.testMCPIssues', async () => {
+		const outputChannel = vscode.window.createOutputChannel('Team X-Ray MCP Issues');
+		outputChannel.show();
+		
+		try {
+			const mcpService = new CopilotMCPService(outputChannel);
+			
+			outputChannel.appendLine('🎯 Testing GitHub Issues MCP Integration\n');
+			
+			const result = await mcpService.getOpenIssuesForAssignment();
+			
+			if (result.success) {
+				outputChannel.appendLine('✅ MCP Issues test completed successfully!');
+				outputChannel.appendLine('📋 Check Copilot Chat for the MCP prompt to get repository issues.');
+			} else {
+				outputChannel.appendLine(`❌ MCP Issues test failed: ${result.error}`);
+				vscode.window.showErrorMessage(`MCP Issues test failed: ${result.error}`);
+			}
+		} catch (error) {
+			outputChannel.appendLine(`❌ Unexpected error: ${error}`);
+			vscode.window.showErrorMessage(`MCP Issues test failed: ${error}`);
+		}
+	});
+
+	// Test which MCP tools are available
+	const testMCPTools = vscode.commands.registerCommand('teamxray.testMCPTools', async () => {
+		const outputChannel = vscode.window.createOutputChannel('Team X-Ray MCP Tools');
+		outputChannel.show();
+		
+		outputChannel.appendLine('🔧 Testing which GitHub MCP tools are available...\n');
+		
+		// Open Copilot Chat and test basic tool availability
+		const testPrompt = `List all available MCP tools that start with "mcp_github". 
+
+Don't call any tools yet - just tell me what GitHub MCP tools you can see.
+
+Are these available?:
+- mcp_github_list_issues
+- mcp_github_update_issue  
+- mcp_github_list_commits
+- mcp_github2_list_issues (duplicate?)
+- mcp_github2_update_issue (duplicate?)
+
+Just list the tools you can see, don't execute anything.`;
+
+		await vscode.commands.executeCommand('workbench.action.chat.open');
+		await vscode.env.clipboard.writeText(testPrompt);
+		
+		vscode.window.showInformationMessage(
+			'📋 MCP tools test prompt copied! Paste in Copilot Chat to see available tools',
+			'Got It'
+		);
+		
+		outputChannel.appendLine('✅ Test prompt ready - this will show if we have tool duplicates');
+	});
+
 	// Register status bar item
 	const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
 	statusBarItem.command = 'teamxray.showTeamOverview';
@@ -350,6 +600,10 @@ Specializations: ${(expert.specializations || []).join(', ')}`;
 		setupGuidanceCommand,
 		forceMCPTestCommand,
 		startMCPServerCommand,
+		testExpertActivityCommand,
+		testJsonExtraction,
+		testMCPIssues,
+		testMCPTools,
 		statusBarItem
 	);
 

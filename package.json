@@ -60,6 +60,22 @@
       {
         "command": "teamxray.testMCPStatus",
         "title": "Team X-Ray: Test MCP Server Status"
+      },
+      {
+        "command": "teamxray.testExpertActivity",
+        "title": "Team X-Ray: Test Expert Activity (MCP)"
+      },
+      {
+        "command": "teamxray.testJsonExtraction",
+        "title": "Team X-Ray: Test JSON Extraction"
+      },
+      {
+        "command": "teamxray.testMCPIssues",
+        "title": "Team X-Ray: Test GitHub Issues (MCP)"
+      },
+      {
+        "command": "teamxray.testMCPTools",
+        "title": "Team X-Ray: Test Available MCP Tools"
       }
     ],
     "menus": {

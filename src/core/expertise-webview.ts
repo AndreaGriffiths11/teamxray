@@ -31,6 +31,9 @@ export class ExpertiseWebviewProvider {
                     case 'showExpertDetails':
                         this.showExpertDetails(message.expert);
                         break;
+                    case 'getExpertActivity':
+                        this.getExpertActivity(message.expert);
+                        break;
                     case 'openFile':
                         this.openFile(message.filePath);
                         break;
@@ -60,6 +63,14 @@ export class ExpertiseWebviewProvider {
             title: `Expert Details: ${expert.name}`,
             canPickMany: false
         });
+    }
+
+    /**
+     * Gets expert recent activity via MCP
+     */
+    private async getExpertActivity(expert: Expert): Promise<void> {
+        // Trigger the extension command for getting expert activity
+        vscode.commands.executeCommand('teamxray.showExpertDetails', expert);
     }
 
     /**
@@ -135,12 +146,41 @@ export class ExpertiseWebviewProvider {
             border-radius: 6px;
             padding: 15px;
             margin-bottom: 15px;
-            cursor: pointer;
             transition: border-color 0.2s;
         }
 
         .expert-card:hover {
             border-color: var(--vscode-textLink-foreground);
+        }
+
+        .expert-actions {
+            margin-top: 10px;
+            display: flex;
+            gap: 8px;
+        }
+
+        .expert-button {
+            background-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background-color 0.2s;
+        }
+
+        .expert-button:hover {
+            background-color: var(--vscode-button-hoverBackground);
+        }
+
+        .expert-button.secondary {
+            background-color: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
+        }
+
+        .expert-button.secondary:hover {
+            background-color: var(--vscode-button-secondaryHoverBackground);
         }
 
         .expert-name {
@@ -303,7 +343,7 @@ export class ExpertiseWebviewProvider {
     <div class="section">
         <h2>👥 Team Experts</h2>
         ${analysis.expertProfiles.map(expert => `
-            <div class="expert-card" onclick="showExpertDetails('${expert.name}')">
+            <div class="expert-card">
                 <div class="expert-name">${expert.name}</div>
                 <div class="expert-stats">
                     <span class="stat">Expertise: ${expert.expertise}%</span>
@@ -317,6 +357,10 @@ export class ExpertiseWebviewProvider {
                     ${(expert.specializations || []).map(spec => 
                         `<span class="specialization-tag">${spec}</span>`
                     ).join('')}
+                </div>
+                <div class="expert-actions">
+                    <button class="expert-button" onclick="showExpertDetails('${expert.name}')">📋 Details</button>
+                    <button class="expert-button secondary" onclick="getExpertActivity('${expert.name}')">🔍 Recent Activity</button>
                 </div>
             </div>
         `).join('')}
@@ -363,6 +407,16 @@ export class ExpertiseWebviewProvider {
             if (expert) {
                 vscode.postMessage({
                     command: 'showExpertDetails',
+                    expert: expert
+                });
+            }
+        }
+
+        function getExpertActivity(expertName) {
+            const expert = ${JSON.stringify(analysis.expertProfiles)}.find(e => e.name === expertName);
+            if (expert) {
+                vscode.postMessage({
+                    command: 'getExpertActivity',
                     expert: expert
                 });
             }

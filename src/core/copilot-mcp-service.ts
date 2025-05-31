@@ -203,31 +203,18 @@ export class CopilotMCPService {
      * Build a prompt for Copilot Chat to gather data using MCP GitHub tools
      */
     private buildMCPDataGatheringPrompt(repository: GitHubRepository): string {
-        return `
-Please use the GitHub MCP tools to analyze the repository ${repository.owner}/${repository.repo} and gather the following data for team expertise analysis:
+        return `Call mcp_github_list_commits with owner: "${repository.owner}", repo: "${repository.repo}", perPage: 10
 
-1. **Repository Commits**: Use list_commits to get the last 50 commits with author information
-2. **Recent Issues**: Use list_issues to get recent issues for collaboration patterns  
-3. **Pull Requests**: Use list_pull_requests to get recent PRs for code review patterns
-4. **Contributors**: Analyze commit authors to identify key contributors
-
-Focus on extracting:
-- Author names and emails from commits
-- Commit messages for communication style analysis
-- Collaboration patterns from issues and PRs
-- File change patterns to identify expertise areas
-
-Please format the response as JSON with this structure:
+After you get the commits data, immediately respond with this JSON format (fill in real data):
 {
-  "commits": [{"sha": "...", "author": {"name": "...", "email": "...", "date": "..."}, "message": "...", "files": [...]}],
-  "contributors": [{"name": "...", "email": "...", "totalCommits": 0, "lastCommit": "...", "recentCommits": [...]}],
-  "issues": [...],
-  "pullRequests": [...],
-  "collaborationInsights": ["..."]
+  "commits": [{"sha": "actual_sha", "author": {"name": "actual_name", "email": "actual_email", "date": "actual_date"}, "message": "actual_message"}],
+  "contributors": [{"name": "contributor_name", "email": "email", "totalCommits": 1}],
+  "issues": [],
+  "pullRequests": [],
+  "collaborationInsights": ["Commit analysis complete"]
 }
 
-If GitHub MCP tools are not available, please let me know so I can use fallback methods.
-        `;
+Just call the tool and format the response. Don't explain anything else.`;
     }
 
     /**
@@ -340,49 +327,23 @@ If GitHub MCP tools are not available, please let me know so I can use fallback 
      * Create an enhanced prompt specifically designed for MCP usage
      */
     private createEnhancedMCPPrompt(basePrompt: string): string {
-        return `# 🔍 Team X-Ray Repository Analysis via GitHub MCP
+        // Extract repository info from the base prompt
+        const repoMatch = basePrompt.match(/(\w+\/\w+)/);
+        const repoPath = repoMatch ? repoMatch[1] : 'owner/repo';
+        const [owner, repo] = repoPath.split('/');
 
-${basePrompt}
+        return `Call mcp_github_list_commits with owner: "${owner}", repo: "${repo}", perPage: 5
 
-## 🎯 MCP Tools to Use:
-Please use these GitHub MCP tools to gather comprehensive data:
-
-1. **github_list_commits** - Get recent commits with authors and messages
-2. **github_list_pull_requests** - Get PR data for collaboration insights  
-3. **github_list_issues** - Get issue discussions and problem-solving patterns
-4. **github_get_file_contents** - Sample key files for expertise areas
-
-## 📊 Expected JSON Response Format:
-\`\`\`json
+Then respond with JSON format:
 {
-  "commits": [
-    {
-      "sha": "abc123",
-      "author": {"name": "...", "email": "...", "date": "..."},
-      "message": "...",
-      "files": ["path1", "path2"]
-    }
-  ],
-  "contributors": [
-    {
-      "name": "...",
-      "email": "...", 
-      "totalCommits": 0,
-      "lastCommit": "...",
-      "recentCommits": ["..."]
-    }
-  ],
-  "pullRequests": [...],
-  "issues": [...],
-  "collaborationInsights": [
-    "Communication style observations",
-    "Collaboration patterns",
-    "Hidden strengths identified"
-  ]
+  "commits": [{"sha": "...", "author": {"name": "...", "email": "...", "date": "..."}, "message": "..."}],
+  "contributors": [{"name": "...", "email": "...", "totalCommits": 0}],
+  "issues": [],
+  "pullRequests": [],
+  "collaborationInsights": ["Analysis complete"]
 }
-\`\`\`
 
-Please gather this data and return it in the exact JSON format above. Thank you! 🚀`;
+Execute now.`;
     }
 
     /**
@@ -730,13 +691,9 @@ Return the analysis as JSON with the following structure:
             this.outputChannel.appendLine('');
 
             // Create a simple MCP test prompt
-            const testPrompt = `Use GitHub MCP tools to analyze ${repository.owner}/${repository.repo}:
+            const testPrompt = `mcp_github_list_commits with owner: "${repository.owner}", repo: "${repository.repo}", perPage: 3
 
-1. Use mcp_github_list_commits with owner: "${repository.owner}" and repo: "${repository.repo}" 
-2. Get the last 5 commits
-3. Show the commit authors and messages
-
-If GitHub MCP tools are working, I should see real commit data. If not available, please say "GitHub MCP tools are not available".`;
+Show the result.`;
 
             // Copy test prompt to clipboard
             await vscode.env.clipboard.writeText(testPrompt);
@@ -912,6 +869,254 @@ If GitHub MCP tools are working, I should see real commit data. If not available
             this.outputChannel.appendLine(`❌ ${errorMsg}`);
             vscode.window.showErrorMessage(errorMsg);
             return { success: false, error: errorMsg };
+        }
+    }
+
+    /**
+     * Get expert's recent activity via GitHub MCP
+     */
+    async getExpertRecentActivity(expertEmail: string, expertName: string): Promise<{success: boolean, activity?: any, error?: string}> {
+        try {
+            this.outputChannel.appendLine(`🔍 Getting recent activity for expert: ${expertName} (${expertEmail})`);
+
+            // Get actual Git activity for this specific expert
+            const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+            if (!workspaceFolder) {
+                return { success: false, error: 'No workspace folder found' };
+            }
+
+            const { exec } = require('child_process');
+            const { promisify } = require('util');
+            const execAsync = promisify(exec);
+
+            try {
+                // Get recent commits by this specific expert
+                const commitCommand = `git log --author="${expertEmail}" --pretty=format:"%H|%s|%ad" --date=short -n 10`;
+                const { stdout: commitOutput } = await execAsync(commitCommand, { cwd: workspaceFolder.uri.fsPath });
+
+                const recentCommits = commitOutput.split('\n')
+                    .filter((line: string) => line.trim())
+                    .map((line: string) => {
+                        const [sha, message, date] = line.split('|');
+                        return {
+                            repo: "Current Repository",
+                            message: message || "No message",
+                            date: date || new Date().toISOString().split('T')[0],
+                            url: `#${sha?.substring(0, 7) || 'unknown'}`
+                        };
+                    });
+
+                // Get file activity for this expert
+                const fileCommand = `git log --author="${expertEmail}" --name-only --pretty=format: -n 20 | sort | uniq | head -10`;
+                const { stdout: fileOutput } = await execAsync(fileCommand, { cwd: workspaceFolder.uri.fsPath });
+                
+                const recentFiles = fileOutput.split('\n')
+                    .filter((file: string) => file.trim())
+                    .slice(0, 5);
+
+                const activity = {
+                    expertName,
+                    expertEmail,
+                    recentCommits: recentCommits.length > 0 ? recentCommits : [{
+                        repo: "Current Repository",
+                        message: "No recent commits found",
+                        date: new Date().toISOString().split('T')[0],
+                        url: "#"
+                    }],
+                    recentActivity: [
+                        `${recentCommits.length} recent commits in this repository`,
+                        recentFiles.length > 0 ? `Recently worked on: ${recentFiles.slice(0, 3).join(', ')}` : "No recent file activity found",
+                        `Last commit: ${recentCommits[0]?.date || 'Unknown'}`
+                    ],
+                    currentFocus: recentCommits.length > 0 ? 
+                        `Recent work: ${recentCommits[0]?.message?.substring(0, 100) || 'No recent activity'}` :
+                        "No recent activity in this repository"
+                };
+
+                this.outputChannel.appendLine(`✅ Generated activity summary for ${expertName} with ${recentCommits.length} commits`);
+                
+                return { 
+                    success: true, 
+                    activity
+                };
+
+            } catch (gitError) {
+                this.outputChannel.appendLine(`⚠️ Git command failed, using fallback data: ${gitError}`);
+                
+                // Fallback with expert's basic info
+                const fallbackActivity = {
+                    expertName,
+                    expertEmail,
+                    recentCommits: [{
+                        repo: "Current Repository",
+                        message: "Git history not accessible",
+                        date: new Date().toISOString().split('T')[0],
+                        url: "#"
+                    }],
+                    recentActivity: [
+                        `Expert: ${expertName}`,
+                        `Email: ${expertEmail}`,
+                        "Git history requires repository access"
+                    ],
+                    currentFocus: "Repository analysis required for detailed activity"
+                };
+
+                return { 
+                    success: true, 
+                    activity: fallbackActivity
+                };
+            }
+
+        } catch (error) {
+            this.outputChannel.appendLine(`❌ Error getting expert activity: ${error}`);
+            return { 
+                success: false, 
+                error: error instanceof Error ? error.message : 'Unknown error' 
+            };
+        }
+    }
+
+    /**
+     * Display expert recent activity in a user-friendly way
+     */
+    async showExpertActivity(activity: any): Promise<void> {
+        try {
+            const { expertName, expertEmail, recentCommits, recentActivity, currentFocus } = activity;
+            
+            // Create a formatted display
+            let activityDisplay = `# 🔍 Recent Activity: ${expertName}\n\n`;
+            activityDisplay += `**Email:** ${expertEmail}\n\n`;
+            
+            if (currentFocus) {
+                activityDisplay += `**🎯 Current Focus:** ${currentFocus}\n\n`;
+            }
+
+            if (recentCommits && recentCommits.length > 0) {
+                activityDisplay += `## 📝 Recent Commits:\n`;
+                recentCommits.slice(0, 5).forEach((commit: any, index: number) => {
+                    activityDisplay += `${index + 1}. **${commit.repo || 'Repository'}**\n`;
+                    activityDisplay += `   ${commit.message || 'Commit message'}\n`;
+                    activityDisplay += `   *${commit.date || 'Recent'}*\n\n`;
+                });
+            }
+
+            if (recentActivity && recentActivity.length > 0) {
+                activityDisplay += `## 🚀 Activity Summary:\n`;
+                recentActivity.forEach((item: string, index: number) => {
+                    activityDisplay += `• ${item}\n`;
+                });
+            }
+
+            // Show in a new document
+            const doc = await vscode.workspace.openTextDocument({
+                content: activityDisplay,
+                language: 'markdown'
+            });
+            await vscode.window.showTextDocument(doc);
+
+        } catch (error) {
+            vscode.window.showErrorMessage(`Error displaying expert activity: ${error}`);
+        }
+    }
+
+    /**
+     * Get open issues from GitHub via MCP and suggest expert assignments
+     */
+    async getOpenIssuesForAssignment(): Promise<{success: boolean, issues?: any[], error?: string}> {
+        try {
+            this.outputChannel.appendLine('🎯 Getting open issues for expert assignment via MCP...');
+
+            // Check if we have repository info
+            const repository = await this.detectRepository();
+            if (!repository || !repository.owner || !repository.repo) {
+                return { success: false, error: 'Could not detect GitHub repository' };
+            }
+
+            // Create MCP prompt to get issues
+            const mcpPrompt = `Use MCP to get open issues from GitHub repository ${repository.owner}/${repository.repo}.
+
+Call mcp_github_list_issues with:
+- owner: "${repository.owner}"
+- repo: "${repository.repo}" 
+- state: "open"
+- perPage: 10
+
+Then respond with JSON:
+{
+  "repository": "${repository.owner}/${repository.repo}",
+  "openIssues": [
+    {
+      "number": 123,
+      "title": "Issue title",
+      "body": "Issue description...",
+      "labels": ["bug", "enhancement"],
+      "assignees": [],
+      "created_at": "2025-01-28",
+      "html_url": "https://github.com/...",
+      "complexity": "medium"
+    }
+  ],
+  "totalCount": 5
+}
+
+Execute the MCP call now.`;
+
+            // Open Copilot Chat with the prompt
+            await vscode.commands.executeCommand('workbench.action.chat.open');
+            await vscode.env.clipboard.writeText(mcpPrompt);
+            
+            vscode.window.showInformationMessage(
+                `📋 MCP prompt copied! Paste in Copilot Chat to get open issues from ${repository.owner}/${repository.repo}`,
+                'Got It'
+            );
+
+            this.outputChannel.appendLine('✅ MCP issues prompt ready - paste in Copilot Chat');
+            return { success: true, issues: [] };
+
+        } catch (error) {
+            this.outputChannel.appendLine(`❌ Error preparing MCP issues request: ${error}`);
+            return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+        }
+    }
+
+    /**
+     * Assign an issue to an expert via MCP
+     */
+    async assignIssueToExpert(issueNumber: number, expertGitHubUsername: string): Promise<{success: boolean, error?: string}> {
+        try {
+            this.outputChannel.appendLine(`🎯 Assigning issue #${issueNumber} to ${expertGitHubUsername} via MCP...`);
+
+            const repository = await this.detectRepository();
+            if (!repository || !repository.owner || !repository.repo) {
+                return { success: false, error: 'Could not detect GitHub repository' };
+            }
+
+            // Create MCP prompt to assign issue
+            const assignPrompt = `Use MCP to assign GitHub issue to an expert.
+
+Call mcp_github_update_issue with:
+- owner: "${repository.owner}"
+- repo: "${repository.repo}"
+- issue_number: ${issueNumber}
+- assignees: ["${expertGitHubUsername}"]
+
+Then confirm assignment was successful.`;
+
+            // Open Copilot Chat with assignment prompt
+            await vscode.commands.executeCommand('workbench.action.chat.open');
+            await vscode.env.clipboard.writeText(assignPrompt);
+            
+            vscode.window.showInformationMessage(
+                `🎯 Assignment prompt copied! Paste in Copilot Chat to assign issue #${issueNumber} to ${expertGitHubUsername}`,
+                'Got It'
+            );
+
+            this.outputChannel.appendLine(`✅ MCP assignment prompt ready for issue #${issueNumber} → ${expertGitHubUsername}`);
+            return { success: true };
+
+        } catch (error) {
+            this.outputChannel.appendLine(`❌ Error preparing MCP assignment: ${error}`);
+            return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
         }
     }
 }

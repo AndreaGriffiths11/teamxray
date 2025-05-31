@@ -73,7 +73,8 @@ export class ExpertiseAnalyzer {
     }
 
     /**
-     * Analyzes repository expertise using GitHub MCP commands and AI analysis
+     * Analyzes repository expertise using local git analysis and AI analysis
+     * (MCP is only used for expert activity features, not main analysis)
      */
     async analyzeRepository(): Promise<ExpertiseAnalysis | null> {
         try {
@@ -90,7 +91,7 @@ export class ExpertiseAnalyzer {
             const repositoryName = workspaceFolder.name;
             this.outputChannel.appendLine(`Analyzing repository: ${repositoryName}`);
 
-            // Step 2: Gather repository data using GitHub MCP commands
+            // Step 2: Gather repository data using local analysis
             const repositoryData = await this.gatherRepositoryData(repositoryName);
             if (!repositoryData) {
                 vscode.window.showErrorMessage('Failed to gather repository data.');
@@ -155,45 +156,26 @@ export class ExpertiseAnalyzer {
     }
 
     /**
-     * Gathers repository data using GitHub MCP commands
+     * Gathers repository data using local analysis (MCP only used for expert activity)
      */
     private async gatherRepositoryData(repositoryName: string): Promise<any> {
         try {
-            this.outputChannel.appendLine('Gathering repository data using Copilot Chat + GitHub MCP...');
+            this.outputChannel.appendLine('Gathering repository data using local analysis...');
 
-            // Step 1: Detect GitHub repository info
-            const repository = await this.copilotMCPService.detectRepository();
-            if (!repository) {
-                this.outputChannel.appendLine('Could not detect GitHub repository, falling back to local analysis');
-                return await this.fallbackWorkspaceAnalysis(repositoryName);
-            }
-
-            // Step 2: Use MCP service to gather comprehensive repository data
-            const repositoryData = await this.copilotMCPService.gatherRepositoryData(repository);
+            // Always use local analysis for main repository analysis
+            // MCP is only used for expert activity features
+            const localData = await this.fallbackWorkspaceAnalysis(repositoryName);
             
-            // Step 3: Get workspace files for local context
-            const files = await this.getWorkspaceFiles();
-            
-            // Combine MCP data with local file information
-            const combinedData = {
-                ...repositoryData,
-                files,
-                repository: repositoryName,
-                githubRepo: repository
-            };
-
             this.outputChannel.appendLine(
-                `Gathered data: ${files.length} files, ` +
-                `${repositoryData.contributors?.length || 0} contributors, ` +
-                `${repositoryData.commits?.length || 0} commits`
+                `Gathered data: ${localData.files?.length || 0} files, ` +
+                `${localData.contributors?.length || 0} contributors`
             );
 
-            return combinedData;
+            return localData;
 
         } catch (error) {
             this.outputChannel.appendLine(`Error gathering repository data: ${error}`);
-            // Fallback to workspace analysis
-            return await this.fallbackWorkspaceAnalysis(repositoryName);
+            throw error;
         }
     }
 
@@ -224,11 +206,17 @@ export class ExpertiseAnalyzer {
         
         const files = await this.getWorkspaceFiles();
         
+        // Get Git data locally
+        const commits = await this.getLocalGitCommits();
+        const contributors = await this.getLocalGitContributors();
+        
+        this.outputChannel.appendLine(`Fallback analysis found ${files.length} files, ${commits.length} commits, ${contributors.length} contributors`);
+        
         return {
             repository: repositoryName,
             files,
-            commits: [],
-            contributors: [],
+            commits,
+            contributors,
             pullRequests: [],
             fallbackMode: true
         };
@@ -303,7 +291,7 @@ export class ExpertiseAnalyzer {
                     messages: [
                         {
                             role: 'system',
-                            content: 'You are an expert code analyst that helps identify team expertise patterns in software repositories.'
+                            content: 'You are an expert code analyst that helps identify team expertise patterns in software repositories. You must respond with valid JSON only. Do not include any explanatory text before or after the JSON. Start your response with { and end with }.'
                         },
                         {
                             role: 'user',
@@ -494,7 +482,9 @@ Focus on the HUMANS, not just the code. Look for:
 - Problem-solving approaches (bug fixes, feature additions)
 - Knowledge sharing (documentation commits, comments)
 
-Format the response as JSON:
+IMPORTANT: Return your response as VALID JSON ONLY. Do not include any explanatory text before or after the JSON. The response must start with { and end with }.
+
+JSON Format:
 {
   "experts": [
     {
@@ -534,15 +524,15 @@ Format the response as JSON:
         try {
             this.outputChannel.appendLine(`Attempting to parse AI response as JSON...`);
             
-            // Remove markdown code blocks if present
-            let cleanResponse = aiResponse.trim();
-            if (cleanResponse.startsWith('```json')) {
-                cleanResponse = cleanResponse.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-            } else if (cleanResponse.startsWith('```')) {
-                cleanResponse = cleanResponse.replace(/^```\s*/, '').replace(/\s*```$/, '');
+            // Try to extract JSON from the response
+            let jsonContent = this.extractJSONFromResponse(aiResponse);
+            
+            if (!jsonContent) {
+                this.outputChannel.appendLine(`No JSON found in AI response, creating fallback analysis`);
+                return this.createFallbackAnalysis(repositoryData);
             }
             
-            const parsed = JSON.parse(cleanResponse);
+            const parsed = JSON.parse(jsonContent);
             this.outputChannel.appendLine(`Successfully parsed JSON response`);
             this.outputChannel.appendLine(`Parsed response structure: ${JSON.stringify(Object.keys(parsed))}`);
             this.outputChannel.appendLine(`Number of experts in response: ${parsed.experts?.length || 0}`);
@@ -583,10 +573,211 @@ Format the response as JSON:
             };
         } catch (error) {
             this.outputChannel.appendLine(`Failed to parse AI response as JSON: ${error}`);
-            this.outputChannel.appendLine(`AI response was: ${aiResponse}`);
-            this.outputChannel.appendLine(`Cannot proceed without valid AI response`);
-            throw new Error(`Failed to parse AI response: ${error instanceof Error ? error.message : 'Unknown parsing error'}`);
+            this.outputChannel.appendLine(`AI response was: ${aiResponse.substring(0, 200)}...`);
+            this.outputChannel.appendLine(`Creating fallback analysis from repository data`);
+            return this.createFallbackAnalysis(repositoryData);
         }
+    }
+
+    /**
+     * Extracts JSON content from AI response that may contain natural language
+     */
+    private extractJSONFromResponse(response: string): string | null {
+        try {
+            this.outputChannel.appendLine(`Extracting JSON from response (first 200 chars): ${response.substring(0, 200)}`);
+            
+            // Remove markdown code blocks if present
+            let cleanResponse = response.trim();
+            if (cleanResponse.startsWith('```json')) {
+                cleanResponse = cleanResponse.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+            } else if (cleanResponse.startsWith('```')) {
+                cleanResponse = cleanResponse.replace(/^```\s*/, '').replace(/\s*```$/, '');
+            }
+            
+            // Try to parse as-is first
+            try {
+                JSON.parse(cleanResponse);
+                this.outputChannel.appendLine('Successfully parsed response as-is');
+                return cleanResponse;
+            } catch {
+                this.outputChannel.appendLine('Response is not pure JSON, searching for JSON content...');
+                
+                // Look for the largest JSON object in the response
+                const jsonMatches = [...response.matchAll(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g)];
+                
+                // Try each match from largest to smallest
+                const sortedMatches = jsonMatches.sort((a, b) => (b[0]?.length || 0) - (a[0]?.length || 0));
+                
+                for (const match of sortedMatches) {
+                    try {
+                        const candidate = match[0];
+                        JSON.parse(candidate);
+                        this.outputChannel.appendLine(`Found valid JSON (length: ${candidate.length})`);
+                        return candidate;
+                    } catch {
+                        continue;
+                    }
+                }
+                
+                // More sophisticated regex for nested JSON
+                const nestedJsonMatch = response.match(/\{(?:[^{}]|{(?:[^{}]|{[^{}]*})*})*\}/);
+                if (nestedJsonMatch) {
+                    try {
+                        const candidate = nestedJsonMatch[0];
+                        JSON.parse(candidate);
+                        this.outputChannel.appendLine(`Found valid nested JSON (length: ${candidate.length})`);
+                        return candidate;
+                    } catch {
+                        this.outputChannel.appendLine('Nested JSON match was invalid');
+                    }
+                }
+                
+                // Look for JSON after common phrases with more patterns
+                const phrases = [
+                    'format the response as json:',
+                    'here\'s the analyzed json output:',
+                    'json output:',
+                    'analysis results:',
+                    'here\'s the analysis:',
+                    'the analysis is:',
+                    'based on the repository structure',
+                    'analyzing the repository',
+                    'response:'
+                ];
+                
+                for (const phrase of phrases) {
+                    const index = response.toLowerCase().indexOf(phrase);
+                    if (index !== -1) {
+                        const afterPhrase = response.substring(index + phrase.length);
+                        
+                        // Look for JSON starting with first {
+                        const firstBrace = afterPhrase.indexOf('{');
+                        if (firstBrace !== -1) {
+                            const fromBrace = afterPhrase.substring(firstBrace);
+                            const jsonMatch = fromBrace.match(/\{(?:[^{}]|{(?:[^{}]|{[^{}]*})*})*\}/);
+                            if (jsonMatch) {
+                                try {
+                                    const candidate = jsonMatch[0];
+                                    JSON.parse(candidate);
+                                    this.outputChannel.appendLine(`Found valid JSON after phrase "${phrase}" (length: ${candidate.length})`);
+                                    return candidate;
+                                } catch {
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                this.outputChannel.appendLine('No valid JSON found in response');
+                return null;
+            }
+        } catch (error) {
+            this.outputChannel.appendLine(`Error extracting JSON: ${error}`);
+            return null;
+        }
+    }
+
+    /**
+     * Creates a fallback analysis when AI response is invalid
+     */
+    private createFallbackAnalysis(repositoryData: any): ExpertiseAnalysis {
+        this.outputChannel.appendLine(`Creating fallback analysis from repository data`);
+        
+        // Create experts from contributors data
+        const experts: Expert[] = (repositoryData.contributors || []).map((contributor: any, index: number) => ({
+            name: contributor.name || `Contributor ${index + 1}`,
+            email: contributor.email || 'unknown@example.com',
+            expertise: Math.min(90, 30 + (contributor.commits || 0) * 2), // Simple expertise calculation
+            contributions: contributor.commits || 0,
+            lastCommit: contributor.lastCommit ? new Date(contributor.lastCommit) : new Date(),
+            specializations: this.inferSpecializationsFromFiles(repositoryData.files || []),
+            communicationStyle: 'Analysis unavailable - local data only',
+            teamRole: 'Team member',
+            hiddenStrengths: ['Code contribution'],
+            idealChallenges: ['General development tasks']
+        }));
+
+        // Generate insights based on available data
+        const insights = [
+            `Analyzed ${repositoryData.files?.length || 0} files in the repository`,
+            `Found ${experts.length} contributors with commit history`,
+            experts.length > 0 ? `Most active contributor: ${experts[0]?.name}` : 'No contributor data available',
+            'AI analysis was unavailable - using local git data only',
+            'For detailed team insights, check GitHub Models API configuration'
+        ].filter(Boolean);
+
+        return {
+            repository: repositoryData.repository || 'Unknown Repository',
+            generatedAt: new Date(),
+            totalFiles: repositoryData.files?.length || 0,
+            totalExperts: experts.length,
+            fileExpertise: this.mapFileExpertise(repositoryData.files || [], experts),
+            expertProfiles: experts,
+            teamDynamics: {
+                collaborationPatterns: ['Data not available in fallback mode'],
+                communicationHighlights: ['Local analysis only'],
+                knowledgeSharing: ['Requires AI analysis for detailed insights']
+            },
+            challengeMatching: {
+                toughProblems: ['Complex analysis requires AI integration'],
+                recommendedExperts: experts.slice(0, 2).map(e => e.name)
+            },
+            insights
+        };
+    }
+
+    /**
+     * Infers specializations from file extensions in the repository
+     */
+    private inferSpecializationsFromFiles(files: string[]): string[] {
+        const extensions = files
+            .map(f => f.split('.').pop()?.toLowerCase())
+            .filter((ext): ext is string => Boolean(ext));
+            
+        const extensionCounts = extensions.reduce((acc: Record<string, number>, ext: string) => {
+            acc[ext] = (acc[ext] || 0) + 1;
+            return acc;
+        }, {} as Record<string, number>);
+        
+        const topExtensions = Object.entries(extensionCounts)
+            .sort(([, a], [, b]) => (b as number) - (a as number))
+            .slice(0, 3)
+            .map(([ext]) => ext);
+            
+        const specializations: string[] = [];
+        
+        for (const ext of topExtensions) {
+            switch (ext) {
+                case 'ts':
+                case 'tsx':
+                    specializations.push('TypeScript');
+                    break;
+                case 'js':
+                case 'jsx':
+                    specializations.push('JavaScript');
+                    break;
+                case 'py':
+                    specializations.push('Python');
+                    break;
+                case 'java':
+                    specializations.push('Java');
+                    break;
+                case 'cpp':
+                case 'cc':
+                case 'cxx':
+                    specializations.push('C++');
+                    break;
+                case 'rs':
+                    specializations.push('Rust');
+                    break;
+                case 'go':
+                    specializations.push('Go');
+                    break;
+            }
+        }
+        
+        return specializations.length > 0 ? specializations : ['General Programming'];
     }
 
     /**
@@ -600,6 +791,117 @@ Format the response as JSON:
             lastModified: new Date(),
             changeFrequency: Math.floor(Math.random() * 10) + 1
         }));
+    }
+
+    /**
+     * Gets local Git commits using git log
+     */
+    private async getLocalGitCommits(): Promise<any[]> {
+        try {
+            const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+            if (!workspaceFolder) {
+                return [];
+            }
+
+            const { exec } = require('child_process');
+            const { promisify } = require('util');
+            const execAsync = promisify(exec);
+
+            // Get recent commits with author info
+            const command = 'git log --pretty=format:"%H|%an|%ae|%ad|%s" --date=iso -n 50';
+            const { stdout } = await execAsync(command, { cwd: workspaceFolder.uri.fsPath });
+
+            const commits = stdout.split('\n')
+                .filter((line: string) => line.trim())
+                .map((line: string) => {
+                    const parts = line.split('|');
+                    if (parts.length >= 5) {
+                        return {
+                            sha: parts[0],
+                            author: {
+                                name: parts[1],
+                                email: parts[2]
+                            },
+                            date: parts[3],
+                            message: parts.slice(4).join('|')
+                        };
+                    }
+                    return null;
+                })
+                .filter(Boolean);
+
+            this.outputChannel.appendLine(`Found ${commits.length} local commits`);
+            return commits;
+
+        } catch (error) {
+            this.outputChannel.appendLine(`Failed to get local git commits: ${error}`);
+            return [];
+        }
+    }
+
+    /**
+     * Gets local Git contributors using git shortlog
+     */
+    private async getLocalGitContributors(): Promise<any[]> {
+        try {
+            const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+            if (!workspaceFolder) {
+                return [];
+            }
+
+            const { exec } = require('child_process');
+            const { promisify } = require('util');
+            const execAsync = promisify(exec);
+
+            // Get contributors with commit counts
+            const command = 'git shortlog -sne --all';
+            const { stdout } = await execAsync(command, { cwd: workspaceFolder.uri.fsPath });
+
+            const contributors = stdout.split('\n')
+                .filter((line: string) => line.trim())
+                .map((line: string) => {
+                    const match = line.match(/^\s*(\d+)\s+(.+?)\s+<(.+?)>\s*$/);
+                    if (match) {
+                        const commits = parseInt(match[1]);
+                        const name = match[2];
+                        const email = match[3];
+                        
+                        return {
+                            name,
+                            email,
+                            commits,
+                            lastCommit: new Date().toISOString() // We'll get this separately if needed
+                        };
+                    }
+                    return null;
+                })
+                .filter(Boolean)
+                .sort((a: any, b: any) => b.commits - a.commits); // Sort by commit count
+
+            // Get last commit date for each contributor
+            for (const contributor of contributors) {
+                try {
+                    const lastCommitCommand = `git log --author="${contributor.email}" --pretty=format:"%ad" --date=iso -n 1`;
+                    const { stdout: lastCommitDate } = await execAsync(lastCommitCommand, { cwd: workspaceFolder.uri.fsPath });
+                    if (lastCommitDate.trim()) {
+                        contributor.lastCommit = lastCommitDate.trim();
+                    }
+                } catch (error) {
+                    this.outputChannel.appendLine(`Failed to get last commit for ${contributor.name}: ${error}`);
+                }
+            }
+
+            this.outputChannel.appendLine(`Found ${contributors.length} local contributors`);
+            contributors.forEach((c: any) => {
+                this.outputChannel.appendLine(`  - ${c.name} (${c.email}): ${c.commits} commits, last: ${c.lastCommit}`);
+            });
+
+            return contributors;
+
+        } catch (error) {
+            this.outputChannel.appendLine(`Failed to get local git contributors: ${error}`);
+            return [];
+        }
     }
 
     /**
