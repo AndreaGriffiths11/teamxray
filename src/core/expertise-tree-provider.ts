@@ -100,7 +100,7 @@ export class ExpertiseTreeProvider implements vscode.TreeDataProvider<ExpertiseT
                             'expert-detail'
                         ),
                         new ExpertiseTreeItem(
-                            `⏰ Last commit: ${element.expert.lastCommit instanceof Date ? element.expert.lastCommit.toLocaleDateString() : 'Unknown'}`,
+                            `⏰ Last commit: ${this.safeFormatDate(element.expert.lastCommit)}`,
                             vscode.TreeItemCollapsibleState.None,
                             'expert-detail'
                         ),
@@ -154,6 +154,19 @@ export class ExpertiseTreeProvider implements vscode.TreeDataProvider<ExpertiseT
         }
 
         return Promise.resolve([]);
+    }
+
+    /**
+     * Safely formats a date that might be a Date object or string
+     */
+    private safeFormatDate(date: any): string {
+        if (!date) return 'Unknown';
+        try {
+            const d = date instanceof Date ? date : new Date(date);
+            return d.toLocaleDateString();
+        } catch {
+            return 'Unknown';
+        }
     }
 }
 

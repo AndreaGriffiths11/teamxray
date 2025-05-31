@@ -55,7 +55,7 @@ export class ExpertiseWebviewProvider {
             `Email: ${expert.email}`,
             `Expertise Score: ${expert.expertise}/100`,
             `Contributions: ${expert.contributions}`,
-            `Last Commit: ${expert.lastCommit instanceof Date ? expert.lastCommit.toLocaleDateString() : 'Unknown'}`,
+            `Last Commit: ${this.safeFormatDate(expert.lastCommit)}`,
             `Specializations: ${(expert.specializations || []).join(', ')}`
         ];
 
@@ -120,6 +120,19 @@ export class ExpertiseWebviewProvider {
             .replace(/\s+/g, '')
             .replace(/[^a-zA-Z0-9\-]/g, '')
             .slice(0, 39); // GitHub username max length
+    }
+
+    /**
+     * Safely formats a date that might be a Date object or string
+     */
+    private safeFormatDate(date: any): string {
+        if (!date) return 'Unknown';
+        try {
+            const d = date instanceof Date ? date : new Date(date);
+            return d.toLocaleDateString();
+        } catch {
+            return 'Unknown';
+        }
     }
 
     /**
@@ -719,7 +732,7 @@ export class ExpertiseWebviewProvider {
     <div class="header">
         <h1>✨ Team Expertise Analysis</h1>
         <div class="metadata">
-            📊 ${analysis.repository} • Generated ${analysis.generatedAt.toLocaleDateString()} • ${analysis.totalFiles} files • ${analysis.totalExperts} experts
+            📊 ${analysis.repository} • Generated ${this.safeFormatDate(analysis.generatedAt)} • ${analysis.totalFiles} files • ${analysis.totalExperts} experts
         </div>
     </div>
 

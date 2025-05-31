@@ -93,28 +93,10 @@ Uses GitHub Models API (GPT-4o) to analyze:
 - Team roles identified through collaboration patterns
 - Challenge matching based on problem-solving approaches
 
-### 🧮 **Expertise Percentage Calculation**
+### 🧮 Expertise Calculation
+AI-First Approach: Uses GPT-4o to analyze team member contributions, communication patterns, and collaboration styles for human-centered expertise scores (0-100%).
 
-Team member expertise percentages are calculated using a **dual-approach system** that prioritizes human insights:
-
-#### **🎯 AI-Powered Analysis (Primary Method)**
-When GitHub Models API is available, GPT-4o analyzes multiple human factors:
-- **Technical Contributions**: Quality and depth of code changes
-- **Communication Excellence**: Commit message clarity and collaboration signals
-- **Mentoring Patterns**: Evidence of knowledge sharing and team support
-- **Problem-Solving Style**: Approach to different types of challenges
-- **Team Collaboration**: Cross-functional work and leadership indicators
-
-*Result: 0-100% based on holistic human assessment, not just code metrics*
-
-#### **📈 Mathematical Fallback (Local Mode)**
-When AI analysis is unavailable, uses Git commit data:
-- **Repository Level**: `30% base + (2% × commit count)` *(max 90%)*
-- **File Level**: `(Individual commits ÷ Top contributor commits) × 100%` *(max 100%)*
-
-*Example: 15 commits = 30% + (15 × 2%) = 60% expertise*
-
-The AI approach reveals **the humans behind the code** - identifying mentors, problem-solvers, and collaboration catalysts that pure metrics would miss.
+Fallback Method: When AI unavailable, calculates percentages from Git commit data using mathematical formulas based on contribution frequency and relative activity.
 
 ## The Technology
 

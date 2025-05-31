@@ -56,26 +56,6 @@
       {
         "command": "teamxray.showTeamOverview",
         "title": "Team X-Ray: Show Team Expertise Overview"
-      },
-      {
-        "command": "teamxray.testMCPStatus",
-        "title": "Team X-Ray: Test MCP Server Status"
-      },
-      {
-        "command": "teamxray.testExpertActivity",
-        "title": "Team X-Ray: Test Expert Activity (MCP)"
-      },
-      {
-        "command": "teamxray.testJsonExtraction",
-        "title": "Team X-Ray: Test JSON Extraction"
-      },
-      {
-        "command": "teamxray.testMCPIssues",
-        "title": "Team X-Ray: Test GitHub Issues (MCP)"
-      },
-      {
-        "command": "teamxray.testMCPTools",
-        "title": "Team X-Ray: Test Available MCP Tools"
       }
     ],
     "menus": {
@@ -118,11 +98,7 @@
       "properties": {
         "teamxray.githubToken": {
           "type": "string",
-          "description": "GitHub token for MCP commands access"
-        },
-        "teamxray.githubModelsKey": {
-          "type": "string",
-          "description": "GitHub Models API key for AI analysis"
+          "description": "GitHub token for MCP access and API calls"
         }
       }
     }

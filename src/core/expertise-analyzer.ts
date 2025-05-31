@@ -905,6 +905,19 @@ JSON Format:
     }
 
     /**
+     * Safely formats a date that might be a Date object or string
+     */
+    private safeFormatDate(date: any): string {
+        if (!date) return 'Unknown';
+        try {
+            const d = date instanceof Date ? date : new Date(date);
+            return d.toLocaleDateString();
+        } catch {
+            return 'Unknown';
+        }
+    }
+
+    /**
      * Saves analysis results to workspace state
      */
     async saveAnalysis(analysis: ExpertiseAnalysis): Promise<void> {
@@ -916,7 +929,20 @@ JSON Format:
      * Gets the last saved analysis
      */
     getLastAnalysis(): ExpertiseAnalysis | undefined {
-        return this.context.workspaceState.get('lastAnalysis');
+        const analysis = this.context.workspaceState.get('lastAnalysis') as any;
+        if (!analysis) {
+            return undefined;
+        }
+
+        // Fix date deserialization - VS Code workspace state converts dates to strings
+        return {
+            ...analysis,
+            generatedAt: new Date(analysis.generatedAt),
+            expertProfiles: analysis.expertProfiles?.map((expert: any) => ({
+                ...expert,
+                lastCommit: expert.lastCommit ? new Date(expert.lastCommit) : new Date()
+            })) || []
+        } as ExpertiseAnalysis;
     }
 
 }
