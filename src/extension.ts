@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import { ExpertiseAnalyzer } from './core/expertise-analyzer';
 import { ExpertiseWebviewProvider } from './core/expertise-webview';
 import { ExpertiseTreeProvider } from './core/expertise-tree-provider';
+import { CopilotMCPService } from './core/copilot-mcp-service';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -161,6 +162,53 @@ Specializations: ${(expert.specializations || []).join(', ')}`;
 		}
 	});
 
+	// Register test MCP status command
+	const testMCPStatusCommand = vscode.commands.registerCommand('teamxray.testMCPStatus', async () => {
+		const outputChannel = vscode.window.createOutputChannel('Team X-Ray MCP Test');
+		outputChannel.show();
+		
+		try {
+			const mcpService = new CopilotMCPService(outputChannel);
+			
+			outputChannel.appendLine('🔍 Testing MCP Server Connection...\n');
+			
+			// Test repository detection
+			const repo = await mcpService.detectRepository();
+			if (repo) {
+				outputChannel.appendLine(`✅ Repository detected: ${repo.owner}/${repo.repo}\n`);
+			} else {
+				outputChannel.appendLine('❌ No GitHub repository detected\n');
+			}
+			
+			// Test MCP server status
+			const status = await mcpService.checkMCPServerStatus();
+			outputChannel.appendLine('📊 MCP Server Status:');
+			outputChannel.appendLine(`   Available: ${status.isAvailable ? '✅ Yes' : '❌ No'}`);
+			
+			if (status.containerName) {
+				outputChannel.appendLine(`   Container: ${status.containerName}`);
+				outputChannel.appendLine(`   Status: ${status.containerStatus}`);
+			}
+			
+			if (status.error) {
+				outputChannel.appendLine(`   Error: ${status.error}`);
+			}
+			
+			outputChannel.appendLine('\n🔧 Recommendations:');
+			if (!status.isAvailable) {
+				outputChannel.appendLine('   • Restart VS Code to initialize MCP server');
+				outputChannel.appendLine('   • Check that .vscode/mcp.json is configured');
+				outputChannel.appendLine('   • Ensure Docker is running');
+			} else {
+				outputChannel.appendLine('   • MCP server is ready for use!');
+				outputChannel.appendLine('   • Try running "Analyze Repository" command');
+			}
+			
+		} catch (error) {
+			outputChannel.appendLine(`❌ Test failed: ${error}`);
+		}
+	});
+
 	// Register status bar item
 	const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
 	statusBarItem.command = 'teamxray.showTeamOverview';
@@ -175,6 +223,7 @@ Specializations: ${(expert.specializations || []).join(', ')}`;
 		showOverviewCommand,
 		openFileFromTreeCommand,
 		showExpertDetailsCommand,
+		testMCPStatusCommand,
 		statusBarItem
 	);
 

@@ -56,6 +56,10 @@
       {
         "command": "teamxray.showTeamOverview",
         "title": "Team X-Ray: Show Team Expertise Overview"
+      },
+      {
+        "command": "teamxray.testMCPStatus",
+        "title": "Team X-Ray: Test MCP Server Status"
       }
     ],
     "menus": {
