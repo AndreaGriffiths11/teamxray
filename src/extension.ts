@@ -209,6 +209,52 @@ Specializations: ${(expert.specializations || []).join(', ')}`;
 		}
 	});
 
+	// Register setup guidance command
+	const setupGuidanceCommand = vscode.commands.registerCommand('teamxray.showSetupGuidance', async () => {
+		const outputChannel = vscode.window.createOutputChannel('Team X-Ray Setup');
+		outputChannel.show();
+		
+		outputChannel.appendLine('🚀 MCP Team X-Ray Setup Guide\n');
+		outputChannel.appendLine('To use GitHub MCP integration, you need to configure a GitHub token:\n');
+		
+		outputChannel.appendLine('📋 OPTION 1: Environment Variable (Recommended)');
+		outputChannel.appendLine('   1. Get a GitHub Personal Access Token from: https://github.com/settings/tokens');
+		outputChannel.appendLine('   2. Set environment variable: export GITHUB_TOKEN=your_token_here');
+		outputChannel.appendLine('   3. Restart VS Code');
+		outputChannel.appendLine('');
+		
+		outputChannel.appendLine('📋 OPTION 2: VS Code Settings');
+		outputChannel.appendLine('   1. Go to VS Code Settings (Cmd/Ctrl + ,)');
+		outputChannel.appendLine('   2. Search for "teamxray.githubToken"');
+		outputChannel.appendLine('   3. Enter your GitHub token');
+		outputChannel.appendLine('');
+		
+		outputChannel.appendLine('🔧 Verify Setup:');
+		outputChannel.appendLine('   • Run "Team X-Ray: Test MCP Server Status" command');
+		outputChannel.appendLine('   • Check that Docker is running');
+		outputChannel.appendLine('   • Ensure you have access to the GitHub repository');
+		outputChannel.appendLine('');
+		
+		outputChannel.appendLine('🔒 Security Note:');
+		outputChannel.appendLine('   Your GitHub token is kept secure and never exposed in logs or UI.');
+		
+		const choice = await vscode.window.showInformationMessage(
+			'Setup guide displayed in output channel. Would you like to open GitHub token settings?',
+			'Open Token Settings',
+			'Test MCP Status',
+			'Got It'
+		);
+		
+		switch (choice) {
+			case 'Open Token Settings':
+				vscode.env.openExternal(vscode.Uri.parse('https://github.com/settings/tokens'));
+				break;
+			case 'Test MCP Status':
+				vscode.commands.executeCommand('teamxray.testMCPStatus');
+				break;
+		}
+	});
+
 	// Register status bar item
 	const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
 	statusBarItem.command = 'teamxray.showTeamOverview';
@@ -224,6 +270,7 @@ Specializations: ${(expert.specializations || []).join(', ')}`;
 		openFileFromTreeCommand,
 		showExpertDetailsCommand,
 		testMCPStatusCommand,
+		setupGuidanceCommand,
 		statusBarItem
 	);
 

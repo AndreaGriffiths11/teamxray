@@ -60,6 +60,10 @@
       {
         "command": "teamxray.testMCPStatus",
         "title": "Team X-Ray: Test MCP Server Status"
+      },
+      {
+        "command": "teamxray.showSetupGuidance", 
+        "title": "Team X-Ray: Setup GitHub Token"
       }
     ],
     "menus": {

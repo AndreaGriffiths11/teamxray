@@ -1,29 +1,21 @@
 {
-  "inputs": [
-    {
-      "type": "promptString",
-      "id": "github_token",
-      "description": "GitHub Personal Access Token for MCP Team X-Ray",
-      "password": true
-    }
-  ],
   "servers": {
     "github": {
       "command": "docker",
       "args": [
         "run",
-        "-i",
+        "-i", 
         "--rm",
         "--name",
         "mcp-team-xray-github",
         "-e",
         "GITHUB_PERSONAL_ACCESS_TOKEN",
-        "-e",
+        "-e", 
         "GITHUB_TOOLSETS=repos,users,pull_requests,issues,commits",
         "ghcr.io/github/github-mcp-server"
       ],
       "env": {
-        "GITHUB_PERSONAL_ACCESS_TOKEN": "${input:github_token}"
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${env:GITHUB_TOKEN}"
       }
     }
   }
