@@ -3,3 +3,8 @@ dist
 node_modules
 .vscode-test/
 *.vsix
+
+# Environment files with sensitive credentials
+.env
+.github/.env
+**/.env
