@@ -60,18 +60,6 @@
       {
         "command": "teamxray.testMCPStatus",
         "title": "Team X-Ray: Test MCP Server Status"
-      },
-      {
-        "command": "teamxray.showSetupGuidance", 
-        "title": "Team X-Ray: Setup GitHub Token"
-      },
-      {
-        "command": "teamxray.forceMCPTest",
-        "title": "Team X-Ray: Force MCP Test (No Fallbacks)"
-      },
-      {
-        "command": "teamxray.startMCPServer",
-        "title": "Team X-Ray: Start MCP Server Manually"
       }
     ],
     "menus": {

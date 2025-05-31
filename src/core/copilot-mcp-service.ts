@@ -180,7 +180,11 @@ export class CopilotMCPService {
             // The user might have MCP configured differently or in the main VS Code instance
             const chatResponse = await this.queryCopilotWithMCP(prompt, mcpStatus);
             
-            if (chatResponse) {
+            if (chatResponse === 'user_chose_mcp') {
+                // User chose to use MCP manually - don't run fallback automatically
+                this.outputChannel.appendLine('User chose to use MCP manually - skipping automatic fallback');
+                throw new Error('User opted for manual MCP usage - analysis paused');
+            } else if (chatResponse) {
                 this.outputChannel.appendLine('Successfully gathered repository data via Copilot + MCP');
                 return this.parseRepositoryResponse(chatResponse, repository);
             } else {
@@ -244,45 +248,141 @@ If GitHub MCP tools are not available, please let me know so I can use fallback 
             
             if (status.isAvailable && status.containerName) {
                 statusMessage = `✅ GitHub MCP Server is running (${status.containerName})`;
+                this.outputChannel.appendLine(`MCP Server Status: ${statusMessage}`);
             } else {
-                statusMessage = `⚠️ GitHub MCP Server not detected. MCP may still work in main VS Code instance.`;
+                statusMessage = `⚠️ GitHub MCP Server not detected. Checking main VS Code instance...`;
+                this.outputChannel.appendLine(`MCP Server Status: ${statusMessage}`);
             }
 
-            // For now, we'll guide the user to use Copilot Chat manually
-            // In the future, this could use the Copilot Chat API when it becomes available
+            // Enhanced user experience with better options
             const choice = await vscode.window.showInformationMessage(
-                `${statusMessage}\n\nTo gather repository data via GitHub MCP:\n\n1. Open Copilot Chat\n2. Enable Agent mode (@)\n3. The GitHub MCP server will be available for analysis`,
-                'Open Copilot Chat',
-                'Use Fallback Method'
+                `${statusMessage}\n\nChoose how to analyze the repository:`,
+                {
+                    title: '🤖 Use MCP + Copilot',
+                    detail: 'Open Copilot Chat with MCP tools for comprehensive analysis'
+                },
+                {
+                    title: '⚡ Quick Analysis',
+                    detail: 'Use local git analysis (faster, limited data)'
+                },
+                {
+                    title: '❌ Cancel',
+                    detail: 'Stop analysis'
+                }
             );
 
-            if (choice === 'Open Copilot Chat') {
+            if (choice?.title === '🤖 Use MCP + Copilot') {
                 try {
-                    // Try to open Copilot Chat (command may not exist in all VS Code versions)
+                    // Try to open Copilot Chat
                     await vscode.commands.executeCommand('workbench.action.chat.open');
+                    
+                    // Copy the enhanced prompt to clipboard
+                    const enhancedPrompt = this.createEnhancedMCPPrompt(prompt);
+                    await vscode.env.clipboard.writeText(enhancedPrompt);
+                    
+                    // Show improved instructions
+                    const result = await vscode.window.showInformationMessage(
+                        `✅ Copilot Chat opened! Instructions:\n\n1. Paste the copied prompt (Cmd/Ctrl+V)\n2. GitHub MCP tools will analyze the repository\n3. Copy the JSON response when complete\n4. Click "Process Results" below`,
+                        'Process Results',
+                        'View Full Prompt',
+                        'Cancel'
+                    );
+
+                    if (result === 'Process Results') {
+                        // Allow user to paste the results
+                        const mcpResults = await vscode.window.showInputBox({
+                            title: 'Paste MCP Analysis Results',
+                            prompt: 'Paste the JSON response from Copilot Chat here',
+                            placeHolder: '{"commits": [...], "contributors": [...], ...}',
+                            ignoreFocusOut: true
+                        });
+
+                        if (mcpResults && mcpResults.trim().startsWith('{')) {
+                            this.outputChannel.appendLine('✅ MCP results received from user');
+                            return mcpResults.trim();
+                        } else {
+                            this.outputChannel.appendLine('❌ No valid MCP results provided');
+                            return null;
+                        }
+                    } else if (result === 'View Full Prompt') {
+                        // Show the prompt in an editor
+                        const doc = await vscode.workspace.openTextDocument({
+                            content: enhancedPrompt,
+                            language: 'markdown'
+                        });
+                        await vscode.window.showTextDocument(doc);
+                        return 'user_chose_mcp';
+                    }
+                    
+                    return 'user_chose_mcp';
+                    
                 } catch (chatError) {
                     // Fallback if chat command doesn't exist
                     this.outputChannel.appendLine(`Chat command not available: ${chatError}`);
-                    vscode.window.showInformationMessage('Please open Copilot Chat manually (Cmd+Shift+I or Ctrl+Shift+I)');
+                    vscode.window.showErrorMessage('Could not open Copilot Chat. Please open it manually (Cmd+Shift+I or Ctrl+Shift+I)');
+                    return null;
                 }
-                
-                // Copy the prompt to clipboard for easy pasting
-                await vscode.env.clipboard.writeText(prompt);
-                
-                vscode.window.showInformationMessage(
-                    `Prompt copied to clipboard! ${status.isAvailable ? 'MCP server detected and ready.' : 'Try using MCP in Copilot Chat even if not detected locally.'}`,
-                    'Got it'
-                );
-                
-                return null; // User will manually interact with Copilot
+            } else if (choice?.title === '⚡ Quick Analysis') {
+                this.outputChannel.appendLine('User chose quick local analysis');
+                return null; // This will trigger fallback
+            } else {
+                this.outputChannel.appendLine('User cancelled analysis');
+                return null;
             }
 
-            return null;
-
         } catch (error) {
-            this.outputChannel.appendLine(`Error querying Copilot Chat: ${error}`);
+            this.outputChannel.appendLine(`Error in MCP integration: ${error}`);
             return null;
         }
+    }
+
+    /**
+     * Create an enhanced prompt specifically designed for MCP usage
+     */
+    private createEnhancedMCPPrompt(basePrompt: string): string {
+        return `# 🔍 Team X-Ray Repository Analysis via GitHub MCP
+
+${basePrompt}
+
+## 🎯 MCP Tools to Use:
+Please use these GitHub MCP tools to gather comprehensive data:
+
+1. **github_list_commits** - Get recent commits with authors and messages
+2. **github_list_pull_requests** - Get PR data for collaboration insights  
+3. **github_list_issues** - Get issue discussions and problem-solving patterns
+4. **github_get_file_contents** - Sample key files for expertise areas
+
+## 📊 Expected JSON Response Format:
+\`\`\`json
+{
+  "commits": [
+    {
+      "sha": "abc123",
+      "author": {"name": "...", "email": "...", "date": "..."},
+      "message": "...",
+      "files": ["path1", "path2"]
+    }
+  ],
+  "contributors": [
+    {
+      "name": "...",
+      "email": "...", 
+      "totalCommits": 0,
+      "lastCommit": "...",
+      "recentCommits": ["..."]
+    }
+  ],
+  "pullRequests": [...],
+  "issues": [...],
+  "collaborationInsights": [
+    "Communication style observations",
+    "Collaboration patterns",
+    "Hidden strengths identified"
+  ]
+}
+\`\`\`
+
+Please gather this data and return it in the exact JSON format above. Thank you! 🚀`;
     }
 
     /**
@@ -609,7 +709,7 @@ Return the analysis as JSON with the following structure:
     async forceMCPTest(repository: GitHubRepository): Promise<{ success: boolean, response?: any, error?: string }> {
         try {
             this.outputChannel.appendLine(`🔬 FORCE MCP TEST: Testing MCP integration for ${repository.owner}/${repository.repo}`);
-            this.outputChannel.appendLine('This test will NOT fall back to local analysis - MCP must work or fail');
+            this.outputChannel.appendLine('This test will NOT fall back to local analysis - MCP must work or fail\n');
 
             // Check Copilot Chat availability first
             const copilotExtension = vscode.extensions.getExtension('GitHub.copilot-chat');
@@ -623,52 +723,110 @@ Return the analysis as JSON with the following structure:
 
             // Check MCP server status
             const mcpStatus = await this.checkMCPServerStatus();
-            this.outputChannel.appendLine(`MCP Status: ${JSON.stringify(mcpStatus, null, 2)}`);
+            this.outputChannel.appendLine(`📊 MCP Server Status:`);
+            this.outputChannel.appendLine(`   Available: ${mcpStatus.isAvailable ? '✅' : '❌'}`);
+            this.outputChannel.appendLine(`   Container: ${mcpStatus.containerName || 'Not found'}`);
+            this.outputChannel.appendLine(`   Status: ${mcpStatus.containerStatus || 'Unknown'}`);
+            this.outputChannel.appendLine('');
 
-            // Build MCP prompt
-            const prompt = this.buildMCPDataGatheringPrompt(repository);
-            this.outputChannel.appendLine(`📝 MCP Prompt prepared:\n${prompt.substring(0, 200)}...`);
+            // Create a simple MCP test prompt
+            const testPrompt = `Use GitHub MCP tools to analyze ${repository.owner}/${repository.repo}:
 
-            // Try to use Copilot Chat with MCP - this is where we'll see if it actually works
-            this.outputChannel.appendLine('🚀 Attempting to query Copilot Chat with MCP...');
-            
-            // For now, we need to guide the user to manually test in Copilot Chat
-            const testInstructions = `
-To test MCP integration manually:
+1. Use mcp_github_list_commits with owner: "${repository.owner}" and repo: "${repository.repo}" 
+2. Get the last 5 commits
+3. Show the commit authors and messages
 
-1. Open Copilot Chat (Ctrl+Shift+I or Cmd+Shift+I)
-2. Type exactly this prompt:
-"Use GitHub MCP tools to get recent commits for ${repository.owner}/${repository.repo}. Use mcp_github_list_commits with owner: "${repository.owner}" and repo: "${repository.repo}". Show me the raw response."
+If GitHub MCP tools are working, I should see real commit data. If not available, please say "GitHub MCP tools are not available".`;
 
-3. If MCP is working, you should see:
-   - Copilot will say it's using MCP GitHub tools
-   - You'll get actual commit data from GitHub API
-   - Response will include commit SHAs, authors, messages
+            // Copy test prompt to clipboard
+            await vscode.env.clipboard.writeText(testPrompt);
 
-4. If MCP is NOT working, you'll see:
-   - Copilot will say GitHub MCP tools are not available
-   - Or it will fall back to general knowledge
-   - No actual repository data will be retrieved
-`;
+            // Open Copilot Chat and show test instructions
+            try {
+                await vscode.commands.executeCommand('workbench.action.chat.open');
+                this.outputChannel.appendLine('✅ Copilot Chat opened');
+            } catch (chatError) {
+                this.outputChannel.appendLine(`⚠️ Could not open Copilot Chat automatically: ${chatError}`);
+                this.outputChannel.appendLine('Please open Copilot Chat manually (Ctrl+Shift+I or Cmd+Shift+I)');
+            }
 
-            vscode.window.showInformationMessage(
-                '🔬 MCP Test Ready: Check the output panel for manual testing instructions',
-                'Open Output Panel'
-            ).then(selection => {
-                if (selection === 'Open Output Panel') {
-                    this.outputChannel.show();
-                }
-            });
+            // Show test results options
+            const choice = await vscode.window.showInformationMessage(
+                `🧪 MCP Test Instructions:\n\n1. Paste the test prompt in Copilot Chat (copied to clipboard)\n2. Check if MCP tools are used\n3. Report the results below`,
+                'MCP Worked! ✅',
+                'MCP Failed ❌',
+                'View Test Prompt',
+                'Retry Test'
+            );
 
-            this.outputChannel.appendLine(testInstructions);
+            switch (choice) {
+                case 'MCP Worked! ✅':
+                    this.outputChannel.appendLine('🎉 SUCCESS: User confirmed MCP is working!');
+                    this.outputChannel.appendLine('✅ GitHub MCP server is properly integrated with VS Code');
+                    this.outputChannel.appendLine('✅ Repository analysis can use MCP for enhanced data gathering');
+                    
+                    vscode.window.showInformationMessage(
+                        '🎉 Excellent! MCP is working. You can now use "Analyze Repository" with full MCP integration.',
+                        'Analyze Repository'
+                    ).then(result => {
+                        if (result === 'Analyze Repository') {
+                            vscode.commands.executeCommand('teamxray.analyzeRepository');
+                        }
+                    });
+                    
+                    return { success: true };
 
-            return { 
-                success: true, 
-                response: 'Manual MCP test instructions provided - check Copilot Chat' 
-            };
+                case 'MCP Failed ❌':
+                    this.outputChannel.appendLine('❌ FAILED: User confirmed MCP is not working');
+                    this.outputChannel.appendLine('');
+                    this.outputChannel.appendLine('🔧 Troubleshooting steps:');
+                    this.outputChannel.appendLine('1. Check that Docker is running');
+                    this.outputChannel.appendLine('2. Verify GITHUB_TOKEN environment variable is set');
+                    this.outputChannel.appendLine('3. Restart VS Code to refresh MCP configuration');
+                    this.outputChannel.appendLine('4. Check .vscode/mcp.json configuration');
+                    
+                    const troubleshootChoice = await vscode.window.showErrorMessage(
+                        'MCP integration failed. What would you like to do?',
+                        'Check Setup Guide',
+                        'Restart VS Code',
+                        'Use Local Analysis'
+                    );
+                    
+                    switch (troubleshootChoice) {
+                        case 'Check Setup Guide':
+                            vscode.commands.executeCommand('teamxray.showSetupGuidance');
+                            break;
+                        case 'Restart VS Code':
+                            vscode.commands.executeCommand('workbench.action.reloadWindow');
+                            break;
+                        case 'Use Local Analysis':
+                            vscode.commands.executeCommand('teamxray.analyzeRepository');
+                            break;
+                    }
+                    
+                    return { success: false, error: 'MCP integration test failed' };
+
+                case 'View Test Prompt':
+                    // Show the test prompt in an editor
+                    const doc = await vscode.workspace.openTextDocument({
+                        content: testPrompt,
+                        language: 'markdown'
+                    });
+                    await vscode.window.showTextDocument(doc);
+                    this.outputChannel.appendLine('📄 Test prompt opened in editor');
+                    return { success: false, error: 'Test prompt displayed - rerun test after trying' };
+
+                case 'Retry Test':
+                    this.outputChannel.appendLine('🔄 Retrying MCP test...');
+                    return this.forceMCPTest(repository);
+
+                default:
+                    this.outputChannel.appendLine('❓ Test cancelled by user');
+                    return { success: false, error: 'Test cancelled' };
+            }
 
         } catch (error) {
-            const errorMsg = `Failed to prepare MCP test: ${error}`;
+            const errorMsg = `Force MCP test failed: ${error}`;
             this.outputChannel.appendLine(`❌ ${errorMsg}`);
             return { success: false, error: errorMsg };
         }
