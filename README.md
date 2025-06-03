@@ -14,6 +14,7 @@ Transform GitHub Copilot into team X-ray vision. Discover the humans behind the 
 - **⚡ MCP Integration** - Uses GitHub's Model Context Protocol for deep repository analysis
 - **🎨 Pretty UI** - Modern webview interface with team insights and expert profiles
 
+![Team X-Ray Demo](demo.gif)
 ## Installation & Setup
 
 **Development Version** - Install from source:
