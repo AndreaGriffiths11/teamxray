@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { ExpertiseAnalyzer } from './core/expertise-analyzer';
+import { ExpertiseAnalyzer, Expert } from './core/expertise-analyzer';
 import { ExpertiseWebviewProvider } from './core/expertise-webview';
 import { ExpertiseTreeProvider } from './core/expertise-tree-provider';
 import { CopilotMCPService } from './core/copilot-mcp-service';
@@ -59,10 +59,12 @@ export function activate(context: vscode.ExtensionContext) {
     // Register find expert for file command
     const findExpertCommand = vscode.commands.registerCommand('teamxray.findExpertForFile', async (uri?: vscode.Uri) => {
         let filePath: string;
+        let isContextMenu = false;
 
         if (uri) {
             // Command called from context menu
             filePath = uri.fsPath;
+            isContextMenu = true;
         } else {
             // Command called from command palette - use active editor
             const activeEditor = vscode.window.activeTextEditor;
@@ -73,17 +75,9 @@ export function activate(context: vscode.ExtensionContext) {
             filePath = activeEditor.document.fileName;
         }
 
-        vscode.window.withProgress({
-            location: vscode.ProgressLocation.Notification,
-            title: "Finding experts for file...",
-            cancellable: false
-        }, async (progress) => {
-            progress.report({ increment: 0, message: "Analyzing file..." });
-
-            const experts = await analyzer.findExpertForFile(filePath);
+        // Function to display experts
+        const displayExperts = (experts: Expert[]) => {
             if (experts && experts.length > 0) {
-                progress.report({ increment: 100, message: "Complete!" });
-
                 // Show experts in quick pick
                 const items = experts.map(expert => ({
                     label: `$(person) ${expert.name}`,
@@ -92,42 +86,50 @@ export function activate(context: vscode.ExtensionContext) {
                     expert: expert
                 }));
 
-                const selected = await vscode.window.showQuickPick(items, {
+                vscode.window.showQuickPick(items, {
                     title: `Experts for ${vscode.workspace.asRelativePath(filePath)}`,
                     placeHolder: 'Select an expert to view details'
-                });
+                }).then(selected => {
+                    if (selected) {
+                        // Show expert details with activity option
+                        const expert = selected.expert;
 
-                if (selected) {
-                    // Show expert details with activity option
-                    const expert = selected.expert;
-
-                    const message = `${expert.name} (${expert.email})
+                        const message = `${expert.name} (${expert.email})
 Expertise: ${expert.expertise}%
 Contributions: ${expert.contributions}
-Last Commit: ${safeFormatDate(expert.lastCommit)}
+Last commit: ${safeFormatDate(expert.lastCommit)}
 Specializations: ${(expert.specializations || []).join(', ')}`;
 
-                    const choice = await vscode.window.showInformationMessage(
-                        message, 
-                        'Copy Email', 
-                        'Get Recent Activity',
-                        'Close'
-                    );
-
-                    switch (choice) {
-                        case 'Copy Email':
-                            vscode.env.clipboard.writeText(expert.email);
-                            vscode.window.showInformationMessage('Email copied to clipboard!');
-                            break;
-                        case 'Get Recent Activity':
-                            await getExpertRecentActivity(expert);
-                            break;
+                        vscode.window.showInformationMessage(message, 'View Activity', 'Close').then(selection => {
+                            if (selection === 'View Activity') {
+                                getExpertRecentActivity(expert);
+                            }
+                        });
                     }
-                }
+                });
             } else {
-                vscode.window.showInformationMessage('No experts found for this file.');
+                vscode.window.showInformationMessage(`No experts found for ${vscode.workspace.asRelativePath(filePath)}`);
             }
-        });
+        };
+
+        // If called from context menu, find experts directly without progress indicator
+        if (isContextMenu) {
+            const experts = await analyzer.findExpertForFile(filePath);
+            displayExperts(experts || []);
+        } else {
+            // Show progress indicator for command palette invocations
+            vscode.window.withProgress({
+                location: vscode.ProgressLocation.Notification,
+                title: "Finding experts for file...",
+                cancellable: false
+            }, async (progress) => {
+                progress.report({ increment: 0, message: "Analyzing file..." });
+                const experts = await analyzer.findExpertForFile(filePath);
+                progress.report({ increment: 100, message: "Complete!" });
+                displayExperts(experts || []);
+                return null;
+            });
+        }
     });
 
     // Register show team overview command

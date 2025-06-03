@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
 
+import * as path from 'path';
+
 export interface GitHubRepository {
     owner: string;
     repo: string;
@@ -220,7 +222,7 @@ Just call the tool and format the response. Don't explain anything else.`;
     /**
      * Query Copilot Chat with MCP integration
      */
-    private async queryCopilotWithMCP(prompt: string, mcpStatus?: MCPServerStatus): Promise<string | null> {
+    private async queryCopilotWithMCP(prompt: string, mcpStatus?: MCPServerStatus, skipPrompt: boolean = false): Promise<string | null> {
         try {
             // Check if Copilot Chat is available
             const copilotExtension = vscode.extensions.getExtension('GitHub.copilot-chat');
@@ -231,15 +233,40 @@ Just call the tool and format the response. Don't explain anything else.`;
 
             // Use provided status or check again
             const status = mcpStatus || await this.checkMCPServerStatus();
-            let statusMessage = '';
             
-            if (status.isAvailable && status.containerName) {
-                statusMessage = `✅ GitHub MCP Server is running (${status.containerName})`;
-                this.outputChannel.appendLine(`MCP Server Status: ${statusMessage}`);
-            } else {
-                statusMessage = `⚠️ GitHub MCP Server not detected. Checking main VS Code instance...`;
-                this.outputChannel.appendLine(`MCP Server Status: ${statusMessage}`);
+            // Skip the prompt if requested
+            if (skipPrompt) {
+                // Proceed with local git analysis instead
+                this.outputChannel.appendLine('Skipping MCP prompt and performing direct git analysis for file');
+                
+                // Extract file path from the prompt
+                const filePathMatch = prompt.match(/path: "([^"]+)"/);
+                const filePath = filePathMatch ? filePathMatch[1] : null;
+                
+                if (!filePath) {
+                    this.outputChannel.appendLine('Could not extract file path from prompt');
+                    return null;
+                }
+                
+                // Get workspace path
+                const workspaceFolders = vscode.workspace.workspaceFolders;
+                if (!workspaceFolders) {
+                    this.outputChannel.appendLine('No workspace folders found');
+                    return null;
+                }
+                
+                // Convert relative path to absolute path
+                const absolutePath = path.join(workspaceFolders[0].uri.fsPath, filePath);
+                
+                return await this.performDirectFileAnalysis(absolutePath);
             }
+
+            // MCP Server is available or not confirmed
+            let statusMessage = status.isAvailable ? 
+                `✅ GitHub MCP Server is running (${status.containerName})` : 
+                `⚠️ GitHub MCP Server not detected. Checking main VS Code instance...`;
+            
+            this.outputChannel.appendLine(`MCP Server Status: ${statusMessage}`);
 
             // Enhanced user experience with better options
             const choice = await vscode.window.showInformationMessage(
@@ -250,75 +277,65 @@ Just call the tool and format the response. Don't explain anything else.`;
                 },
                 {
                     title: '⚡ Quick Analysis',
-                    detail: 'Use local git analysis (faster, limited data)'
-                },
-                {
-                    title: '❌ Cancel',
-                    detail: 'Stop analysis'
+                    detail: 'Use local git data for faster results without MCP'
                 }
             );
 
-            if (choice?.title === '🤖 Use MCP + Copilot') {
-                try {
-                    // Try to open Copilot Chat
-                    await vscode.commands.executeCommand('workbench.action.chat.open');
+            if (choice && choice.title === '🤖 Use MCP + Copilot') {
+                // Open Copilot Chat with the prepared prompt
+                this.outputChannel.appendLine('Opening Copilot Chat with MCP tools...');
+                
+                // Execute the command to open Copilot Chat
+                await vscode.commands.executeCommand('github.copilot.interactiveEditor.explain', prompt);
+                
+                // Wait for user to interact with Copilot Chat
+                const userResponse = await vscode.window.showInformationMessage(
+                    'After receiving the analysis from Copilot Chat, click "Done" to continue.',
+                    'Done',
+                    'Cancel'
+                );
+                
+                if (userResponse === 'Done') {
+                    // User indicates they've received the analysis
+                    this.outputChannel.appendLine('User confirmed analysis completion via Copilot Chat');
                     
-                    // Copy the enhanced prompt to clipboard
-                    const enhancedPrompt = this.createEnhancedMCPPrompt(prompt);
-                    await vscode.env.clipboard.writeText(enhancedPrompt);
-                    
-                    // Show improved instructions
-                    const result = await vscode.window.showInformationMessage(
-                        `✅ Copilot Chat opened! Instructions:\n\n1. Paste the copied prompt (Cmd/Ctrl+V)\n2. GitHub MCP tools will analyze the repository\n3. Copy the JSON response when complete\n4. Click "Process Results" below`,
-                        'Process Results',
-                        'View Full Prompt',
-                        'Cancel'
-                    );
-
-                    if (result === 'Process Results') {
-                        // Allow user to paste the results
-                        const mcpResults = await vscode.window.showInputBox({
-                            title: 'Paste MCP Analysis Results',
-                            prompt: 'Paste the JSON response from Copilot Chat here',
-                            placeHolder: '{"commits": [...], "contributors": [...], ...}',
-                            ignoreFocusOut: true
-                        });
-
-                        if (mcpResults && mcpResults.trim().startsWith('{')) {
-                            this.outputChannel.appendLine('✅ MCP results received from user');
-                            return mcpResults.trim();
-                        } else {
-                            this.outputChannel.appendLine('❌ No valid MCP results provided');
-                            return null;
-                        }
-                    } else if (result === 'View Full Prompt') {
-                        // Show the prompt in an editor
-                        const doc = await vscode.workspace.openTextDocument({
-                            content: enhancedPrompt,
-                            language: 'markdown'
-                        });
-                        await vscode.window.showTextDocument(doc);
-                        return 'user_chose_mcp';
-                    }
-                    
-                    return 'user_chose_mcp';
-                    
-                } catch (chatError) {
-                    // Fallback if chat command doesn't exist
-                    this.outputChannel.appendLine(`Chat command not available: ${chatError}`);
-                    vscode.window.showErrorMessage('Could not open Copilot Chat. Please open it manually (Cmd+Shift+I or Ctrl+Shift+I)');
+                    // Use the last command from VS Code's internal clipboard as a fallback
+                    // This isn't perfect but helps bridge the gap
+                    return "Analysis completed via Copilot Chat. Please check the chat panel for details.";
+                } else {
+                    this.outputChannel.appendLine('User cancelled Copilot Chat analysis');
                     return null;
                 }
-            } else if (choice?.title === '⚡ Quick Analysis') {
-                this.outputChannel.appendLine('User chose quick local analysis');
-                return null; // This will trigger fallback
+            } else if (choice && choice.title === '⚡ Quick Analysis') {
+                // Extract file path for local analysis
+                const filePathMatch = prompt.match(/path: "([^"]+)"/);
+                const filePath = filePathMatch ? filePathMatch[1] : null;
+                
+                if (!filePath) {
+                    this.outputChannel.appendLine('Could not extract file path for local analysis');
+                    return null;
+                }
+                
+                // Get workspace path
+                const workspaceFolders = vscode.workspace.workspaceFolders;
+                if (!workspaceFolders) {
+                    this.outputChannel.appendLine('No workspace folders found');
+                    return null;
+                }
+                
+                // Convert relative path to absolute path
+                const absolutePath = path.join(workspaceFolders[0].uri.fsPath, filePath);
+                
+                // Perform local git analysis
+                this.outputChannel.appendLine(`Performing quick analysis for: ${absolutePath}`);
+                return await this.performDirectFileAnalysis(absolutePath);
             } else {
-                this.outputChannel.appendLine('User cancelled analysis');
+                // User cancelled
+                this.outputChannel.appendLine('User cancelled the analysis');
                 return null;
             }
-
         } catch (error) {
-            this.outputChannel.appendLine(`Error in MCP integration: ${error}`);
+            this.outputChannel.appendLine(`Error in queryCopilotWithMCP: ${error}`);
             return null;
         }
     }
@@ -497,18 +514,18 @@ Execute now.`;
     /**
      * Analyze file-specific experts using Copilot Chat + MCP
      */
-    async analyzeFileExperts(filePath: string, repository: GitHubRepository): Promise<any[] | null> {
+    async analyzeFileExperts(filePath: string, repository: GitHubRepository, skipPrompt: boolean = false): Promise<any[] | null> {
         try {
             this.outputChannel.appendLine(`Analyzing experts for file: ${filePath} in ${repository.owner}/${repository.repo}`);
 
             // Create a specific prompt for file expertise analysis
             const prompt = this.buildFileExpertisePrompt(filePath, repository);
 
-            // Query Copilot Chat with MCP tools
-            const chatResponse = await this.queryCopilotWithMCP(prompt);
+            // Query Copilot Chat with MCP tools, passing the skipPrompt parameter
+            const chatResponse = await this.queryCopilotWithMCP(prompt, undefined, skipPrompt);
             
             if (chatResponse) {
-                this.outputChannel.appendLine('Successfully analyzed file experts via Copilot + MCP');
+                this.outputChannel.appendLine('Successfully analyzed file experts');
                 return this.parseFileExpertsResponse(chatResponse, filePath);
             }
 
@@ -523,35 +540,29 @@ Execute now.`;
      * Build a prompt for analyzing file-specific expertise
      */
     private buildFileExpertisePrompt(filePath: string, repository: GitHubRepository): string {
-        return `
-Please use the GitHub MCP tools to analyze expertise for the specific file "${filePath}" in repository ${repository.owner}/${repository.repo}:
+        // Get the relative file path (remove the absolute workspace path)
+        const relativePath = vscode.workspace.asRelativePath(filePath);
+        
+        return `Call mcp_github_list_commits with owner: "${repository.owner}", repo: "${repository.repo}", path: "${relativePath}", perPage: 30
 
-1. **File History**: Use appropriate MCP tools to get commit history for this specific file
-2. **File Contributors**: Identify who has modified this file most frequently and recently
-3. **Code Patterns**: Analyze the types of changes made to this file
-4. **Expertise Indicators**: Look for patterns that indicate deep knowledge of this file
-
-Focus on the humans behind the code changes - their communication styles in commit messages, collaboration patterns, and the nature of their contributions to this specific file.
-
-Return the analysis as JSON with the following structure:
+Then respond with JSON format:
 {
-    "fileExperts": [
-        {
-            "name": "Developer Name",
-            "email": "email@example.com",
-            "expertise": 85,
-            "contributions": 12,
-            "lastCommit": "2024-01-15T10:30:00Z",
-            "specializations": ["Frontend", "React"],
-            "communicationStyle": "Detailed, methodical",
-            "teamRole": "Senior Developer",
-            "hiddenStrengths": ["Code review", "Mentoring"],
-            "idealChallenges": ["Complex architecture", "Performance optimization"]
-        }
-    ],
-    "insights": ["This file shows collaborative development patterns", "Recent changes focus on performance improvements"]
+  "file": "${relativePath}",
+  "experts": [
+    {
+      "name": "Contributor Name",
+      "email": "email@example.com",
+      "expertise": 85,
+      "contributions": 25,
+      "lastCommit": "2025-05-29T12:34:56Z",
+      "specializations": ["TypeScript", "React"]
+    }
+  ],
+  "totalCommits": 50,
+  "lastModified": "2025-05-29T12:34:56Z"
 }
-        `;
+
+Execute now.`;
     }
 
     /**
@@ -1118,5 +1129,144 @@ Then confirm assignment was successful.`;
             this.outputChannel.appendLine(`❌ Error preparing MCP assignment: ${error}`);
             return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
         }
+    }
+
+    // Method to perform direct file analysis using git commands
+    private async performDirectFileAnalysis(filePath: string): Promise<string | null> {
+        this.outputChannel.appendLine(`Performing direct git analysis for file: ${filePath}`);
+        
+        try {
+            // Get repository path
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+            if (!workspaceFolders || workspaceFolders.length === 0) {
+                this.outputChannel.appendLine('No workspace folder found');
+                return null;
+            }
+            
+            const repoPath = workspaceFolders[0].uri.fsPath;
+            
+            // Get file-specific git commits
+            const commits = await this.getFileCommits(repoPath, filePath);
+            
+            if (!commits || commits.length === 0) {
+                this.outputChannel.appendLine('No commit history found for file');
+                return null;
+            }
+            
+            // Extract experts from commit data
+            const fileExperts = this.extractFileExpertsFromCommits(commits, filePath);
+            
+            // Get last modified date
+            const lastModified = commits.length > 0 ? 
+                commits[0].author.date.toISOString() : 
+                new Date().toISOString();
+            
+            // Return the data in the same format as MCP would
+            return JSON.stringify({
+                file: vscode.workspace.asRelativePath(filePath),
+                experts: fileExperts,
+                totalCommits: commits.length,
+                lastModified: lastModified
+            });
+        } catch (error) {
+            this.outputChannel.appendLine(`Error in direct file analysis: ${error}`);
+            return null;
+        }
+    }
+
+    // Get commits specific to a file using git commands
+    private async getFileCommits(repoPath: string, filePath: string): Promise<any[]> {
+        try {
+            const { exec } = require('child_process');
+            const util = require('util');
+            const execPromise = util.promisify(exec);
+            
+            // Relative path to the file from repo root
+            const relativePath = vscode.workspace.asRelativePath(filePath);
+            
+            // Get git log for the file
+            const gitLogCommand = `cd "${repoPath}" && git log --format="%H|%an|%ae|%at|%s" -- "${relativePath}"`;
+            
+            const { stdout } = await execPromise(gitLogCommand);
+            
+            if (!stdout) {
+                return [];
+            }
+            
+            // Parse the git log output
+            return stdout.split('\n')
+                .filter((line: string) => line.trim() !== '')
+                .map((line: string) => {
+                    const [hash, authorName, authorEmail, authorDate, subject] = line.split('|');
+                    return {
+                        hash,
+                        author: {
+                            name: authorName,
+                            email: authorEmail,
+                            date: new Date(parseInt(authorDate) * 1000)
+                        },
+                        message: subject,
+                        filePath: relativePath
+                    };
+                });
+        } catch (error) {
+            this.outputChannel.appendLine(`Error getting file commits: ${error}`);
+            return [];
+        }
+    }
+
+    // Extract file experts from commit data
+    private extractFileExpertsFromCommits(commits: any[], filePath: string): any[] {
+        const contributorMap = new Map<string, any>();
+        
+        // Calculate total lines changed by each author
+        for (const commit of commits) {
+            const { author } = commit;
+            
+            if (!contributorMap.has(author.email)) {
+                contributorMap.set(author.email, {
+                    name: author.name,
+                    email: author.email,
+                    contributions: 0,
+                    lastCommit: null,
+                    recentCommits: []
+                });
+            }
+            
+            const contributor = contributorMap.get(author.email);
+            contributor.contributions++;
+            
+            if (!contributor.lastCommit || author.date > contributor.lastCommit) {
+                contributor.lastCommit = author.date;
+            }
+            
+            if (contributor.recentCommits.length < 5) {
+                contributor.recentCommits.push(commit.message);
+            }
+        }
+        
+        // Calculate expertise scores
+        const totalCommits = commits.length;
+        const experts = Array.from(contributorMap.values())
+            .map(contributor => {
+                // Calculate expertise score based on contribution percentage
+                const expertiseScore = Math.min(100, Math.round((contributor.contributions / totalCommits) * 100));
+                
+                // Infer specializations from file extension and commit messages
+                const specializations = this.inferSpecializationsFromFile(filePath);
+                
+                return {
+                    name: contributor.name,
+                    email: contributor.email,
+                    expertise: expertiseScore,
+                    contributions: contributor.contributions,
+                    lastCommit: contributor.lastCommit,
+                    specializations,
+                    recentCommits: contributor.recentCommits
+                };
+            })
+            .sort((a, b) => b.expertise - a.expertise);
+        
+        return experts;
     }
 }

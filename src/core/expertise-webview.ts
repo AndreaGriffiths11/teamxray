@@ -221,8 +221,8 @@ export class ExpertiseWebviewProvider {
 
         .experts-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
-            gap: 24px;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 16px;
             margin-bottom: 32px;
         }
 
@@ -230,11 +230,13 @@ export class ExpertiseWebviewProvider {
             background: rgba(255, 255, 255, 0.03);
             backdrop-filter: blur(16px);
             border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 16px;
-            padding: 24px;
+            border-radius: 12px;
+            padding: 16px;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             position: relative;
             overflow: hidden;
+            display: flex;
+            flex-direction: column;
         }
 
         .expert-card::before {
@@ -249,12 +251,6 @@ export class ExpertiseWebviewProvider {
             transition: opacity 0.3s ease;
         }
 
-        .expert-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
-            border-color: rgba(255, 255, 255, 0.2);
-        }
-
         .expert-card:hover::before {
             opacity: 1;
         }
@@ -262,34 +258,17 @@ export class ExpertiseWebviewProvider {
         .expert-header {
             display: flex;
             align-items: center;
-            gap: 16px;
-            margin-bottom: 20px;
+            margin-bottom: 12px;
         }
 
         .expert-avatar {
-            width: 48px;
-            height: 48px;
-            border-radius: 12px;
-            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 20px;
-            font-weight: 600;
-            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            margin-right: 12px;
             overflow: hidden;
             position: relative;
-        }
-
-        .expert-avatar-img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            border-radius: 12px;
-            position: absolute;
-            top: 0;
-            left: 0;
-            z-index: 2;
+            flex-shrink: 0;
         }
 
         .expert-avatar-fallback {
@@ -300,7 +279,7 @@ export class ExpertiseWebviewProvider {
             justify-content: center;
             background: linear-gradient(135deg, #3b82f6, #8b5cf6);
             color: white;
-            font-size: 18px;
+            font-size: 16px;
             font-weight: 600;
             position: absolute;
             top: 0;
@@ -308,65 +287,75 @@ export class ExpertiseWebviewProvider {
             z-index: 1;
         }
 
+        .expert-info {
+            flex: 1;
+            min-width: 0; /* Enables text truncation */
+        }
+
         .expert-info h3 {
-            margin: 0 0 4px 0;
-            font-size: 18px;
+            margin: 0 0 2px 0;
+            font-size: 16px;
             font-weight: 600;
             color: var(--vscode-foreground);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .expert-email {
-            font-size: 14px;
+            font-size: 12px;
             color: var(--vscode-descriptionForeground);
-            opacity: 0.8;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .expert-content {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
         }
 
         .expert-stats {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 16px;
-            margin-bottom: 20px;
+            display: flex;
+            gap: 8px;
+            flex: 1;
         }
 
         .stat {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 8px;
+            border-radius: 8px;
             text-align: center;
+            flex: 1;
         }
 
         .stat-value {
             display: block;
-            font-size: 20px;
+            font-size: 18px;
             font-weight: 700;
             color: var(--vscode-textLink-foreground);
-            margin-bottom: 4px;
+            margin-bottom: 2px;
         }
 
         .stat-label {
-            font-size: 12px;
+            font-size: 10px;
             color: var(--vscode-descriptionForeground);
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
 
         .expertise-indicator {
-            margin-bottom: 20px;
-        }
-
-        .expertise-label {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 8px;
-            font-size: 12px;
-            font-weight: 500;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            width: 70px;
+            height: 70px;
+            flex-shrink: 0;
+            margin-left: 8px;
         }
 
         .expertise-ring {
             position: relative;
-            width: 120px;
-            height: 120px;
-            margin: 0 auto 16px;
+            width: 100%;
+            height: 100%;
         }
 
         .expertise-circle {
@@ -374,7 +363,7 @@ export class ExpertiseWebviewProvider {
             height: 100%;
             border-radius: 50%;
             background: conic-gradient(from 0deg, #3b82f6, #8b5cf6, #ec4899, #3b82f6);
-            padding: 4px;
+            padding: 3px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -392,13 +381,14 @@ export class ExpertiseWebviewProvider {
         }
 
         .expertise-score {
-            font-size: 24px;
+            font-size: 18px;
             font-weight: 700;
             color: var(--vscode-textLink-foreground);
+            line-height: 1;
         }
 
         .expertise-text {
-            font-size: 10px;
+            font-size: 8px;
             color: var(--vscode-descriptionForeground);
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -407,46 +397,39 @@ export class ExpertiseWebviewProvider {
         .specializations {
             display: flex;
             flex-wrap: wrap;
-            gap: 8px;
-            margin-bottom: 20px;
+            gap: 6px;
+            margin-bottom: 12px;
         }
 
         .specialization-tag {
             background: rgba(59, 130, 246, 0.1);
-            color: #60a5fa;
-            border: 1px solid rgba(59, 130, 246, 0.2);
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 500;
-            transition: all 0.2s ease;
-        }
-
-        .specialization-tag:hover {
-            background: rgba(59, 130, 246, 0.2);
-            transform: scale(1.05);
+            color: var(--vscode-textLink-foreground);
+            font-size: 10px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            white-space: nowrap;
         }
 
         .expert-actions {
             display: flex;
-            gap: 12px;
+            gap: 8px;
+            margin-top: auto;
         }
 
         .expert-button {
             flex: 1;
-            background: rgba(255, 255, 255, 0.1);
+            padding: 8px 12px;
+            font-size: 12px;
+            border-radius: 6px;
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.1);
             color: var(--vscode-foreground);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            padding: 12px 16px;
-            border-radius: 12px;
             cursor: pointer;
-            font-size: 13px;
-            font-weight: 500;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: all 0.2s ease;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 8px;
+            gap: 6px;
         }
 
         .expert-button:hover {
@@ -777,28 +760,30 @@ export class ExpertiseWebviewProvider {
                         </div>
                     </div>
                     
-                    <div class="expert-stats">
-                        <div class="stat">
-                            <span class="stat-value">${expert.expertise}%</span>
-                            <span class="stat-label">Expertise</span>
+                    <div class="expert-content">
+                        <div class="expert-stats">
+                            <div class="stat">
+                                <span class="stat-value">${expert.expertise}%</span>
+                                <span class="stat-label">Expertise</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-value">${expert.contributions}</span>
+                                <span class="stat-label">Commits</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-value">${expert.lastCommit instanceof Date ? 
+                                    Math.floor((new Date().getTime() - expert.lastCommit.getTime()) / (1000 * 60 * 60 * 24)) : '?'}</span>
+                                <span class="stat-label">Days Ago</span>
+                            </div>
                         </div>
-                        <div class="stat">
-                            <span class="stat-value">${expert.contributions}</span>
-                            <span class="stat-label">Commits</span>
-                        </div>
-                        <div class="stat">
-                            <span class="stat-value">${expert.lastCommit instanceof Date ? 
-                                Math.floor((new Date().getTime() - expert.lastCommit.getTime()) / (1000 * 60 * 60 * 24)) : '?'}</span>
-                            <span class="stat-label">Days Ago</span>
-                        </div>
-                    </div>
 
-                    <div class="expertise-indicator">
-                        <div class="expertise-ring">
-                            <div class="expertise-circle">
-                                <div class="expertise-inner">
-                                    <div class="expertise-score">${expert.expertise}%</div>
-                                    <div class="expertise-text">Expertise</div>
+                        <div class="expertise-indicator">
+                            <div class="expertise-ring">
+                                <div class="expertise-circle">
+                                    <div class="expertise-inner">
+                                        <div class="expertise-score">${expert.expertise}%</div>
+                                        <div class="expertise-text">Expertise</div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
