@@ -1,6 +1,11 @@
 # MCP Team X-Ray VS Code Extension
 
+[![Build Status](https://github.com/AndreaGriffiths11/mcp-team-xray/workflows/CI%2FCD%20Pipeline/badge.svg)](https://github.com/AndreaGriffiths11/mcp-team-xray/actions)
+[![License](https://img.shields.io/github/license/AndreaGriffiths11/mcp-team-xray)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/AndreaGriffiths11/mcp-team-xray)](https://github.com/AndreaGriffiths11/mcp-team-xray/stargazers)
+
 > *"Feeling like a stranger on my own team, surrounded by brilliant minds whose talents hide in code and commits."*
+
 
 Transform GitHub Copilot into team X-ray vision. Discover the humans behind the codebase, reveal hidden expertise, and understand how your teammates naturally collaborate.
 
