@@ -11,6 +11,19 @@ export function activate(context: vscode.ExtensionContext) {
     // Secure GitHub token storage using VS Code SecretStorage
     const secretKey = 'github_token';
 
+    // Helper to ensure token is available as environment variable for MCP server
+    async function ensureTokenEnvironment() {
+        const token = await context.secrets.get(secretKey);
+        if (token && !process.env.GITHUB_TOKEN) {
+            // Set environment variable for MCP server if not already set
+            process.env.GITHUB_TOKEN = token;
+            console.log('🔧 GitHub token set as environment variable for MCP server');
+        }
+    }
+
+    // Initialize token environment on activation
+    ensureTokenEnvironment();
+
     // Command to allow user to reset their GitHub token
     context.subscriptions.push(
         vscode.commands.registerCommand('teamXray.setGithubToken', async () => {
@@ -21,7 +34,9 @@ export function activate(context: vscode.ExtensionContext) {
             });
             if (token) {
                 await context.secrets.store(secretKey, token);
-                vscode.window.showInformationMessage('GitHub token saved securely.');
+                // Also set as environment variable for MCP server
+                process.env.GITHUB_TOKEN = token;
+                vscode.window.showInformationMessage('GitHub token saved securely and configured for MCP server.');
             } else {
                 vscode.window.showWarningMessage('GitHub token is required for MCP features.');
             }
@@ -47,9 +62,13 @@ export function activate(context: vscode.ExtensionContext) {
         }
     };
 
-    // Helper to get token (always latest)
+    // Helper to get token (always latest) and ensure environment variable is set
     async function getToken() {
-        return await context.secrets.get(secretKey);
+        const token = await context.secrets.get(secretKey);
+        if (token && !process.env.GITHUB_TOKEN) {
+            process.env.GITHUB_TOKEN = token;
+        }
+        return token;
     }
 
     // Register main analysis command
