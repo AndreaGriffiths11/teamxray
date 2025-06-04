@@ -10,3 +10,7 @@ node_modules
 !.env.example
 .github/.env
 **/.env
+.github/.env
+**/.env
+*.key
+*.pem
