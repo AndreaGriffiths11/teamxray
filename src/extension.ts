@@ -8,9 +8,25 @@ import { CopilotMCPService } from './core/copilot-mcp-service';
 // Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
 
-    // Use the console to output diagnostic information (console.log) and errors (console.error)
-    // This line of code will only be executed once when your extension is activated
-    console.log('MCP Team X-Ray extension is now active!');
+    // Secure GitHub token storage using VS Code SecretStorage
+    const secretKey = 'github_token';
+
+    // Command to allow user to reset their GitHub token
+    context.subscriptions.push(
+        vscode.commands.registerCommand('teamXray.setGithubToken', async () => {
+            const token = await vscode.window.showInputBox({
+                prompt: 'Enter your GitHub Personal Access Token',
+                password: true,
+                ignoreFocusOut: true,
+            });
+            if (token) {
+                await context.secrets.store(secretKey, token);
+                vscode.window.showInformationMessage('GitHub token saved securely.');
+            } else {
+                vscode.window.showWarningMessage('GitHub token is required for MCP features.');
+            }
+        })
+    );
 
     // Initialize core components
     const analyzer = new ExpertiseAnalyzer(context);
@@ -31,26 +47,30 @@ export function activate(context: vscode.ExtensionContext) {
         }
     };
 
+    // Helper to get token (always latest)
+    async function getToken() {
+        return await context.secrets.get(secretKey);
+    }
+
     // Register main analysis command
     const analyzeRepositoryCommand = vscode.commands.registerCommand('teamxray.analyzeRepository', async () => {
+        const token = await getToken();
+        if (!token) {
+            vscode.window.showWarningMessage('GitHub token is required for team expertise analysis. Run "Team XRay: Set Github Token" to provide one.');
+            return;
+        }
         vscode.window.withProgress({
             location: vscode.ProgressLocation.Notification,
             title: "Analyzing repository expertise...",
             cancellable: false
         }, async (progress) => {
             progress.report({ increment: 0, message: "Starting analysis..." });
-
             const analysis = await analyzer.analyzeRepository();
             if (analysis) {
                 progress.report({ increment: 50, message: "Generating report..." });
-                
-                // Save analysis and update tree view
                 await analyzer.saveAnalysis(analysis);
                 treeProvider.refresh(analysis);
-                
                 progress.report({ increment: 100, message: "Complete!" });
-                
-                // Show results in webview
                 webviewProvider.showAnalysisResults(analysis);
             }
         });
@@ -58,6 +78,11 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Register find expert for file command
     const findExpertCommand = vscode.commands.registerCommand('teamxray.findExpertForFile', async (uri?: vscode.Uri) => {
+        const token = await getToken();
+        if (!token) {
+            vscode.window.showWarningMessage('GitHub token is required to find file experts. Run "Team XRay: Set Github Token" to provide one.');
+            return;
+        }
         let filePath: string;
         let isContextMenu = false;
 
@@ -152,6 +177,11 @@ Specializations: ${(expert.specializations || []).join(', ')}`;
 
     // Helper function to get expert recent activity via MCP
     async function getExpertRecentActivity(expert: any) {
+        const token = await getToken();
+        if (!token) {
+            vscode.window.showWarningMessage('GitHub token is required to get expert activity. Run "Team XRay: Set Github Token" to provide one.');
+            return;
+        }
         const outputChannel = vscode.window.createOutputChannel('Team X-Ray Expert Activity');
         
         try {
@@ -214,6 +244,11 @@ Specializations: ${(expert.specializations || []).join(', ')}`;
     });
 
     const showExpertDetailsCommand = vscode.commands.registerCommand('teamxray.showExpertDetails', async (expert: any) => {
+        const token = await getToken();
+        if (!token) {
+            vscode.window.showWarningMessage('GitHub token is required to view expert details. Run "Team XRay: Set Github Token" to provide one.');
+            return;
+        }
         if (expert) {
             const message = `${expert.name}
 Email: ${expert.email}
