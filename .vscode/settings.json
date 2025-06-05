@@ -9,5 +9,40 @@
 		"dist": true // set this to false to include "dist" folder in search results
 	},
 	// Turn off tsc task auto detection since we have the necessary tasks as npm scripts
-	"typescript.tsc.autoDetect": "off"
+	"typescript.tsc.autoDetect": "off",
+
+	// Disable GitHub Copilot suggestions
+	"github.copilot.enable": {
+		"*": true,
+		"plaintext": false,
+		"markdown": false,
+		"scminput": false,
+		"json": false,
+		"jsonc": false
+	},
+
+	// Fix the MCP configuration
+	"mcp.github.containerName": "github-mcp-teamxray",
+	"mcp.forceRemoveExistingContainers": true,
+
+	// Disable quick suggestions in JSON files
+	"[json]": {
+		"editor.quickSuggestions": {
+			"strings": false,
+			"other": false,
+			"comments": false
+		},
+		"editor.suggest.showWords": false,
+		"editor.suggestOnTriggerCharacters": false
+	},
+
+	"[jsonc]": {
+		"editor.quickSuggestions": {
+			"strings": false,
+			"other": false,
+			"comments": false
+		},
+		"editor.suggest.showWords": false,
+		"editor.suggestOnTriggerCharacters": false
+	}
 }
