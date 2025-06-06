@@ -135,6 +135,28 @@ export class ExpertiseWebviewProvider {
         }
     }
 
+    private calculateDaysAgo(lastCommitDate: any): string {
+        try {
+            // If it's already a Date object
+            if (lastCommitDate instanceof Date && !isNaN(lastCommitDate.getTime())) {
+                return String(Math.floor((new Date().getTime() - lastCommitDate.getTime()) / (1000 * 60 * 60 * 24)));
+            }
+            
+            // If it's a string or number, try to convert to Date
+            if (lastCommitDate) {
+                const date = new Date(lastCommitDate);
+                if (!isNaN(date.getTime())) {
+                    return String(Math.floor((new Date().getTime() - date.getTime()) / (1000 * 60 * 60 * 24)));
+                }
+            }
+            
+            // Default fallback
+            return 'N/A';
+        } catch (e) {
+            return 'N/A';
+        }
+    }
+
     /**
      * Generates the HTML content for the webview
      */
@@ -771,8 +793,9 @@ export class ExpertiseWebviewProvider {
                                 <span class="stat-label">Commits</span>
                             </div>
                             <div class="stat">
-                                <span class="stat-value">${expert.lastCommit instanceof Date ? 
-                                    Math.floor((new Date().getTime() - expert.lastCommit.getTime()) / (1000 * 60 * 60 * 24)) : '?'}</span>
+                                <span class="stat-value">${
+                                    this.calculateDaysAgo(expert.lastCommit)
+                                }</span>
                                 <span class="stat-label">Days Ago</span>
                             </div>
                         </div>
