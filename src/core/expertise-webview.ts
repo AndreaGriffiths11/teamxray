@@ -137,22 +137,73 @@ export class ExpertiseWebviewProvider {
 
     private calculateDaysAgo(lastCommitDate: any): string {
         try {
-            // If it's already a Date object
-            if (lastCommitDate instanceof Date && !isNaN(lastCommitDate.getTime())) {
-                return String(Math.floor((new Date().getTime() - lastCommitDate.getTime()) / (1000 * 60 * 60 * 24)));
+            // For debugging - useful during development
+            console.log("Input lastCommitDate:", lastCommitDate, typeof lastCommitDate);
+            
+            // If there's no date, return 'N/A' - we won't guess
+            if (!lastCommitDate) {
+                return 'N/A';
             }
             
-            // If it's a string or number, try to convert to Date
-            if (lastCommitDate) {
-                const date = new Date(lastCommitDate);
+            // If it's already a Date object and valid
+            if (lastCommitDate instanceof Date && !isNaN(lastCommitDate.getTime())) {
+                const days = Math.floor((new Date().getTime() - lastCommitDate.getTime()) / (1000 * 60 * 60 * 24));
+                return String(days);
+            }
+            
+            // Handle string values - try multiple parsing approaches
+            if (typeof lastCommitDate === 'string') {
+                // Special case: if the string is empty, return 'N/A'
+                if (lastCommitDate.trim() === '') {
+                    return 'N/A';
+                }
+                
+                // Try standard date parsing first
+                let date = new Date(lastCommitDate);
+                
                 if (!isNaN(date.getTime())) {
-                    return String(Math.floor((new Date().getTime() - date.getTime()) / (1000 * 60 * 60 * 24)));
+                    const days = Math.floor((new Date().getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+                    return String(days);
+                }
+                
+                // Try ISO-like format with flexible parsing
+                const isoMatch = lastCommitDate.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+                if (isoMatch) {
+                    date = new Date(Number(isoMatch[1]), Number(isoMatch[2])-1, Number(isoMatch[3]));
+                    if (!isNaN(date.getTime())) {
+                        const days = Math.floor((new Date().getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+                        return String(days);
+                    }
+                }
+                
+                // Try Unix timestamp (seconds since epoch)
+                if (/^\d+$/.test(lastCommitDate)) {
+                    const timestamp = parseInt(lastCommitDate, 10);
+                    // Determine if seconds or milliseconds
+                    const multiplier = timestamp > 9999999999 ? 1 : 1000;
+                    date = new Date(timestamp * multiplier);
+                    if (!isNaN(date.getTime())) {
+                        const days = Math.floor((new Date().getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+                        return String(days);
+                    }
                 }
             }
             
-            // Default fallback
+            // Handle numeric timestamp
+            if (typeof lastCommitDate === 'number') {
+                // Determine if seconds or milliseconds
+                const multiplier = lastCommitDate > 9999999999 ? 1 : 1000;
+                const date = new Date(lastCommitDate * multiplier);
+                if (!isNaN(date.getTime())) {
+                    const days = Math.floor((new Date().getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+                    return String(days);
+                }
+            }
+            
+            // If all parsing attempts fail, return 'N/A'
             return 'N/A';
         } catch (e) {
+            console.error("Error calculating days ago:", e);
             return 'N/A';
         }
     }

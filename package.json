@@ -55,16 +55,16 @@
         "title": "Team X-Ray: Set GitHub Token"
       },
       {
-        "command": "teamxray.analyzeFile",
-        "title": "Team X-Ray: Analyze This File"
-      },
-      {
         "command": "teamxray.findExpertForFile",
         "title": "Team X-Ray: Find Expert for This File"
       },
       {
         "command": "teamxray.showTeamOverview",
         "title": "Team X-Ray: Show Team Expertise Overview"
+      },
+      {
+        "command": "teamxray.analyzeFile",
+        "title": "Team X-Ray: Analyze This File"
       }
     ],
     "menus": {
