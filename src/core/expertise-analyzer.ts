@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import axios from 'axios';
 import { CopilotMCPService, GitHubRepository } from './copilot-mcp-service';
+import { TokenManager } from './token-manager';
 
 export interface FileExpertise {
     fileName: string;
@@ -74,6 +75,7 @@ export class ExpertiseAnalyzer {
     private context: vscode.ExtensionContext;
     private outputChannel: vscode.OutputChannel;
     private copilotMCPService: CopilotMCPService;
+    private tokenManager: TokenManager;
 
     // Limits for different repository sizes
     private readonly SIZE_LIMITS = {
@@ -83,10 +85,11 @@ export class ExpertiseAnalyzer {
         enterprise: { files: 1000, contributors: 50, commits: 500 }
     };
 
-    constructor(context: vscode.ExtensionContext) {
+    constructor(context: vscode.ExtensionContext, tokenManager: TokenManager) {
         this.context = context;
-        this.outputChannel = vscode.window.createOutputChannel('Team X-Ray');
-        this.copilotMCPService = new CopilotMCPService(this.outputChannel);
+        this.tokenManager = tokenManager;
+        this.outputChannel = vscode.window.createOutputChannel('Team Expertise Analysis');
+        this.copilotMCPService = new CopilotMCPService(this.outputChannel, this.tokenManager);
     }
 
     /**
@@ -401,21 +404,8 @@ export class ExpertiseAnalyzer {
      * Performs standard AI analysis for smaller datasets
      */
     private async performStandardAnalysis(repositoryData: any, repoStats: RepositoryStats): Promise<ExpertiseAnalysis | null> {
-        const config = vscode.workspace.getConfiguration('teamxray');
-        let apiKey = config.get<string>('githubModelsKey');
-
-        if (!apiKey || apiKey.includes('${input:github_token}')) {
-            apiKey = process.env.GITHUB_TOKEN;
-        }
-
-        if (apiKey?.includes('${input:github_token}')) {
-            apiKey = await vscode.window.showInputBox({
-                prompt: 'Enter your GitHub Personal Access Token',
-                password: true,
-                placeHolder: 'ghp_...'
-            });
-        }
-
+        const apiKey = await this.tokenManager.ensureToken('GitHub token required for team expertise analysis');
+        
         if (!apiKey) {
             vscode.window.showErrorMessage('GitHub token is required for team expertise analysis.');
             return null;

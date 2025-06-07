@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 
 import * as path from 'path';
+import { TokenManager } from './token-manager';
 
 export interface GitHubRepository {
     owner: string;
@@ -28,9 +29,11 @@ export interface MCPServerStatus {
  */
 export class CopilotMCPService {
     private outputChannel: vscode.OutputChannel;
+    private tokenManager: TokenManager;
 
-    constructor(outputChannel: vscode.OutputChannel) {
+    constructor(outputChannel: vscode.OutputChannel, tokenManager: TokenManager) {
         this.outputChannel = outputChannel;
+        this.tokenManager = tokenManager;
     }
 
     /**
@@ -807,16 +810,16 @@ Show the result.`;
         try {
             this.outputChannel.appendLine('🚀 Attempting to manually start GitHub MCP server...');
 
-            // Check if GitHub token is available
-            const token = process.env.GITHUB_TOKEN;
+            // Get token from token manager
+            const token = await this.tokenManager.getToken();
             if (!token) {
-                const error = 'GITHUB_TOKEN environment variable not set. Please run "Team X-Ray: Setup GitHub Token" first.';
+                const error = 'GitHub token not found. Please run "Team X-Ray: Set GitHub Token" first.';
                 this.outputChannel.appendLine(`❌ ${error}`);
                 vscode.window.showErrorMessage(error);
                 return { success: false, error };
             }
 
-            this.outputChannel.appendLine('✅ GITHUB_TOKEN found in environment');
+            this.outputChannel.appendLine('✅ GitHub token found');
 
             const { exec } = require('child_process');
             const util = require('util');
@@ -837,6 +840,7 @@ Show the result.`;
             
             const dockerCommand = [
                 'docker run -d',
+                '--name github-mcp-teamxray',
                 '--rm',
                 `-e GITHUB_TOKEN=${token}`,
                 '-p 8080:8080',
@@ -845,7 +849,7 @@ Show the result.`;
                 '--toolsets repos,users,pull_requests,issues'
             ].join(' ');
 
-            this.outputChannel.appendLine(`Running: ${dockerCommand.replace(token, 'GITHUB_TOKEN')}`);
+            this.tokenManager.logCommandWithToken(dockerCommand);
 
             const { stdout: containerId } = await execAsync(dockerCommand);
             const cleanContainerId = containerId.trim();
