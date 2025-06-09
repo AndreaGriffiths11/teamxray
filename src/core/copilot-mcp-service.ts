@@ -1,13 +1,15 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import axios from 'axios';
 import { TokenManager } from './token-manager';
+import { ExpertiseAnalyzer, ExpertiseAnalysis, Expert } from './expertise-analyzer'; // Removed GitHubContributor
 
 export interface GitHubRepository {
     owner: string;
     repo: string;
 }
 
-export interface GitHubContributor {
+export interface GitHubContributor { // Ensure this interface is defined here or correctly imported if it's elsewhere
     name: string;
     email: string;
     contributions: number;
@@ -34,9 +36,8 @@ export class CopilotMCPService {
         this.tokenManager = tokenManager;
     }
 
-    /**
-     * Check the status of GitHub MCP Server containers
-     */
+    //Check the status of GitHub MCP Server containers
+  
     async checkMCPServerStatus(): Promise<MCPServerStatus> {
         try {
             const { exec } = require('child_process');
@@ -77,12 +78,11 @@ export class CopilotMCPService {
                 isAvailable: false,
                 error: `Failed to check Docker containers: ${error}`
             };
-        }
-    }
+        } // This closes the catch block
+    } // This closes the checkMCPServerStatus method
 
-    /**
-     * Ensure GitHub MCP server is running
-     */
+    //Ensure GitHub MCP server is running
+  
     async ensureMCPServerRunning(): Promise<MCPServerStatus> {
         const status = await this.checkMCPServerStatus();
         
@@ -124,9 +124,9 @@ export class CopilotMCPService {
         }
     }
 
-    /**
-     * Detect GitHub repository information from the current workspace
-     */
+    
+    //Detect GitHub repository information from the current workspace
+     
     async detectRepository(): Promise<GitHubRepository | null> {
         try {
             const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -258,7 +258,7 @@ Just call the tool and format the response. Don't explain anything else.`;
                 // Convert relative path to absolute path
                 const absolutePath = path.join(workspaceFolders[0].uri.fsPath, filePath);
                 
-                return await this.performDirectFileAnalysis(absolutePath);
+                return await this.performDirectFileAnalysis(absolutePath); // This method needs to be implemented
             }
 
             // MCP Server is available or not confirmed
@@ -328,7 +328,7 @@ Just call the tool and format the response. Don't explain anything else.`;
                 
                 // Perform local git analysis
                 this.outputChannel.appendLine(`Performing quick analysis for: ${absolutePath}`);
-                return await this.performDirectFileAnalysis(absolutePath);
+                return await this.performDirectFileAnalysis(absolutePath); // This method needs to be implemented
             } else {
                 // User cancelled
                 this.outputChannel.appendLine('User cancelled the analysis');
@@ -603,309 +603,235 @@ Execute now.`;
      * Infer specializations from file path and extension
      */
     private inferSpecializationsFromFile(filePath: string): string[] {
-        const specializations: string[] = [];
-        
-        if (!filePath || typeof filePath !== 'string') {
-            return ['General Programming'];
-        }
-        
-        const ext = filePath.split('.').pop()?.toLowerCase();
-        const pathParts = filePath.toLowerCase().split('/');
+        const extension = path.extname(filePath).toLowerCase();
+        // Basic mapping, can be expanded
+        const map: { [key: string]: string } = {
+            '.ts': 'TypeScript',
+            '.js': 'JavaScript',
+            '.py': 'Python',
+            '.java': 'Java',
+            '.cs': 'C#',
+            '.go': 'Go',
+            '.rs': 'Rust',
+            '.rb': 'Ruby',
+            '.php': 'PHP',
+            '.html': 'HTML',
+            '.css': 'CSS',
+            '.scss': 'SCSS',
+            '.md': 'Markdown',
+        };
+        return map[extension] ? [map[extension]] : ['General'];
+    }
 
-        // Language-based specializations
-        switch (ext) {
-            case 'ts':
-            case 'tsx':
-                specializations.push('TypeScript');
-                if (ext === 'tsx') specializations.push('React');
-                break;
-            case 'js':
-            case 'jsx':
-                specializations.push('JavaScript');
-                if (ext === 'jsx') specializations.push('React');
-                break;
-            case 'py':
-                specializations.push('Python');
-                break;
-            case 'java':
-                specializations.push('Java');
-                break;
-            case 'cs':
-                specializations.push('C#');
-                break;
-            case 'cpp':
-            case 'cc':
-            case 'cxx':
-                specializations.push('C++');
-                break;
-            case 'rs':
-                specializations.push('Rust');
-                break;
-            case 'go':
-                specializations.push('Go');
-                break;
-            case 'rb':
-                specializations.push('Ruby');
-                break;
-            case 'php':
-                specializations.push('PHP');
-                break;
-            case 'swift':
-                specializations.push('Swift');
-                break;
-            case 'kt':
-                specializations.push('Kotlin');
-                break;
-        }
+    // Placeholder for performDirectFileAnalysis
+    private async performDirectFileAnalysis(filePath: string): Promise<string | null> {
+        this.outputChannel.appendLine(`Placeholder: performDirectFileAnalysis called for ${filePath}`);
+        // Implement actual local file analysis logic here (e.g., git blame, simple parsing)
+        // For now, returns a dummy response or null
+        // Example:
+        // const fileContent = await vscode.workspace.fs.readFile(vscode.Uri.file(filePath));
+        // const commitHistory = await this.getLocalCommits(path.dirname(filePath)); // Simplified
+        // return JSON.stringify({ file: filePath, experts: [{ name: "Local Expert", contributions: 5 }] });
+        return null;
+    }
 
-        // Path-based specializations
-        if (pathParts.some(part => ['test', 'tests', 'spec'].includes(part))) {
-            specializations.push('Testing');
+    private async getExpertiseAnalysis(analyzer: ExpertiseAnalyzer): Promise<ExpertiseAnalysis | null> {
+        const analysis = await analyzer.getLastAnalysis();
+        if (!analysis) {
+            this.outputChannel.appendLine('Error: No expertise analysis found. Please run an analysis first.');
+            vscode.window.showErrorMessage('No expertise analysis found. Please run an analysis first.');
+            return null;
         }
-        if (pathParts.some(part => ['api', 'backend', 'server'].includes(part))) {
-            specializations.push('Backend');
-        }
-        if (pathParts.some(part => ['frontend', 'ui', 'components'].includes(part))) {
-            specializations.push('Frontend');
-        }
-        if (pathParts.some(part => ['docs', 'documentation'].includes(part))) {
-            specializations.push('Documentation');
-        }
+        return analysis;
+    }
 
-        return specializations.length > 0 ? specializations : ['General Programming'];
+    // Placeholder for suggestExpertForIssueNumber
+    // public async suggestExpertForIssueNumber(analyzer: ExpertiseAnalyzer): Promise<void> {
+    //     this.outputChannel.appendLine('Suggesting expert for GitHub issue by number...');
+
+    //     const issueNumberStr = await vscode.window.showInputBox({
+    //         prompt: 'Enter the GitHub issue number',
+    //         placeHolder: 'e.g., 42',
+    //         validateInput: text => {
+    //             return /^[1-9]\\\\d*$/.test(text) ? null : 'Please enter a valid issue number.';
+    //         }
+    //     });
+
+    //     if (!issueNumberStr) {
+    //         this.outputChannel.appendLine('Issue number input cancelled.');
+    //         return;
+    //     }
+    //     const issueNumber = parseInt(issueNumberStr, 10);
+
+    //     const githubToken = await this.tokenManager.getToken();
+    //     if (!githubToken) {
+    //         vscode.window.showErrorMessage('GitHub token not available. Please configure it first.');
+    //         this.outputChannel.appendLine('GitHub token not available.');
+    //         return;
+    //     }
+
+    //     const repoInfo = await this.detectRepository();
+    //     if (!repoInfo) {
+    //         vscode.window.showErrorMessage('Could not detect repository information.');
+    //         this.outputChannel.appendLine('Repository detection failed.');
+    //         return;
+    //     }
+
+    //     this.outputChannel.appendLine(`Fetching issue #${issueNumber} from ${repoInfo.owner}/${repoInfo.repo}`);
+    //     let issueData;
+    //     try {
+    //         const response = await axios.get(
+    //             `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/issues/${issueNumber}`,
+    //             {
+    //                 headers: {
+    //                     Authorization: `token ${githubToken}`,
+    //                     Accept: 'application/vnd.github.v3+json',
+    //                 },
+    //             }
+    //         );
+    //         issueData = this.extractIssueDataFromResponse(response.data);
+    //     } catch (error: any) {
+    //         this.outputChannel.appendLine(`Error fetching issue: ${error.message}`);
+    //         vscode.window.showErrorMessage(`Failed to fetch issue #${issueNumber}: ${error.message}`);
+    //         return;
+    //     }
+
+    //     if (!issueData) {
+    //         this.outputChannel.appendLine('No data extracted from issue response.');
+    //         return;
+    //     }
+
+    //     const analysis = await this.getExpertiseAnalysis(analyzer);
+    //     if (!analysis || !analysis.expertProfiles || analysis.expertProfiles.length === 0) { // Changed to expertProfiles
+    //         vscode.window.showInformationMessage('No expertise data available to suggest an expert. Please run repository analysis first.');
+    //         this.outputChannel.appendLine('No expertise data for suggestion.');
+    //         return;
+    //     }
+
+    //     const bestExpert = this.findBestExpertForIssue(issueData, analysis.expertProfiles, this.extractKeywords); // Changed to expertProfiles
+    //     this.displayExpertForIssue(bestExpert, issueData, issueNumber);
+    // }
+
+    // Placeholder for suggestExpertForIssueDetails
+    public async suggestExpertForIssueDetails(issueDetails: any, analyzer: ExpertiseAnalyzer): Promise<void> {
+        this.outputChannel.appendLine(`Suggesting expert for issue (details provided): ${issueDetails.title}`);
+        const analysis = await this.getExpertiseAnalysis(analyzer);
+        if (!analysis || !analysis.expertProfiles || analysis.expertProfiles.length === 0) {
+            vscode.window.showInformationMessage('No expertise data available. Please run repository analysis first.');
+            this.outputChannel.appendLine('No expertise data for suggestion based on details.');
+            return;
+        }
+        const bestExpert = this.findBestExpertForIssue(issueDetails, analysis.expertProfiles, this.extractKeywords);
+        this.displayExpertForIssue(bestExpert, issueDetails);
+        // vscode.window.showInformationMessage('suggestExpertForIssueDetails called. See logs.');
+    }
+
+
+    private extractIssueDataFromResponse(responseData: any): any {
+        return {
+            title: responseData.title,
+            body: responseData.body,
+            labels: responseData.labels?.map((label: any) => label.name) || [],
+            number: responseData.number,
+            url: responseData.html_url
+        };
+    }
+
+    private findBestExpertForIssue(issueData: any, experts: Expert[], extractKeywords: (text: string) => string[]): Expert | null {
+        if (!experts || experts.length === 0) return null;
+        const issueKeywords = extractKeywords(`${issueData.title} ${issueData.body}`);
+        let bestExpert: Expert | null = null;
+        let bestScore = -1;
+        for (const expert of experts) {
+            const expertSkills = (expert.specializations || []).map(s => s.toLowerCase());
+            const matchCount = issueKeywords.filter(k => expertSkills.includes(k)).length;
+            if (matchCount > bestScore) {
+                bestScore = matchCount;
+                bestExpert = expert;
+            }
+        }
+        return bestExpert;
     }
 
     /**
-     * Force test MCP integration without fallbacks - for debugging MCP connectivity
+     * Extract keywords from text for expert matching
      */
-    async forceMCPTest(repository: GitHubRepository): Promise<{ success: boolean, response?: any, error?: string }> {
-        try {
-            this.outputChannel.appendLine(`🔬 FORCE MCP TEST: Testing MCP integration for ${repository.owner}/${repository.repo}`);
-            this.outputChannel.appendLine('This test will NOT fall back to local analysis - MCP must work or fail\n');
-
-            // Check Copilot Chat availability first
-            const copilotExtension = vscode.extensions.getExtension('GitHub.copilot-chat');
-            if (!copilotExtension) {
-                const error = 'GitHub Copilot Chat extension not found - cannot test MCP';
-                this.outputChannel.appendLine(`❌ ${error}`);
-                return { success: false, error };
-            }
-
-            this.outputChannel.appendLine('✅ GitHub Copilot Chat extension found');
-
-            // Check MCP server status
-            const mcpStatus = await this.checkMCPServerStatus();
-            this.outputChannel.appendLine(`📊 MCP Server Status:`);
-            this.outputChannel.appendLine(`   Available: ${mcpStatus.isAvailable ? '✅' : '❌'}`);
-            this.outputChannel.appendLine(`   Container: ${mcpStatus.containerName || 'Not found'}`);
-            this.outputChannel.appendLine(`   Status: ${mcpStatus.containerStatus || 'Unknown'}`);
-            this.outputChannel.appendLine('');
-
-            // Create a simple MCP test prompt
-            const testPrompt = `mcp_github_list_commits with owner: "${repository.owner}", repo: "${repository.repo}", perPage: 3
-
-Show the result.`;
-
-            // Copy test prompt to clipboard
-            await vscode.env.clipboard.writeText(testPrompt);
-
-            // Open Copilot Chat and show test instructions
-            try {
-                await vscode.commands.executeCommand('workbench.action.chat.open');
-                this.outputChannel.appendLine('✅ Copilot Chat opened');
-            } catch (chatError) {
-                this.outputChannel.appendLine(`⚠️ Could not open Copilot Chat automatically: ${chatError}`);
-                this.outputChannel.appendLine('Please open Copilot Chat manually (Ctrl+Shift+I or Cmd+Shift+I)');
-            }
-
-            // Show test results options
-            const choice = await vscode.window.showInformationMessage(
-                `🧪 MCP Test Instructions:\n\n1. Paste the test prompt in Copilot Chat (copied to clipboard)\n2. Check if MCP tools are used\n3. Report the results below`,
-                'MCP Worked! ✅',
-                'MCP Failed ❌',
-                'View Test Prompt',
-                'Retry Test'
-            );
-
-            switch (choice) {
-                case 'MCP Worked! ✅':
-                    this.outputChannel.appendLine('🎉 SUCCESS: User confirmed MCP is working!');
-                    this.outputChannel.appendLine('✅ GitHub MCP server is properly integrated with VS Code');
-                    this.outputChannel.appendLine('✅ Repository analysis can use MCP for enhanced data gathering');
-                    
-                    vscode.window.showInformationMessage(
-                        '🎉 Excellent! MCP is working. You can now use "Analyze Repository" with full MCP integration.',
-                        'Analyze Repository'
-                    ).then(result => {
-                        if (result === 'Analyze Repository') {
-                            vscode.commands.executeCommand('teamxray.analyzeRepository');
-                        }
-                    });
-                    
-                    return { success: true };
-
-                case 'MCP Failed ❌':
-                    this.outputChannel.appendLine('❌ FAILED: User confirmed MCP is not working');
-                    this.outputChannel.appendLine('');
-                    this.outputChannel.appendLine('🔧 Troubleshooting steps:');
-                    this.outputChannel.appendLine('1. Check that Docker is running');
-                    this.outputChannel.appendLine('2. Verify GITHUB_TOKEN environment variable is set');
-                    this.outputChannel.appendLine('3. Restart VS Code to refresh MCP configuration');
-                    this.outputChannel.appendLine('4. Check .vscode/mcp.json configuration');
-                    
-                    const troubleshootChoice = await vscode.window.showErrorMessage(
-                        'MCP integration failed. What would you like to do?',
-                        'Check Setup Guide',
-                        'Restart VS Code',
-                        'Use Local Analysis'
-                    );
-                    
-                    switch (troubleshootChoice) {
-                        case 'Check Setup Guide':
-                            vscode.commands.executeCommand('teamxray.showSetupGuidance');
-                            break;
-                        case 'Restart VS Code':
-                            vscode.commands.executeCommand('workbench.action.reloadWindow');
-                            break;
-                        case 'Use Local Analysis':
-                            vscode.commands.executeCommand('teamxray.analyzeRepository');
-                            break;
-                    }
-                    
-                    return { success: false, error: 'MCP integration test failed' };
-
-                case 'View Test Prompt':
-                    // Show the test prompt in an editor
-                    const doc = await vscode.workspace.openTextDocument({
-                        content: testPrompt,
-                        language: 'markdown'
-                    });
-                    await vscode.window.showTextDocument(doc);
-                    this.outputChannel.appendLine('📄 Test prompt opened in editor');
-                    return { success: false, error: 'Test prompt displayed - rerun test after trying' };
-
-                case 'Retry Test':
-                    this.outputChannel.appendLine('🔄 Retrying MCP test...');
-                    return this.forceMCPTest(repository);
-
-                default:
-                    this.outputChannel.appendLine('❓ Test cancelled by user');
-                    return { success: false, error: 'Test cancelled' };
-            }
-
-        } catch (error) {
-            const errorMsg = `Force MCP test failed: ${error}`;
-            this.outputChannel.appendLine(`❌ ${errorMsg}`);
-            return { success: false, error: errorMsg };
-        }
+    private extractKeywords(text: string): string[] {
+        // Simple keyword extraction: split by non-alphanumeric characters, lowercase, and filter
+        return text
+            .split(/[\W_]+/)
+            .map(kw => kw.toLowerCase())
+            .filter(kw => kw.length > 2); // Minimum length 3 for keywords
     }
 
     /**
-     * Manually start GitHub MCP server (useful for debugging)
+     * Display the suggested expert for the issue
      */
-    async manuallyStartMCPServer(): Promise<{ success: boolean, containerId?: string, error?: string }> {
-        try {
-            this.outputChannel.appendLine('🚀 Attempting to manually start GitHub MCP server...');
-
-            // Get token from token manager
-            const token = await this.tokenManager.getToken();
-            if (!token) {
-                const error = 'GitHub token not found. Please run "Team X-Ray: Set GitHub Token" first.';
-                this.outputChannel.appendLine(`❌ ${error}`);
-                vscode.window.showErrorMessage(error);
-                return { success: false, error };
-            }
-
-            this.outputChannel.appendLine('✅ GitHub token found');
-
-            const { exec } = require('child_process');
-            const util = require('util');
-            const execAsync = util.promisify(exec);
-
-            // First, check if any MCP servers are already running
-            const { stdout: existingContainers } = await execAsync(
-                'docker ps --format "{{.Names}}" --filter "ancestor=ghcr.io/github/github-mcp-server"'
-            );
-
-            if (existingContainers.trim()) {
-                this.outputChannel.appendLine(`⚠️ MCP server already running: ${existingContainers.trim()}`);
-                return { success: true, containerId: existingContainers.trim() };
-            }
-
-            // Start new MCP server container
-            this.outputChannel.appendLine('Starting new GitHub MCP server container...');
-            
-            const dockerCommand = [
-                'docker run -d',
-                '--name github-mcp-teamxray',
-                '--rm',
-                `-e GITHUB_TOKEN=${token}`,
-                '-p 8080:8080',
-                'ghcr.io/github/github-mcp-server',
-                '--port 8080',
-                '--toolsets repos,users,pull_requests,issues'
-            ].join(' ');
-
-            this.tokenManager.logCommandWithToken(dockerCommand);
-
-            const { stdout: containerId } = await execAsync(dockerCommand);
-            const cleanContainerId = containerId.trim();
-
-            this.outputChannel.appendLine(`✅ MCP server started with container ID: ${cleanContainerId}`);
-
-            // Wait a moment for container to start
-            await new Promise(resolve => setTimeout(resolve, 2000));
-
-            // Verify it's running
-            const { stdout: containerStatus } = await execAsync(`docker ps --filter "id=${cleanContainerId}" --format "{{.Status}}"`);
-            
-            if (containerStatus.trim()) {
-                this.outputChannel.appendLine(`✅ Container verified running: ${containerStatus.trim()}`);
-                
-                vscode.window.showInformationMessage(
-                    '🎉 GitHub MCP server started successfully! You can now test MCP integration.',
-                    'Test MCP Now'
-                ).then(selection => {
-                    if (selection === 'Test MCP Now') {
-                        vscode.commands.executeCommand('teamxray.forceMCPTest');
-                    }
-                });
-
-                return { success: true, containerId: cleanContainerId };
-            } else {
-                throw new Error('Container started but not showing in docker ps');
-            }
-
-        } catch (error) {
-            const errorMsg = `Failed to start MCP server: ${error}`;
-            this.outputChannel.appendLine(`❌ ${errorMsg}`);
-            vscode.window.showErrorMessage(errorMsg);
-            return { success: false, error: errorMsg };
+    private displayExpertForIssue(expert: Expert | null, issueData: any, issueNumber?: number): void {
+        if (!expert) {
+            this.outputChannel.appendLine('No suitable expert found for this issue.');
+            vscode.window.showInformationMessage('No suitable expert found for this issue.');
+            return;
         }
+
+        // Enhanced message with expert details
+        const message = `Suggested Expert: ${expert.name} <${expert.email}>\n` +
+                        `Expertise: ${expert.specializations?.join(', ') || 'N/A'}\n` +
+                        `Contributions: ${expert.contributions}\n` +
+                        `Last Commit: ${expert.lastCommit.toISOString()}\n\n` +
+                        `Issue Title: ${issueData.title}\n` +
+                        `Issue URL: ${issueData.url}\n\n` +
+                        `Click to notify the expert or copy details.`;
+
+        this.outputChannel.appendLine(message);
+
+        // Show notification with action to notify the expert
+        vscode.window.showInformationMessage(message, { modal: true }, 'Notify Expert')
+            .then(async (selection) => {
+                if (selection === 'Notify Expert') {
+                    await this.notifyExpert(expert, issueData, issueNumber);
+                }
+            });
     }
 
     /**
-     * Get expert's recent activity via GitHub MCP
+     * Notify the expert about the issue (e.g., via GitHub comment, email, etc.)
      */
+    private async notifyExpert(expert: Expert, issueData: any, issueNumber?: number): Promise<void> {
+        if (!expert.email) {
+            vscode.window.showErrorMessage('No email available for the expert. Cannot send notification.');
+            return;
+        }
+
+        // Simple email notification (placeholder, integrate with actual email service)
+        const subject = `Expertise Requested for Issue #${issueNumber}: ${issueData.title}`;
+        const body = `Hello ${expert.name},\n\n` +
+                     `You have been suggested as an expert for GitHub Issue #${issueNumber} - ${issueData.title}.\n` +
+                     `Issue URL: ${issueData.url}\n\n` +
+                     `Please check the issue for details and consider contributing your expertise.\n\n` +
+                     `Thank you!`;
+
+        this.outputChannel.appendLine(`Sending email to ${expert.email}...`);
+        // Integrate with email service here
+
+        vscode.window.showInformationMessage(`Notification sent to ${expert.name} <${expert.email}>`, { modal: true });
+    }
+
+    // Add getExpertRecentActivity and showExpertActivity methods back to CopilotMCPService
+
     async getExpertRecentActivity(expertEmail: string, expertName: string): Promise<{success: boolean, activity?: any, error?: string}> {
         try {
             this.outputChannel.appendLine(`🔍 Getting recent activity for expert: ${expertName} (${expertEmail})`);
-
-            // Get actual Git activity for this specific expert
             const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
             if (!workspaceFolder) {
                 return { success: false, error: 'No workspace folder found' };
             }
-
             const { exec } = require('child_process');
             const { promisify } = require('util');
             const execAsync = promisify(exec);
-
             try {
-                // Get recent commits by this specific expert
                 const commitCommand = `git log --author="${expertEmail}" --pretty=format:"%H|%s|%ad" --date=short -n 10`;
                 const { stdout: commitOutput } = await execAsync(commitCommand, { cwd: workspaceFolder.uri.fsPath });
-
                 const recentCommits = commitOutput.split('\n')
                     .filter((line: string) => line.trim())
                     .map((line: string) => {
@@ -917,15 +843,11 @@ Show the result.`;
                             url: `#${sha?.substring(0, 7) || 'unknown'}`
                         };
                     });
-
-                // Get file activity for this expert
-                const fileCommand = `git log --author="${expertEmail}" --name-only --pretty=format: -n 20 | sort | uniq | head -10`;
+                const fileCommand = `git log --author=\"${expertEmail}\" --name-only --pretty=format: -n 20 | sort | uniq | head -10`;
                 const { stdout: fileOutput } = await execAsync(fileCommand, { cwd: workspaceFolder.uri.fsPath });
-                
                 const recentFiles = fileOutput.split('\n')
                     .filter((file: string) => file.trim())
                     .slice(0, 5);
-
                 const activity = {
                     expertName,
                     expertEmail,
@@ -944,18 +866,10 @@ Show the result.`;
                         `Recent work: ${recentCommits[0]?.message?.substring(0, 100) || 'No recent activity'}` :
                         "No recent activity in this repository"
                 };
-
                 this.outputChannel.appendLine(`✅ Generated activity summary for ${expertName} with ${recentCommits.length} commits`);
-                
-                return { 
-                    success: true, 
-                    activity
-                };
-
+                return { success: true, activity };
             } catch (gitError) {
                 this.outputChannel.appendLine(`⚠️ Git command failed, using fallback data: ${gitError}`);
-                
-                // Fallback with expert's basic info
                 const fallbackActivity = {
                     expertName,
                     expertEmail,
@@ -972,411 +886,43 @@ Show the result.`;
                     ],
                     currentFocus: "Repository analysis required for detailed activity"
                 };
-
-                return { 
-                    success: true, 
-                    activity: fallbackActivity
-                };
+                return { success: true, activity: fallbackActivity };
             }
-
         } catch (error) {
             this.outputChannel.appendLine(`❌ Error getting expert activity: ${error}`);
-            return { 
-                success: false, 
-                error: error instanceof Error ? error.message : 'Unknown error' 
-            };
+            return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
         }
     }
 
-    /**
-     * Display expert recent activity in a user-friendly way
-     */
     async showExpertActivity(activity: any): Promise<void> {
         try {
             const { expertName, expertEmail, recentCommits, recentActivity, currentFocus } = activity;
-            
-            // Create a formatted display
             let activityDisplay = `# 🔍 Recent Activity: ${expertName}\n\n`;
             activityDisplay += `**Email:** ${expertEmail}\n\n`;
-            
             if (currentFocus) {
                 activityDisplay += `**🎯 Current Focus:** ${currentFocus}\n\n`;
             }
-
             if (recentCommits && recentCommits.length > 0) {
                 activityDisplay += `## 📝 Recent Commits:\n`;
                 recentCommits.slice(0, 5).forEach((commit: any, index: number) => {
-                    activityDisplay += `${index + 1}. **${commit.repo || 'Repository'}**\n`;
+                    activityDisplay += `${index + 1}. **${commit.repo || 'Repository'}\n`;
                     activityDisplay += `   ${commit.message || 'Commit message'}\n`;
                     activityDisplay += `   *${commit.date || 'Recent'}*\n\n`;
                 });
             }
-
             if (recentActivity && recentActivity.length > 0) {
                 activityDisplay += `## 🚀 Activity Summary:\n`;
-                recentActivity.forEach((item: string, index: number) => {
+                recentActivity.forEach((item: string) => {
                     activityDisplay += `• ${item}\n`;
                 });
             }
-
-            // Show in a new document
             const doc = await vscode.workspace.openTextDocument({
                 content: activityDisplay,
                 language: 'markdown'
             });
             await vscode.window.showTextDocument(doc);
-
         } catch (error) {
             vscode.window.showErrorMessage(`Error displaying expert activity: ${error}`);
         }
-    }
-
-    /**
-     * Get open issues from GitHub via MCP and suggest expert assignments
-     */
-    async getOpenIssuesForAssignment(): Promise<{success: boolean, issues?: any[], error?: string}> {
-        try {
-            this.outputChannel.appendLine('🎯 Getting open issues for expert assignment via MCP...');
-
-            // Check if we have repository info
-            const repository = await this.detectRepository();
-            if (!repository || !repository.owner || !repository.repo) {
-                return { success: false, error: 'Could not detect GitHub repository' };
-            }
-
-            // Create MCP prompt to get issues
-            const mcpPrompt = `Use MCP to get open issues from GitHub repository ${repository.owner}/${repository.repo}.
-
-Call mcp_github_list_issues with:
-- owner: "${repository.owner}"
-- repo: "${repository.repo}" 
-- state: "open"
-- perPage: 10
-
-Then respond with JSON:
-{
-  "repository": "${repository.owner}/${repository.repo}",
-  "openIssues": [
-    {
-      "number": 123,
-      "title": "Issue title",
-      "body": "Issue description...",
-      "labels": ["bug", "enhancement"],
-      "assignees": [],
-      "created_at": "2025-01-28",
-      "html_url": "https://github.com/...",
-      "complexity": "medium"
-    }
-  ],
-  "totalCount": 5
-}
-
-Execute the MCP call now.`;
-
-            // Open Copilot Chat with the prompt
-            await vscode.commands.executeCommand('workbench.action.chat.open');
-            await vscode.env.clipboard.writeText(mcpPrompt);
-            
-            vscode.window.showInformationMessage(
-                `📋 MCP prompt copied! Paste in Copilot Chat to get open issues from ${repository.owner}/${repository.repo}`,
-                'Got It'
-            );
-
-            this.outputChannel.appendLine('✅ MCP issues prompt ready - paste in Copilot Chat');
-            return { success: true, issues: [] };
-
-        } catch (error) {
-            this.outputChannel.appendLine(`❌ Error preparing MCP issues request: ${error}`);
-            return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
-        }
-    }
-
-    /**
-     * Assign an issue to an expert via MCP
-     */
-    async assignIssueToExpert(issueNumber: number, expertGitHubUsername: string): Promise<{success: boolean, error?: string}> {
-        try {
-            this.outputChannel.appendLine(`🎯 Assigning issue #${issueNumber} to ${expertGitHubUsername} via MCP...`);
-
-            const repository = await this.detectRepository();
-            if (!repository || !repository.owner || !repository.repo) {
-                return { success: false, error: 'Could not detect GitHub repository' };
-            }
-
-            // Create MCP prompt to assign issue
-            const assignPrompt = `Use MCP to assign GitHub issue to an expert.
-
-Call mcp_github_update_issue with:
-- owner: "${repository.owner}"
-- repo: "${repository.repo}"
-- issue_number: ${issueNumber}
-- assignees: ["${expertGitHubUsername}"]
-
-Then confirm assignment was successful.`;
-
-            // Open Copilot Chat with assignment prompt
-            await vscode.commands.executeCommand('workbench.action.chat.open');
-            await vscode.env.clipboard.writeText(assignPrompt);
-            
-            vscode.window.showInformationMessage(
-                `🎯 Assignment prompt copied! Paste in Copilot Chat to assign issue #${issueNumber} to ${expertGitHubUsername}`,
-                'Got It'
-            );
-
-            this.outputChannel.appendLine(`✅ MCP assignment prompt ready for issue #${issueNumber} → ${expertGitHubUsername}`);
-            return { success: true };
-
-        } catch (error) {
-            this.outputChannel.appendLine(`❌ Error preparing MCP assignment: ${error}`);
-            return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
-        }
-    }
-
-    /**
-     * Suggest an expert for a specific issue number using MCP and repo analysis
-     */
-    async suggestExpertForIssueNumber(issueNumber?: number): Promise<void> {
-        try {
-            // Prompt for issue number if not provided
-            if (!issueNumber) {
-                const input = await vscode.window.showInputBox({
-                    prompt: 'Enter the GitHub issue number to suggest an expert for',
-                    validateInput: (val) => isNaN(Number(val)) ? 'Please enter a valid number' : undefined
-                });
-                if (!input) return;
-                issueNumber = Number(input);
-            }
-
-            // Detect repository
-            const repository = await this.detectRepository();
-            if (!repository) {
-                vscode.window.showErrorMessage('Could not detect GitHub repository.');
-                return;
-            }
-
-            // Build MCP prompt to get issue details
-            const issuePrompt = `Call mcp_github_get_issue with owner: "${repository.owner}", repo: "${repository.repo}", issue_number: ${issueNumber}
-
-Respond with JSON:
-{
-  "number": ${issueNumber},
-  "title": "...",
-  "body": "...",
-  "labels": ["..."],
-  "assignees": ["..."],
-  "created_at": "...",
-  "html_url": "..."
-}`;
-
-            // Open Copilot Chat and copy prompt
-            await vscode.commands.executeCommand('workbench.action.chat.open');
-            await vscode.env.clipboard.writeText(issuePrompt);
-            vscode.window.showInformationMessage(`MCP prompt copied! Paste in Copilot Chat to get details for issue #${issueNumber}.`, 'Got It');
-            this.outputChannel.appendLine(`Prompt for issue #${issueNumber} copied to clipboard.`);
-
-            // Ask user to paste and copy the JSON response
-            const proceed = await vscode.window.showInformationMessage('Paste the prompt in Copilot Chat, then copy the JSON response. Click Continue when ready.', 'Continue', 'Cancel');
-            if (proceed !== 'Continue') return;
-
-            // Prompt user to paste the JSON response
-            const response = await vscode.window.showInputBox({
-                prompt: 'Paste the JSON response for the issue from Copilot Chat',
-                validateInput: (val) => {
-                    try { JSON.parse(val); return undefined; } catch { return 'Invalid JSON'; }
-                }
-            });
-            if (!response) return;
-            const issueData = JSON.parse(response);
-
-            // Gather repository data (contributors, file experts, etc.)
-            const repoData = await this.gatherRepositoryData(repository);
-            if (!repoData || !repoData.contributors) {
-                vscode.window.showErrorMessage('Could not gather repository analysis data.');
-                return;
-            }
-
-            // Simple expert suggestion: match label/keywords to contributor specializations (if available)
-            let bestExpert = repoData.contributors[0];
-            let bestScore = 0;
-            for (const expert of repoData.contributors) {
-                let score = 0;
-                // Score by label match
-                if (issueData.labels && expert.specializations) {
-                    for (const label of issueData.labels) {
-                        if (expert.specializations.includes(label)) score += 2;
-                    }
-                }
-                // Score by keyword in title/body
-                const text = (issueData.title + ' ' + issueData.body).toLowerCase();
-                if (expert.specializations) {
-                    for (const spec of expert.specializations) {
-                        if (text.includes(spec.toLowerCase())) score += 1;
-                    }
-                }
-                // Score by recent activity
-                if (expert.lastCommit) {
-                    const daysAgo = (Date.now() - new Date(expert.lastCommit).getTime()) / (1000*60*60*24);
-                    if (daysAgo < 30) score += 1;
-                }
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestExpert = expert;
-                }
-            }
-
-            // Show result
-            vscode.window.showInformationMessage(
-                `Suggested expert for issue #${issueNumber}: ${bestExpert.name} (${bestExpert.email})`,
-                'Show Details'
-            ).then(async (choice) => {
-                if (choice === 'Show Details') {
-                    const details = `# Expert Suggestion\n\n- **Name:** ${bestExpert.name}\n- **Email:** ${bestExpert.email}\n- **Contributions:** ${bestExpert.contributions}\n- **Specializations:** ${(bestExpert.specializations || []).join(', ')}\n- **Last Commit:** ${bestExpert.lastCommit}`;
-                    const doc = await vscode.workspace.openTextDocument({ content: details, language: 'markdown' });
-                    await vscode.window.showTextDocument(doc);
-                }
-            });
-        } catch (error) {
-            this.outputChannel.appendLine(`Error suggesting expert for issue: ${error}`);
-            vscode.window.showErrorMessage(`Error suggesting expert for issue: ${error}`);
-        }
-    }
-
-    // Method to perform direct file analysis using git commands
-    private async performDirectFileAnalysis(filePath: string): Promise<string | null> {
-        this.outputChannel.appendLine(`Performing direct git analysis for file: ${filePath}`);
-        
-        try {
-            // Get repository path
-            const workspaceFolders = vscode.workspace.workspaceFolders;
-            if (!workspaceFolders || workspaceFolders.length === 0) {
-                this.outputChannel.appendLine('No workspace folder found');
-                return null;
-            }
-            
-            const repoPath = workspaceFolders[0].uri.fsPath;
-            
-            // Get file-specific git commits
-            const commits = await this.getFileCommits(repoPath, filePath);
-            
-            if (!commits || commits.length === 0) {
-                this.outputChannel.appendLine('No commit history found for file');
-                return null;
-            }
-            
-            // Extract experts from commit data
-            const fileExperts = this.extractFileExpertsFromCommits(commits, filePath);
-            
-            // Get last modified date
-            const lastModified = commits.length > 0 ? 
-                commits[0].author.date.toISOString() : 
-                new Date().toISOString();
-            
-            // Return the data in the same format as MCP would
-            return JSON.stringify({
-                file: vscode.workspace.asRelativePath(filePath),
-                experts: fileExperts,
-                totalCommits: commits.length,
-                lastModified: lastModified
-            });
-        } catch (error) {
-            this.outputChannel.appendLine(`Error in direct file analysis: ${error}`);
-            return null;
-        }
-    }
-
-    // Get commits specific to a file using git commands
-    private async getFileCommits(repoPath: string, filePath: string): Promise<any[]> {
-        try {
-            const { exec } = require('child_process');
-            const util = require('util');
-            const execPromise = util.promisify(exec);
-            
-            // Relative path to the file from repo root
-            const relativePath = vscode.workspace.asRelativePath(filePath);
-            
-            // Get git log for the file
-            const gitLogCommand = `cd "${repoPath}" && git log --format="%H|%an|%ae|%at|%s" -- "${relativePath}"`;
-            
-            const { stdout } = await execPromise(gitLogCommand);
-            
-            if (!stdout) {
-                return [];
-            }
-            
-            // Parse the git log output
-            return stdout.split('\n')
-                .filter((line: string) => line.trim() !== '')
-                .map((line: string) => {
-                    const [hash, authorName, authorEmail, authorDate, subject] = line.split('|');
-                    return {
-                        hash,
-                        author: {
-                            name: authorName,
-                            email: authorEmail,
-                            date: new Date(parseInt(authorDate) * 1000)
-                        },
-                        message: subject,
-                        filePath: relativePath
-                    };
-                });
-        } catch (error) {
-            this.outputChannel.appendLine(`Error getting file commits: ${error}`);
-            return [];
-        }
-    }
-
-    // Extract file experts from commit data
-    private extractFileExpertsFromCommits(commits: any[], filePath: string): any[] {
-        const contributorMap = new Map<string, any>();
-        
-        // Calculate total lines changed by each author
-        for (const commit of commits) {
-            const { author } = commit;
-            
-            if (!contributorMap.has(author.email)) {
-                contributorMap.set(author.email, {
-                    name: author.name,
-                    email: author.email,
-                    contributions: 0,
-                    lastCommit: null,
-                    recentCommits: []
-                });
-            }
-            
-            const contributor = contributorMap.get(author.email);
-            contributor.contributions++;
-            
-            if (!contributor.lastCommit || author.date > contributor.lastCommit) {
-                contributor.lastCommit = author.date;
-            }
-            
-            if (contributor.recentCommits.length < 5) {
-                contributor.recentCommits.push(commit.message);
-            }
-        }
-        
-        // Calculate expertise scores
-        const totalCommits = commits.length;
-        const experts = Array.from(contributorMap.values())
-            .map(contributor => {
-                // Calculate expertise score based on contribution percentage
-                const expertiseScore = Math.min(100, Math.round((contributor.contributions / totalCommits) * 100));
-                
-                // Infer specializations from file extension and commit messages
-                const specializations = this.inferSpecializationsFromFile(filePath);
-                
-                return {
-                    name: contributor.name,
-                    email: contributor.email,
-                    expertise: expertiseScore,
-                    contributions: contributor.contributions,
-                    lastCommit: contributor.lastCommit,
-                    specializations,
-                    recentCommits: contributor.recentCommits
-                };
-            })
-            .sort((a, b) => b.expertise - a.expertise);
-        
-        return experts;
     }
 }

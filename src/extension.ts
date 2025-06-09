@@ -5,8 +5,8 @@ import { ExpertiseTreeProvider } from './core/expertise-tree-provider';
 import { CopilotMCPService } from './core/copilot-mcp-service';
 import { TokenManager } from './core/token-manager';
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
+// This method is called when the extension is activated
+// extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
     // Create output channel for logging
     const outputChannel = vscode.window.createOutputChannel('Team X-Ray');
@@ -24,7 +24,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Initialize core components with token manager
     const analyzer = new ExpertiseAnalyzer(context, tokenManager);
-    const copilotMCPService = new CopilotMCPService(outputChannel, tokenManager);
+    const copilotMCPService = new CopilotMCPService(outputChannel, tokenManager); // Only 2 args now
     const webviewProvider = new ExpertiseWebviewProvider(context);
     const treeProvider = new ExpertiseTreeProvider();
 
@@ -179,14 +179,6 @@ Specializations: ${(expert.specializations || []).join(', ')}`;
         }
     });
 
-    // Register suggest expert for issue command
-    const suggestExpertForIssueCommand = vscode.commands.registerCommand('teamxray.suggestExpertForIssue', async () => {
-        if (!await ensureGitHubToken()) {
-            return;
-        }
-        await copilotMCPService.suggestExpertForIssueNumber();
-    });
-
     // Helper function to get expert recent activity via MCP
     async function getExpertRecentActivity(expert: any) {
         const token = await tokenManager.getToken();
@@ -295,15 +287,14 @@ Specializations: ${(expert.specializations || []).join(', ')}`;
     statusBarItem.tooltip = 'Show team expertise overview';
     statusBarItem.show();
 
-    // Add all commands to subscriptions
+    // Add all commands to subscriptions 
     context.subscriptions.push(
         analyzeRepositoryCommand,
         findExpertCommand,
         showOverviewCommand,
         openFileFromTreeCommand,
         showExpertDetailsCommand,
-        statusBarItem,
-        suggestExpertForIssueCommand
+        statusBarItem
     );
 
     // Check if we have a previous analysis and update the tree view

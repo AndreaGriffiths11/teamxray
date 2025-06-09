@@ -1,6 +1,14 @@
-# Copilot Instructions for MCP Team X-Ray Extension
+# GitHub Copilot Instructions for MCP Team X-Ray Extension
 
-<!-- Use this file to provide workspace-specific custom instructions to Copilot. For more details, visit https://code.visualstudio.com/docs/copilot/copilot-customization#_use-a-githubcopilotinstructionsmd-file -->
+## 🎯 Core Engineering Philosophy
+**ALWAYS prioritize elegant engineering over redundant, bloated solutions.** Write code that is clean, efficient, maintainable, and serves our human-centric mission.
+
+### Engineering Excellence Principles
+- **Minimal viable complexity**: Solve problems with the simplest effective solution
+- **Question necessity**: Is this feature/dependency truly needed for human discovery?
+- **Measure impact**: Focus on changes that provide measurable performance and user experience gains
+- **Maintain readability**: Never sacrifice code clarity for micro-optimizations
+- **Remove cruft**: Eliminate dead code, unused imports, and unnecessary abstractions
 
 ## 🛡️ CRITICAL SECURITY GUIDELINES
 **ABSOLUTE REQUIREMENTS - NO EXCEPTIONS**
@@ -16,7 +24,17 @@
 
 > **REMEMBER**: One exposed credential can compromise entire systems. Security is non-negotiable.
 
-This is a VS Code extension project focused on **human discovery through code analysis**. Always use the `get_vscode_api` tool with relevant queries to fetch the latest VS Code API references.
+## 🚀 Performance & Compilation Optimization
+### Primary Objectives
+- **Faster compilation times**: Minimize dependencies, reduce template instantiations, optimize build processes
+- **Runtime efficiency**: Choose optimal algorithms, data structures, and memory management patterns
+- **Smart caching**: Implement intelligent caching strategies for GitHub API calls and AI analysis
+- **Progressive loading**: Load team insights incrementally for better UX
+
+### TypeScript Excellence
+- **Strict typing**: Leverage TypeScript's type system to catch errors at compile time
+- **Smart imports**: Use tree-shaking friendly imports and avoid circular dependencies
+- **Efficient bundling**: Optimize webpack configuration for VS Code extension packaging
 
 ## 🎯 Mission Statement
 > *"Feeling like a stranger on my own team, surrounded by brilliant minds whose talents hide in code and commits."*
@@ -30,110 +48,119 @@ MCP Team X-Ray transforms GitHub Copilot into a lens that reveals the **humans b
 2. **AI-Powered Human Analysis**: Sends repository data to GitHub Models API (`models.github.ai`) using `gpt-4o`
 3. **Human-Focused UI**: Displays team insights through VS Code webviews and tree providers
 
-## 🔧 Core Components
+## 🔧 Core Components & Optimization Guidelines
 
-### `/src/core/expertise-analyzer.ts`
-- **Main orchestrator** that coordinates MCP data gathering and AI analysis
-- Contains human-focused AI prompts that analyze communication styles and teamwork patterns
-- Handles GitHub Models API integration with comprehensive error handling
-- **Key Methods**: `analyzeRepository()`, `findExpertForFile()`, `performAIAnalysis()`
+### `/src/core/expertise-analyzer.ts` - Main Orchestrator
+**Purpose**: Coordinates MCP data gathering and AI analysis with elegant efficiency
 
-### `/src/core/copilot-mcp-service.ts` 
-- **MCP Integration Layer** that interfaces with VS Code's Copilot Chat + GitHub MCP Server
-- Detects GitHub repositories and gathers comprehensive team data
-- Provides fallback to local Git analysis when MCP is unavailable
-- **Key Methods**: `detectRepository()`, `gatherRepositoryData()`, `analyzeFileExperts()`
+**Optimization Focus**:
+- **Single responsibility**: Each method has one clear purpose in human discovery
+- **Async efficiency**: Use Promise.all() for parallel API calls, implement request batching
+- **Error resilience**: Graceful degradation when AI services are unavailable
+- **Memory management**: Stream large repository data instead of loading everything in memory
 
-### `/src/core/expertise-webview.ts`
-- **Human-focused webview** that displays team expertise in a beautiful, accessible interface
-- Uses VS Code theming and modern web standards
-- Shows expert profiles with communication styles, hidden strengths, and ideal challenges
+**Key Methods**: 
+- `analyzeRepository()` - Orchestrates entire analysis pipeline
+- `findExpertForFile()` - Quickly identifies file experts using cached data
+- `performAIAnalysis()` - Efficiently batch AI requests for team insights
 
-### `/src/core/expertise-tree-provider.ts`
-- **Sidebar tree view** for quick team expertise navigation
-- Organized by team members and their areas of expertise
-- Provides contextual actions for deeper analysis
+### `/src/core/copilot-mcp-service.ts` - MCP Integration Layer
+**Purpose**: Interfaces with VS Code's Copilot Chat + GitHub MCP Server
 
-## 🎨 Design Philosophy
+**Optimization Focus**:
+- **Intelligent fallbacks**: Gracefully degrade to local Git when MCP unavailable
+- **Data efficiency**: Fetch only necessary GitHub data, implement smart pagination
+- **Caching strategy**: Cache MCP responses to reduce API calls
+- **Connection pooling**: Reuse MCP connections efficiently
 
-### Human-Centric Analysis
+**Key Methods**:
+- `detectRepository()` - Fast repository detection with minimal filesystem access
+- `gatherRepositoryData()` - Efficient data collection with parallel requests
+- `analyzeFileExperts()` - Optimized file-to-expert mapping algorithm
+
+### `/src/core/expertise-webview.ts` - Human-Focused UI
+**Purpose**: Beautiful, accessible interface for team expertise
+
+**Optimization Focus**:
+- **Lazy loading**: Load team member details on-demand
+- **Virtual scrolling**: Handle large teams efficiently
+- **Minimal DOM manipulation**: Use efficient rendering patterns
+- **Theme integration**: Seamless VS Code theming without performance overhead
+
+### `/src/core/expertise-tree-provider.ts` - Sidebar Navigation
+**Purpose**: Quick team expertise navigation
+
+**Optimization Focus**:
+- **Tree virtualization**: Handle large teams without performance degradation
+- **Smart updates**: Update only changed nodes in the tree
+- **Contextual loading**: Load detailed data only when nodes are expanded
+
+## 🎨 Development Guidelines
+
+### Code Quality Excellence
+- **TypeScript strict mode** with comprehensive typing - no `any` types
+- **DRY principle**: Eliminate redundancy while maintaining readability
+- **Composability**: Build small, reusable components for human analysis
+- **Self-documenting code**: Variable and function names should reveal intent
+- **Comprehensive error handling** with user-friendly messages
+
+### Human-Centric Analysis (Core Mission)
 - **Communication Style**: Analyze commit message patterns, collaboration indicators
-- **Hidden Strengths**: Discover mentoring, documentation, problem-solving abilities
+- **Hidden Strengths**: Discover mentoring, documentation, problem-solving abilities  
 - **Team Dynamics**: Identify collaboration patterns and knowledge sharing
 - **Challenge Matching**: Recommend which team members thrive on specific problem types
-
-### Technical Excellence
-- **MCP-First**: Leverage VS Code's native MCP support with GitHub's official server
-- **Graceful Fallbacks**: When MCP unavailable, fall back to local Git analysis
-- **Progressive Enhancement**: Basic functionality works without external dependencies
-- **Comprehensive Logging**: Use `outputChannel` for detailed debugging information
-
-## 🛠️ Development Guidelines
-
-### Code Quality
-- Use TypeScript strict mode with proper typing
-- Follow VS Code extension best practices and security guidelines
-- Implement comprehensive error handling with user-friendly messages
-- Add extensive logging to `outputChannel` for debugging
-
-### Security Guidelines
-- **🔒 NEVER display contents of .env files in chat or output**
-- **🔒 NEVER expose API keys, tokens, or credentials in any form**
-- Always check if .env files exist without reading their contents
-- Warn about not committing sensitive files to version control
-- Use environment variables securely without revealing their values
-- When handling sensitive files, reference them by name only
-
-### Human-Focused Features
 - **Always prioritize human insights over technical metrics**
-- Look for collaboration patterns, not just code contributions
-- Analyze communication styles in commit messages and comments
-- Identify mentoring relationships and knowledge sharing patterns
-- Focus on team member strengths and growth opportunities
 
-### AI Prompt Engineering
-- Craft prompts that reveal human qualities behind code changes
-- Ask about communication styles, teamwork patterns, hidden strengths
-- Request insights about challenge matching and ideal project types
-- Emphasize emotional intelligence and team dynamics
+### Performance & Efficiency Standards
+- **Question every dependency**: Use lightweight alternatives when possible
+- **Optimize bundle size**: Tree-shake unused code, lazy-load heavy components
+- **Efficient algorithms**: Choose O(log n) over O(n) when dealing with team data
+- **Memory conscious**: Clean up event listeners, dispose of resources properly
+- **Smart caching**: Cache AI responses and GitHub data with appropriate TTL
 
-### MCP Integration
-- Use `CopilotMCPService` for all GitHub data gathering
-- Always provide fallback mechanisms for offline/MCP-unavailable scenarios
-- Leverage VS Code's built-in MCP support rather than custom implementations
-- Configure GitHub MCP Server via `.vscode/mcp.json`
+### Security & Best Practices
+- **Environment variable security**: Use VS Code secrets API, never hardcode tokens
+- **Input validation**: Sanitize all user inputs and GitHub data
+- **Least privilege**: Request minimal GitHub permissions needed
+- **Audit dependencies**: Regularly check for security vulnerabilities
+- **Secure logging**: Never log sensitive data to output channels
 
-### UI/UX Standards
-- Use VS Code theming (`vscode.window.createWebviewPanel`)
-- Implement accessible interfaces with proper ARIA labels
-- Provide progress indicators for long-running operations
-- Show clear error messages with actionable next steps
-- Use consistent iconography and VS Code design patterns
+### AI Prompt Engineering Excellence
+- **Human-focused prompts**: Reveal human qualities behind code changes
+- **Efficient token usage**: Craft concise prompts that maximize insight per token
+- **Context optimization**: Send only relevant repository data to AI
+- **Batch processing**: Group multiple analysis requests efficiently
+- **Fallback strategies**: Handle AI service limitations gracefully
 
-## 🔧 Configuration Files
+### MCP Integration Best Practices
+- **MCP-first approach**: Leverage VS Code's native MCP support
+- **Graceful degradation**: Provide meaningful functionality without MCP
+- **Connection management**: Efficiently manage MCP server connections
+- **Error handling**: Clear user feedback when MCP services fail
 
-### `.vscode/mcp.json`
-Configures GitHub MCP Server with Docker-based deployment:
-- Uses GitHub's official MCP server image
-- Configured toolsets: `repos,users,pull_requests,issues`
-- Secure token handling via VS Code input prompts
+## 🚀 What to Avoid (Anti-Patterns)
+- **Over-abstraction**: Don't create unnecessary layers that obscure human insights
+- **Premature optimization**: Profile before optimizing, focus on user-facing performance
+- **Heavy frameworks**: Choose lightweight solutions that serve the human discovery mission
+- **Magic numbers/behaviors**: All thresholds for team analysis should be configurable
+- **Blocking operations**: Keep VS Code responsive during repository analysis
+- **Redundant API calls**: Cache and batch GitHub/AI requests intelligently
 
-### `package.json`
-- Extension contributes commands for repository analysis and file expertise
-- Context menus for right-click file analysis
-- Configuration for GitHub Models API tokens
+## 🔧 Configuration & Testing
 
-## 🚀 Testing Strategy
-- **Manual Testing**: Use F5 debugging with real GitHub repositories
-- **MCP Testing**: Verify GitHub MCP Server integration with various repo types
-- **AI Testing**: Test GitHub Models API responses with different repository sizes
-- **Fallback Testing**: Ensure graceful degradation when MCP/API unavailable
+### Performance Monitoring
+- **Bundle analysis**: Regularly audit extension size and load times
+- **Memory profiling**: Monitor memory usage during large repository analysis
+- **API efficiency**: Track GitHub API rate limit usage and optimization opportunities
+- **User experience metrics**: Measure time-to-insight for team discovery
 
-## 🎯 Future Enhancements
-- Real-time team expertise updates via GitHub webhooks
-- Integration with VS Code's chat interface for contextual queries
-- Team collaboration recommendations based on expertise analysis
-- Historical team evolution tracking and insights
-- Cross-repository team expertise aggregation
+### Testing Strategy
+- **Unit tests**: Focus on human analysis algorithms and data transformations
+- **Integration tests**: Verify MCP and GitHub API interactions
+- **Performance tests**: Ensure responsive UI with large teams/repositories
+- **Security tests**: Validate credential handling and input sanitization
 
-Remember: This extension is about **discovering the humans behind the code** - their unique gifts, communication styles, and the ways they make their teams stronger. Every feature should serve this human-centric mission.
+## 🎯 Remember: The Mission
+This extension is about **discovering the humans behind the code** - their unique gifts, communication styles, and the ways they make their teams stronger. Every optimization and feature should serve this human-centric mission while maintaining elegant, efficient engineering practices.
+
+**The best code is often the code you don't have to write. Help me build something that efficiently reveals the beautiful human stories hidden in our repositories.**

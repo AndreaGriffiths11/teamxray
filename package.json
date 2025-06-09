@@ -44,6 +44,18 @@
   "icon": "resources/icon.png",
   "activationEvents": [],
   "main": "./dist/extension.js",
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "webpack",
+    "watch": "webpack --watch",
+    "package": "webpack --mode production --devtool hidden-source-map",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "vscode-test",
+    "clean": "rimraf ./dist"
+  },
   "contributes": {
     "commands": [
       {
@@ -65,10 +77,6 @@
       {
         "command": "teamxray.analyzeFile",
         "title": "Team X-Ray: Analyze This File"
-      },
-      {
-        "command": "teamxray.suggestExpertForIssue",
-        "title": "Team X-Ray: Suggest Expert for Issue"
       }
     ],
     "menus": {
@@ -116,17 +124,6 @@
       }
     }
   },
-  "scripts": {
-    "vscode:prepublish": "npm run package",
-    "compile": "webpack",
-    "watch": "webpack --watch",
-    "package": "webpack --mode production --devtool hidden-source-map",
-    "compile-tests": "tsc -p . --outDir out",
-    "watch-tests": "tsc -p . -w --outDir out",
-    "pretest": "npm run compile-tests && npm run compile && npm run lint",
-    "lint": "eslint src",
-    "test": "vscode-test"
-  },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
     "@types/node": "20.x",
@@ -136,6 +133,7 @@
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "^2.5.2",
     "eslint": "^9.25.1",
+    "rimraf": "^6.0.1",
     "ts-loader": "^9.5.2",
     "typescript": "^5.8.3",
     "webpack": "^5.99.7",
