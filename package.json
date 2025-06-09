@@ -65,6 +65,10 @@
       {
         "command": "teamxray.analyzeFile",
         "title": "Team X-Ray: Analyze This File"
+      },
+      {
+        "command": "teamxray.suggestExpertForIssue",
+        "title": "Team X-Ray: Suggest Expert for Issue"
       }
     ],
     "menus": {

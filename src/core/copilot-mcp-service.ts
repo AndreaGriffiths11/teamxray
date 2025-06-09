@@ -1,5 +1,4 @@
 import * as vscode from 'vscode';
-
 import * as path from 'path';
 import { TokenManager } from './token-manager';
 
@@ -23,10 +22,9 @@ export interface MCPServerStatus {
     error?: string;
 }
 
-/**
- * Service that integrates with VS Code's Copilot Chat and GitHub MCP Server
- * to gather repository data for team expertise analysis
- */
+//Service that integrates with VS Code's Copilot Chat and GitHub MCP Server
+//to gather repository data for team expertise analysis
+
 export class CopilotMCPService {
     private outputChannel: vscode.OutputChannel;
     private tokenManager: TokenManager;
@@ -170,7 +168,7 @@ export class CopilotMCPService {
         try {
             this.outputChannel.appendLine(`Gathering repository data for ${repository.owner}/${repository.repo} via Copilot Chat + MCP...`);
 
-            // Always try MCP first - even in debug mode, the user might have MCP available
+            // Always try MCP first - even in debug mode
             const prompt = this.buildMCPDataGatheringPrompt(repository);
             
             // Check MCP server status for user information (but don't block on it)
@@ -204,9 +202,8 @@ export class CopilotMCPService {
         }
     }
 
-    /**
-     * Build a prompt for Copilot Chat to gather data using MCP GitHub tools
-     */
+    //Build a prompt for Copilot Chat to gather data using MCP GitHub tools
+ 
     private buildMCPDataGatheringPrompt(repository: GitHubRepository): string {
         return `Call mcp_github_list_commits with owner: "${repository.owner}", repo: "${repository.repo}", perPage: 10
 
@@ -1132,6 +1129,115 @@ Then confirm assignment was successful.`;
         } catch (error) {
             this.outputChannel.appendLine(`❌ Error preparing MCP assignment: ${error}`);
             return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+        }
+    }
+
+    /**
+     * Suggest an expert for a specific issue number using MCP and repo analysis
+     */
+    async suggestExpertForIssueNumber(issueNumber?: number): Promise<void> {
+        try {
+            // Prompt for issue number if not provided
+            if (!issueNumber) {
+                const input = await vscode.window.showInputBox({
+                    prompt: 'Enter the GitHub issue number to suggest an expert for',
+                    validateInput: (val) => isNaN(Number(val)) ? 'Please enter a valid number' : undefined
+                });
+                if (!input) return;
+                issueNumber = Number(input);
+            }
+
+            // Detect repository
+            const repository = await this.detectRepository();
+            if (!repository) {
+                vscode.window.showErrorMessage('Could not detect GitHub repository.');
+                return;
+            }
+
+            // Build MCP prompt to get issue details
+            const issuePrompt = `Call mcp_github_get_issue with owner: "${repository.owner}", repo: "${repository.repo}", issue_number: ${issueNumber}
+
+Respond with JSON:
+{
+  "number": ${issueNumber},
+  "title": "...",
+  "body": "...",
+  "labels": ["..."],
+  "assignees": ["..."],
+  "created_at": "...",
+  "html_url": "..."
+}`;
+
+            // Open Copilot Chat and copy prompt
+            await vscode.commands.executeCommand('workbench.action.chat.open');
+            await vscode.env.clipboard.writeText(issuePrompt);
+            vscode.window.showInformationMessage(`MCP prompt copied! Paste in Copilot Chat to get details for issue #${issueNumber}.`, 'Got It');
+            this.outputChannel.appendLine(`Prompt for issue #${issueNumber} copied to clipboard.`);
+
+            // Ask user to paste and copy the JSON response
+            const proceed = await vscode.window.showInformationMessage('Paste the prompt in Copilot Chat, then copy the JSON response. Click Continue when ready.', 'Continue', 'Cancel');
+            if (proceed !== 'Continue') return;
+
+            // Prompt user to paste the JSON response
+            const response = await vscode.window.showInputBox({
+                prompt: 'Paste the JSON response for the issue from Copilot Chat',
+                validateInput: (val) => {
+                    try { JSON.parse(val); return undefined; } catch { return 'Invalid JSON'; }
+                }
+            });
+            if (!response) return;
+            const issueData = JSON.parse(response);
+
+            // Gather repository data (contributors, file experts, etc.)
+            const repoData = await this.gatherRepositoryData(repository);
+            if (!repoData || !repoData.contributors) {
+                vscode.window.showErrorMessage('Could not gather repository analysis data.');
+                return;
+            }
+
+            // Simple expert suggestion: match label/keywords to contributor specializations (if available)
+            let bestExpert = repoData.contributors[0];
+            let bestScore = 0;
+            for (const expert of repoData.contributors) {
+                let score = 0;
+                // Score by label match
+                if (issueData.labels && expert.specializations) {
+                    for (const label of issueData.labels) {
+                        if (expert.specializations.includes(label)) score += 2;
+                    }
+                }
+                // Score by keyword in title/body
+                const text = (issueData.title + ' ' + issueData.body).toLowerCase();
+                if (expert.specializations) {
+                    for (const spec of expert.specializations) {
+                        if (text.includes(spec.toLowerCase())) score += 1;
+                    }
+                }
+                // Score by recent activity
+                if (expert.lastCommit) {
+                    const daysAgo = (Date.now() - new Date(expert.lastCommit).getTime()) / (1000*60*60*24);
+                    if (daysAgo < 30) score += 1;
+                }
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestExpert = expert;
+                }
+            }
+
+            // Show result
+            vscode.window.showInformationMessage(
+                `Suggested expert for issue #${issueNumber}: ${bestExpert.name} (${bestExpert.email})`,
+                'Show Details'
+            ).then(async (choice) => {
+                if (choice === 'Show Details') {
+                    const details = `# Expert Suggestion\n\n- **Name:** ${bestExpert.name}\n- **Email:** ${bestExpert.email}\n- **Contributions:** ${bestExpert.contributions}\n- **Specializations:** ${(bestExpert.specializations || []).join(', ')}\n- **Last Commit:** ${bestExpert.lastCommit}`;
+                    const doc = await vscode.workspace.openTextDocument({ content: details, language: 'markdown' });
+                    await vscode.window.showTextDocument(doc);
+                }
+            });
+        } catch (error) {
+            this.outputChannel.appendLine(`Error suggesting expert for issue: ${error}`);
+            vscode.window.showErrorMessage(`Error suggesting expert for issue: ${error}`);
         }
     }
 

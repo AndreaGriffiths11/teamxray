@@ -179,6 +179,14 @@ Specializations: ${(expert.specializations || []).join(', ')}`;
         }
     });
 
+    // Register suggest expert for issue command
+    const suggestExpertForIssueCommand = vscode.commands.registerCommand('teamxray.suggestExpertForIssue', async () => {
+        if (!await ensureGitHubToken()) {
+            return;
+        }
+        await copilotMCPService.suggestExpertForIssueNumber();
+    });
+
     // Helper function to get expert recent activity via MCP
     async function getExpertRecentActivity(expert: any) {
         const token = await tokenManager.getToken();
@@ -294,7 +302,8 @@ Specializations: ${(expert.specializations || []).join(', ')}`;
         showOverviewCommand,
         openFileFromTreeCommand,
         showExpertDetailsCommand,
-        statusBarItem
+        statusBarItem,
+        suggestExpertForIssueCommand
     );
 
     // Check if we have a previous analysis and update the tree view
