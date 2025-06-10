@@ -317,7 +317,7 @@ Specializations: ${(expert.specializations || []).join(', ')}`;
                     vscode.commands.executeCommand('teamxray.analyzeRepository');
                     break;
                 case 'Learn More':
-                    vscode.env.openExternal(vscode.Uri.parse('https://github.com/your-repo/mcp-team-xray'));
+                    vscode.env.openExternal(vscode.Uri.parse('https://github.com/AndreaGriffiths11/team-xray'));
                     break;
             }
         });

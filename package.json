@@ -11,12 +11,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/AndreaGriffiths11/mcp-team-xray"
+    "url": "https://github.com/AndreaGriffiths11/team-xray"
   },
   "bugs": {
-    "url": "https://github.com/AndreaGriffiths11/mcp-team-xray/issues"
+    "url": "https://github.com/AndreaGriffiths11/team-xray/issues"
   },
-  "homepage": "https://github.com/AndreaGriffiths11/mcp-team-xray#readme",
+  "homepage": "https://github.com/AndreaGriffiths11/team-xray#readme",
   "engines": {
     "vscode": "^1.100.0"
   },

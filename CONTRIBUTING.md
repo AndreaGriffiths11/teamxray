@@ -26,8 +26,8 @@ We believe in **human-centered development**:
 1. **Fork & Clone**
    ```bash
    # Fork the repository on GitHub first
-   git clone https://github.com/andreagriffiths11/mcp-team-xray.git
-   cd mcp-team-xray
+   git clone https://github.com/andreagriffiths11/team-xray.git
+   cd team-xray
    ```
 
 2. **Install Dependencies**
@@ -72,7 +72,7 @@ We believe in **human-centered development**:
 Found something that doesn't work as expected? Help us fix it!
 
 **Before reporting:**
-- Check [existing issues](https://github.com/AndreaGriffiths11/mcp-team-xray/issues)
+- Check [existing issues](https://github.com/AndreaGriffiths11/team-xray/issues)
 - Try with the latest version
 - Test with a minimal reproduction case
 
@@ -99,7 +99,7 @@ Ready to dive into the code? Here's how to make impactful contributions:
 
 #### **Good First Issues**
 
-Look for issues labeled [`good first issue`](https://github.com/AndreaGriffiths11/mcp-team-xray/labels/good%20first%20issue):
+Look for issues labeled [`good first issue`](https://github.com/AndreaGriffiths11/team-xray/labels/good%20first%20issue):
 - Documentation improvements
 - UI/UX enhancements
 - Error message improvements
@@ -291,7 +291,7 @@ We believe in celebrating contributions:
 
 Stuck or have questions? We're here to help:
 
-- **💬 Discussions**: [GitHub Discussions](https://github.com/AndreaGriffiths11/mcp-team-xray/discussions) for questions and ideas
+- **💬 Discussions**: [GitHub Discussions](https://github.com/AndreaGriffiths11/team-xray/discussions) for questions and ideas
 
 
 ## 📜 **Code of Conduct**

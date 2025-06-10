@@ -1,6 +1,6 @@
 # MCP Team X-Ray VS Code Extension
 
-[![Build Status](https://github.com/AndreaGriffiths11/mcp-team-xray/workflows/CI%2FCD%20Pipeline/badge.svg)](https://github.com/AndreaGriffiths11/mcp-team-xray/actions)
+[![Build Status](https://github.com/AndreaGriffiths11/team-xray/workflows/CI%2FCD%20Pipeline/badge.svg)](https://github.com/AndreaGriffiths11/team-xray/actions)
 
 > *"Feeling like a stranger on my own team, surrounded by brilliant minds whose talents hide in code and commits."*
 
@@ -23,8 +23,8 @@ Transform GitHub Copilot into team X-ray vision. Discover the humans behind the 
 **Development Version** - Install from source:
 
 ```bash
-git clone https://github.com/AndreaGriffiths11/mcp-team-xray.git
-cd mcp-team-xray
+git clone https://github.com/AndreaGriffiths11/team-xray.git
+cd team-xray
 npm install
 npm run compile
 npm install -g @vscode/vsce && vsce package
@@ -56,8 +56,8 @@ export GITHUB_TOKEN="your_github_token_here"
 **Prerequisites:** Node.js 20+, VS Code 1.100.0+, Git repository
 
 ```bash
-git clone https://github.com/AndreaGriffiths11/mcp-team-xray.git
-cd mcp-team-xray
+git clone https://github.com/AndreaGriffiths11/team-xray.git
+cd team-xray
 npm install
 export GITHUB_TOKEN="your_token"
 npm run compile
