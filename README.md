@@ -1,4 +1,4 @@
-# MCP Team X-Ray VS Code Extension
+#Team X-Ray VS Code Extension
 
 [![Build Status](https://github.com/AndreaGriffiths11/team-xray/workflows/CI%2FCD%20Pipeline/badge.svg)](https://github.com/AndreaGriffiths11/teamxray/actions)
 
