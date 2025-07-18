@@ -1,0 +1,17 @@
+out
+dist
+node_modules
+.vscode-test/
+*.vsix
+
+# Environment files (contain sensitive tokens)
+.env
+.env.*
+!.env.example
+.github/.env
+**/.env
+*.key
+*.pem
+.DS_Store
+.vscodeignore
+

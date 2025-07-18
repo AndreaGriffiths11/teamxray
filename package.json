@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "teamxray",
+  "displayName": "Team X-Ray",
+  "description": "Human discovery through code analysis - reveal team expertise, communication styles, and hidden strengths using GitHub MCP integration",
+  "version": "1.0.0",
+  "publisher": "alacolombiadev",
+  "author": {
+    "name": "alacolombiadev"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AndreaGriffiths11/team-xray"
+  },
+  "bugs": {
+    "url": "https://github.com/AndreaGriffiths11/team-xray/issues"
+  },
+  "homepage": "https://github.com/AndreaGriffiths11/team-xray#readme",
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Other",
+    "Data Science",
+    "Machine Learning"
+  ],
+  "keywords": [
+    "team",
+    "expertise",
+    "github",
+    "mcp",
+    "ai",
+    "analysis",
+    "collaboration",
+    "human-discovery",
+    "copilot",
+    "team-insights"
+  ],
+  "galleryBanner": {
+    "color": "#007ACC",
+    "theme": "dark"
+  },
+  "icon": "resources/icon.png",
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "webpack",
+    "watch": "webpack --watch",
+    "package": "webpack --mode production --devtool hidden-source-map",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "vscode-test",
+    "clean": "rimraf ./dist"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "teamxray.analyzeRepository",
+        "title": "Team X-Ray: Analyze Repository Expertise"
+      },
+      {
+        "command": "teamxray.setGitHubToken",
+        "title": "Team X-Ray: Set GitHub Token"
+      },
+      {
+        "command": "teamxray.findExpertForFile",
+        "title": "Team X-Ray: Find Expert for This File"
+      },
+      {
+        "command": "teamxray.showTeamOverview",
+        "title": "Team X-Ray: Show Team Expertise Overview"
+      },
+      {
+        "command": "teamxray.analyzeFile",
+        "title": "Team X-Ray: Analyze This File"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "teamxray.findExpertForFile",
+          "when": "resourceExtname =~ /\\.(js|ts|jsx|tsx|py|java|cpp|c|h|cs|rb|php|go|rs|kt|swift)$/",
+          "group": "1_modification"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "teamxray.findExpertForFile",
+          "when": "resourceExtname =~ /\\.(js|ts|jsx|tsx|py|java|cpp|c|h|cs|rb|php|go|rs|kt|swift)$/",
+          "group": "1_modification"
+        }
+      ]
+    },
+    "views": {
+      "explorer": [
+        {
+          "id": "teamxray.expertiseView",
+          "name": "Team Expertise",
+          "when": "teamxray.hasAnalysis",
+          "icon": "$(organization)"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "teamxray",
+          "title": "Team X-Ray",
+          "icon": "$(organization)"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Team X-Ray",
+      "properties": {
+        "teamxray.githubToken": {
+          "type": "string",
+          "description": "GitHub token for MCP access and API calls"
+        }
+      }
+    }
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "20.x",
+    "@types/vscode": "^1.100.0",
+    "@typescript-eslint/eslint-plugin": "^8.31.1",
+    "@typescript-eslint/parser": "^8.31.1",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.5.2",
+    "eslint": "^9.25.1",
+    "rimraf": "^6.0.1",
+    "ts-loader": "^9.5.2",
+    "typescript": "^5.8.3",
+    "webpack": "^5.99.7",
+    "webpack-cli": "^6.0.1"
+  },
+  "dependencies": {
+    "@types/axios": "^0.9.36",
+    "axios": "^1.9.0",
+    "dotenv": "^16.5.0"
+  }
+}

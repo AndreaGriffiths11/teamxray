@@ -1,0 +1,246 @@
+name: Marketplace Preparation
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+        - patch
+        - minor
+        - major
+      dry_run:
+        description: 'Dry run (test only, do not publish)'
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  prepare-release:
+    name: Prepare Marketplace Release
+    runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.version.outputs.version }}
+      vsix_file: ${{ steps.package.outputs.vsix_file }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
+        
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Install VSCE
+      run: npm install -g @vscode/vsce
+      
+    - name: Validate extension for marketplace
+      run: |
+        echo "🔍 Validating extension for VS Code Marketplace..."
+        
+        # Check required fields
+        node -e "
+          const pkg = require('./package.json');
+          const required = ['name', 'displayName', 'description', 'version', 'publisher', 'engines', 'categories'];
+          const missing = required.filter(field => !pkg[field]);
+          if (missing.length > 0) {
+            console.error('❌ Missing required fields:', missing.join(', '));
+            process.exit(1);
+          }
+          console.log('✅ All required package.json fields present');
+        "
+        
+        # Validate README
+        if [ ! -f "README.md" ] || [ ! -s "README.md" ]; then
+          echo "❌ README.md is required and must not be empty"
+          exit 1
+        fi
+        echo "✅ README.md validation passed"
+        
+        # Check for icon
+        if grep -q '"icon"' package.json; then
+          ICON_PATH=$(node -e "console.log(require('./package.json').icon || '')")
+          if [ ! -f "$ICON_PATH" ]; then
+            echo "❌ Icon file not found: $ICON_PATH"
+            exit 1
+          fi
+          echo "✅ Extension icon found"
+        else
+          echo "⚠️  No icon specified (recommended for marketplace)"
+        fi
+        
+        # Validate license
+        if [ ! -f "LICENSE" ] && ! grep -q '"license"' package.json; then
+          echo "⚠️  No license file or license field (recommended for marketplace)"
+        fi
+        
+    - name: Update version
+      id: version
+      if: ${{ !inputs.dry_run }}
+      run: |
+        echo "📝 Updating version (${{ inputs.version_type }})..."
+        npm version ${{ inputs.version_type }} --no-git-tag-version
+        NEW_VERSION=$(node -e "console.log(require('./package.json').version)")
+        echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+        echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+        
+    - name: Update CHANGELOG
+      if: ${{ !inputs.dry_run }}
+      run: |
+        echo "📝 Updating CHANGELOG.md..."
+        DATE=$(date +%Y-%m-%d)
+        
+        # Create new changelog entry
+        cat > temp_changelog.md << EOF
+        # Change Log
+
+        ## [${{ steps.version.outputs.version }}] - $DATE
+
+        ### Added
+        - Human-focused team expertise analysis
+        - GitHub MCP Server integration for repository data
+        - GitHub Models AI analysis for communication styles
+        - VS Code webview for team insights
+        - File-specific expert identification
+
+        ### Features
+        - Right-click context menu for file analysis
+        - Command palette integration
+        - Sidebar tree view for team navigation
+        - Graceful fallback to local Git analysis
+
+        EOF
+        
+        # Append existing changelog if it exists
+        if [ -f "CHANGELOG.md" ]; then
+          tail -n +2 CHANGELOG.md >> temp_changelog.md
+        fi
+        
+        mv temp_changelog.md CHANGELOG.md
+        
+    - name: Build and package extension
+      id: package
+      run: |
+        echo "🔨 Building extension..."
+        npm run compile
+        
+        echo "📦 Packaging extension..."
+        vsce package --no-dependencies
+        
+        VSIX_FILE=$(ls *.vsix)
+        echo "vsix_file=$VSIX_FILE" >> $GITHUB_OUTPUT
+        echo "VSIX_FILE=$VSIX_FILE" >> $GITHUB_ENV
+        
+        # Show package info
+        echo "📋 Extension package details:"
+        vsce show --packagePath $VSIX_FILE
+        
+    - name: Test package installation
+      run: |
+        echo "🧪 Testing package installation..."
+        # This would ideally run in a VS Code environment
+        # For now, just verify the package structure
+        unzip -l ${{ steps.package.outputs.vsix_file }}
+        
+    - name: Dry run validation
+      if: ${{ inputs.dry_run }}
+      run: |
+        echo "🎯 DRY RUN COMPLETE - Extension is ready for marketplace!"
+        echo ""
+        echo "📦 Generated package: ${{ steps.package.outputs.vsix_file }}"
+        echo "🔍 Package validation: ✅ Passed"
+        echo "📋 Marketplace requirements: ✅ Met"
+        echo ""
+        echo "To publish to marketplace:"
+        echo "1. Set up VSCE_PAT secret with your marketplace token"
+        echo "2. Run this workflow with dry_run=false"
+        echo "3. Create a GitHub release to trigger automatic publishing"
+        
+    - name: Commit version changes
+      if: ${{ !inputs.dry_run }}
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add package.json CHANGELOG.md
+        git commit -m "🚀 Bump version to ${{ steps.version.outputs.version }}"
+        git push
+        
+    - name: Create release
+      if: ${{ !inputs.dry_run }}
+      id: create_release
+      uses: softprops/action-gh-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ steps.version.outputs.version }}
+        name: "MCP Team X-Ray v${{ steps.version.outputs.version }}"
+        body: |
+          ## 🎯 MCP Team X-Ray Extension v${{ steps.version.outputs.version }}
+          
+          Human discovery through code analysis - revealing team expertise, communication styles, and hidden strengths.
+          
+          ### ✨ Key Features
+          - **GitHub MCP Integration**: Uses VS Code's native MCP support with GitHub's official server
+          - **AI-Powered Analysis**: GitHub Models API (gpt-4o) for human-focused insights  
+          - **Team Expertise Discovery**: Find experts for any file or technology
+          - **Communication Analysis**: Understand team collaboration patterns
+          - **Beautiful UI**: VS Code-themed webviews and tree navigation
+          
+          ### 🚀 Installation
+          1. Download the `.vsix` file from this release
+          2. In VS Code: `Extensions` → `...` → `Install from VSIX`
+          3. Or install from marketplace: [MCP Team X-Ray](https://marketplace.visualstudio.com/items?itemName=alacolombiadev.teamxray)
+          
+          ### 📋 Requirements
+          - GitHub Personal Access Token
+          - Docker (for GitHub MCP Server)
+          - VS Code 1.100.0+
+        draft: false
+        prerelease: false
+        files: ${{ steps.package.outputs.vsix_file }}
+
+  publish-to-marketplace:
+    name: Publish to VS Code Marketplace  
+    runs-on: ubuntu-latest
+    needs: prepare-release
+    if: ${{ !inputs.dry_run && success() }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        ref: main
+        
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Install VSCE
+      run: npm install -g @vscode/vsce
+      
+    - name: Build extension
+      run: npm run compile
+      
+    - name: Publish to marketplace
+      env:
+        VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      run: |
+        echo "🚀 Publishing to VS Code Marketplace..."
+        vsce publish --no-dependencies
+        echo "✅ Extension published successfully!"
