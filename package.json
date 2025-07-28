@@ -3,7 +3,7 @@
   "name": "teamxray",
   "displayName": "Team X-Ray",
   "description": "Human discovery through code analysis - reveal team expertise, communication styles, and hidden strengths using GitHub MCP integration",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "publisher": "AndreaGriffiths",
   "author": {
     "name": "alacolombiadev"

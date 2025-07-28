@@ -717,12 +717,12 @@ export class ExpertiseWebviewProvider {
                 // Try to parse the string date
                 date = new Date(lastCommitDate);
             } else if (typeof lastCommitDate === 'number') {
-                // Handle Unix timestamp (in milliseconds)
-                if (lastCommitDate > 9999999999) {
-                    date = new Date(lastCommitDate);
-                } else {
-                    // Handle Unix timestamp (in seconds)
+                // For timestamp in seconds (standard Unix timestamps)
+                if (lastCommitDate < 9999999999) {
                     date = new Date(lastCommitDate * 1000);
+                } else {
+                    // For timestamp in milliseconds
+                    date = new Date(lastCommitDate);
                 }
             } else {
                 return 'N/A';
@@ -733,13 +733,15 @@ export class ExpertiseWebviewProvider {
                 return 'N/A';
             }
 
-            // Calculate days difference
+            // Calculate days difference using UTC to avoid timezone issues
             const currentDate = new Date();
-            const timeDifference = currentDate.getTime() - date.getTime();
-            const daysDifference = Math.floor(timeDifference / (1000 * 60 * 60 * 24));
+            const utcDate1 = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+            const utcDate2 = Date.UTC(currentDate.getUTCFullYear(), currentDate.getUTCMonth(), currentDate.getUTCDate());
+            const millisecondsPerDay = 1000 * 60 * 60 * 24;
+            const daysDifference = Math.floor((utcDate2 - utcDate1) / millisecondsPerDay);
             
             // Return "0" for same day commits
-            if (daysDifference === 0 && timeDifference > 0) {
+            if (daysDifference === 0) {
                 return '0';
             }
 
