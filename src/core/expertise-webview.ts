@@ -704,73 +704,49 @@ export class ExpertiseWebviewProvider {
 
     private calculateDaysAgo(lastCommitDate: any): string {
         try {
-            // For debugging - useful during development
-            console.log("Input lastCommitDate:", lastCommitDate, typeof lastCommitDate);
-            
-            // If there's no date, return 'N/A' - we won't guess
             if (!lastCommitDate) {
                 return 'N/A';
             }
+
+            let date: Date;
             
-            // If it's already a Date object and valid
-            if (lastCommitDate instanceof Date && !isNaN(lastCommitDate.getTime())) {
-                const days = Math.floor((new Date().getTime() - lastCommitDate.getTime()) / (1000 * 60 * 60 * 24));
-                return String(days);
+            // Convert the input to a Date object
+            if (lastCommitDate instanceof Date) {
+                date = lastCommitDate;
+            } else if (typeof lastCommitDate === 'string') {
+                // Try to parse the string date
+                date = new Date(lastCommitDate);
+            } else if (typeof lastCommitDate === 'number') {
+                // Handle Unix timestamp (in milliseconds)
+                if (lastCommitDate > 9999999999) {
+                    date = new Date(lastCommitDate);
+                } else {
+                    // Handle Unix timestamp (in seconds)
+                    date = new Date(lastCommitDate * 1000);
+                }
+            } else {
+                return 'N/A';
             }
-            
-            // Handle string values - try multiple parsing approaches
-            if (typeof lastCommitDate === 'string') {
-                // Special case: if the string is empty, return 'N/A'
-                if (lastCommitDate.trim() === '') {
-                    return 'N/A';
-                }
-                
-                // Try standard date parsing first
-                let date = new Date(lastCommitDate);
-                
-                if (!isNaN(date.getTime())) {
-                    const days = Math.floor((new Date().getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-                    return String(days);
-                }
-                
-                // Try ISO-like format with flexible parsing
-                const isoMatch = lastCommitDate.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
-                if (isoMatch) {
-                    date = new Date(Number(isoMatch[1]), Number(isoMatch[2])-1, Number(isoMatch[3]));
-                    if (!isNaN(date.getTime())) {
-                        const days = Math.floor((new Date().getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-                        return String(days);
-                    }
-                }
-                
-                // Try Unix timestamp (seconds since epoch)
-                if (/^\d+$/.test(lastCommitDate)) {
-                    const timestamp = parseInt(lastCommitDate, 10);
-                    // Determine if seconds or milliseconds
-                    const multiplier = timestamp > 9999999999 ? 1 : 1000;
-                    date = new Date(timestamp * multiplier);
-                    if (!isNaN(date.getTime())) {
-                        const days = Math.floor((new Date().getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-                        return String(days);
-                    }
-                }
+
+            // Check if date is valid
+            if (isNaN(date.getTime())) {
+                return 'N/A';
             }
+
+            // Calculate days difference
+            const currentDate = new Date();
+            const timeDifference = currentDate.getTime() - date.getTime();
+            const daysDifference = Math.floor(timeDifference / (1000 * 60 * 60 * 24));
             
-            // Handle numeric timestamp
-            if (typeof lastCommitDate === 'number') {
-                // Determine if seconds or milliseconds
-                const multiplier = lastCommitDate > 9999999999 ? 1 : 1000;
-                const date = new Date(lastCommitDate * multiplier);
-                if (!isNaN(date.getTime())) {
-                    const days = Math.floor((new Date().getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-                    return String(days);
-                }
+            // Return "0" for same day commits
+            if (daysDifference === 0 && timeDifference > 0) {
+                return '0';
             }
-            
-            // If all parsing attempts fail, return 'N/A'
-            return 'N/A';
-        } catch (e) {
-            console.error("Error calculating days ago:", e);
+
+            return daysDifference.toString();
+
+        } catch (error) {
+            console.error('Error calculating days ago:', error);
             return 'N/A';
         }
     }
@@ -1050,6 +1026,77 @@ export class ExpertiseWebviewProvider {
             white-space: nowrap;
         }
 
+        .expert-files {
+            margin: 12px 0;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 6px;
+            overflow: hidden;
+            cursor: pointer;
+        }
+
+        .expert-files-header {
+            padding: 8px 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: var(--vscode-foreground);
+            font-size: 13px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+        }
+
+        .expert-files-header:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .expert-files-content {
+            max-height: 500px;
+            opacity: 1;
+            transition: all 0.3s ease;
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .expert-files-content.collapsed {
+            max-height: 0;
+            opacity: 0;
+        }
+
+        .expert-file-item {
+            padding: 8px 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .expert-file-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .expert-file-item .file-name {
+            color: var(--vscode-textLink-foreground);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 70%;
+        }
+
+        .expert-file-item .file-changes {
+            color: var(--vscode-descriptionForeground);
+            font-size: 11px;
+        }
+
+        .expert-file-item.more-files {
+            text-align: center;
+            color: var(--vscode-descriptionForeground);
+            font-size: 11px;
+            background: rgba(255, 255, 255, 0.02);
+            cursor: default;
+        }
+
         .expert-actions {
             display: flex;
             gap: 8px;
@@ -1104,81 +1151,75 @@ export class ExpertiseWebviewProvider {
             transition: width 0.3s ease;
         }
 
-        .file-section {
-            background: rgba(255, 255, 255, 0.02);
-            border-radius: 16px;
-            padding: 24px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
 
-        .file-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 16px;
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 12px;
-            margin-bottom: 12px;
-            cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            position: relative;
-            overflow: hidden;
-        }
-
-        .file-item::before {
-            content: '';
-            position: absolute;
-            left: 0;
-            top: 0;
-            bottom: 0;
-            width: 3px;
-            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-            transform: scaleY(0);
-            transition: transform 0.3s ease;
-        }
-
-        .file-item:hover {
-            background: rgba(255, 255, 255, 0.06);
-            border-color: rgba(255, 255, 255, 0.2);
-            transform: translateX(8px);
-        }
-
-        .file-item:hover::before {
-            transform: scaleY(1);
-        }
-
-        .file-info {
-            flex: 1;
-        }
-
-        .file-path {
-            color: var(--vscode-foreground);
-            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
-            font-size: 14px;
-            font-weight: 500;
-            margin-bottom: 4px;
-        }
-
-        .file-experts {
-            color: var(--vscode-descriptionForeground);
-            font-size: 13px;
-            opacity: 0.8;
-        }
-
-        .file-stats {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            color: var(--vscode-descriptionForeground);
-            font-size: 12px;
-        }
 
         .insights-section {
-            background: rgba(255, 255, 255, 0.02);
+            background: rgb(30, 34, 42);
             border-radius: 16px;
             padding: 24px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .insight-container {
+            background: rgba(30, 34, 42, 0.9);
+            border-radius: 8px;
+            padding: 20px;
+        }
+
+        .insight-badges {
+            margin-bottom: 15px;
+        }
+
+        .badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+            margin-right: 8px;
+            display: inline-block;
+        }
+
+        .badge.opportunity {
+            background-color: #0066cc;
+            color: white;
+        }
+
+        .badge.medium {
+            background-color: #996600;
+            color: white;
+        }
+
+        .insight-title {
+            margin: 0 0 15px 0;
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--vscode-foreground);
+        }
+
+        .insight-text {
+            margin: 0 0 20px 0;
+            color: #e1e1e1;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .recommendations {
+            border-top: 1px solid #333;
+            padding-top: 15px;
+            margin-top: 15px;
+        }
+
+        .recommendations h4 {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+            font-weight: 500;
+            color: var(--vscode-foreground);
+        }
+
+        .recommendations p {
+            margin: 8px 0;
+            color: #e1e1e1;
+            font-size: 14px;
+            line-height: 1.6;
         }
 
         .insights-list {
@@ -1703,16 +1744,22 @@ export class ExpertiseWebviewProvider {
 
         .collapsible-content {
             overflow: hidden;
-            transition: max-height 0.4s ease, opacity 0.3s ease;
+            transition: all 0.4s ease;
             max-height: 2000px;
             opacity: 1;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            margin-top: 10px;
+            background: rgba(255, 255, 255, 0.02);
         }
 
         .collapsible-content.collapsed {
             max-height: 0;
             opacity: 0;
-            margin-bottom: 0;
+            margin: 0;
             padding: 0;
+            border: none;
         }
 
         /* Override file-section margin when collapsed */
@@ -1808,6 +1855,34 @@ export class ExpertiseWebviewProvider {
                         ).join('')}
                     </div>
 
+                    <div class="expert-files">
+                        <div class="expert-files-header" onclick="toggleExpertFiles('${expert.name.replace(/\s+/g, '-')}')">
+                            <span>📁 Key Files (${analysis.fileExpertise.filter(file => 
+                                file.experts.some(e => e.name === expert.name)
+                            ).length})</span>
+                            <span class="toggle-icon collapsed" id="${expert.name.replace(/\s+/g, '-')}-icon">▶</span>
+                        </div>
+                        <div class="expert-files-content collapsed" id="${expert.name.replace(/\s+/g, '-')}-content">
+                            ${analysis.fileExpertise.filter(file => 
+                                file.experts.some(e => e.name === expert.name)
+                            ).slice(0, 5).map(file => `
+                                <div class="expert-file-item" onclick="openFile('${file.filePath}'); event.stopPropagation();">
+                                    <div class="file-name">${file.fileName}</div>
+                                    <div class="file-changes">🔄 ${file.changeFrequency}</div>
+                                </div>
+                            `).join('')}
+                            ${analysis.fileExpertise.filter(file => 
+                                file.experts.some(e => e.name === expert.name)
+                            ).length > 5 ? `
+                                <div class="expert-file-item more-files">
+                                    <em>+ ${analysis.fileExpertise.filter(file => 
+                                        file.experts.some(e => e.name === expert.name)
+                                    ).length - 5} more files</em>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+
                     <div class="expert-actions">
                         <button class="expert-button primary" onclick="showExpertDetails('${expert.name}')">
                             📋 View Details
@@ -1822,37 +1897,10 @@ export class ExpertiseWebviewProvider {
     </div>
 
     <div class="section">
-        <h2 onclick="toggleSection('file-expertise')" class="collapsible-header">
-            📁 File Expertise Map 
-            <span class="toggle-icon" id="file-expertise-icon">▼</span>
-        </h2>
-        <div class="file-section collapsible-content" id="file-expertise-content">
-            ${analysis.fileExpertise.slice(0, 20).map(file => `
-                <div class="file-item" onclick="openFile('${file.filePath}')">
-                    <div class="file-info">
-                        <div class="file-path">${file.fileName}</div>
-                        <div class="file-experts">
-                            👨‍💻 ${file.experts.map(e => e.name).join(', ')}
-                        </div>
-                    </div>
-                    <div class="file-stats">
-                        <span>🔄 ${file.changeFrequency} changes</span>
-                    </div>
-                </div>
-            `).join('')}
-            ${analysis.fileExpertise.length > 20 ? 
-                `<div class="empty-state">
-                    <div class="empty-state-icon">📂</div>
-                    <div>Showing first 20 files of ${analysis.fileExpertise.length} total</div>
-                </div>` : ''
-            }
-        </div>
-    </div>
-
-    <div class="section">
         <h2>📊 Management Dashboard</h2>
         ${this.renderManagementInsights(analysis)}
     </div>
+
 
     <div class="section">
         <h2>🏥 Team Health Metrics</h2>
@@ -1865,28 +1913,20 @@ export class ExpertiseWebviewProvider {
             <span class="toggle-icon" id="ai-insights-icon">▼</span>
         </h2>
         <div class="insights-section collapsible-content" id="ai-insights-content">
-            <ul class="insights-list">
-                ${analysis.insights.map(insight => {
-                    if (typeof insight === 'string') {
-                        return `<li>${insight}</li>`;
-                    } else {
-                        return `<li>
-                            <div class="insight-header">
-                                <span class="insight-type ${insight.type}">${insight.type.toUpperCase()}</span>
-                                <span class="insight-impact ${insight.impact}">${insight.impact.toUpperCase()}</span>
-                            </div>
-                            <h4>${insight.title}</h4>
-                            <p>${insight.description}</p>
-                            <div class="insight-recommendations">
-                                <strong>Recommendations:</strong>
-                                <ul>
-                                    ${insight.recommendations.map(rec => `<li>${rec}</li>`).join('')}
-                                </ul>
-                            </div>
-                        </li>`;
-                    }
-                }).join('')}
-            </ul>
+            <div class="insight-container">
+                <div class="insight-badges">
+                    <span class="badge opportunity">OPPORTUNITY</span>
+                    <span class="badge medium">MEDIUM</span>
+                </div>
+                <h3 class="insight-title">Analysis Insight</h3>
+                <p class="insight-text">${analysis.insights[0]?.description || 'No insights available.'}</p>
+                <div class="recommendations">
+                    <h4>Recommendations:</h4>
+                    ${(analysis.insights.slice(1) || []).map(insight => `
+                        <p>${typeof insight === 'string' ? insight : insight.description}</p>
+                    `).join('')}
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1942,9 +1982,9 @@ export class ExpertiseWebviewProvider {
             });
         }
 
-        function toggleSection(sectionId) {
-            const content = document.getElementById(sectionId + '-content');
-            const icon = document.getElementById(sectionId + '-icon');
+        function toggleExpertFiles(expertId) {
+            const content = document.getElementById(expertId + '-content');
+            const icon = document.getElementById(expertId + '-icon');
             
             if (content && icon) {
                 const isCollapsed = content.classList.contains('collapsed');

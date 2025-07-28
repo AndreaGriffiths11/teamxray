@@ -36,6 +36,32 @@
 - **Smart imports**: Use tree-shaking friendly imports and avoid circular dependencies
 - **Efficient bundling**: Optimize webpack configuration for VS Code extension packaging
 
+### VS Code Extension Patterns
+- **Command Registration**:
+  ```typescript
+  vscode.commands.registerCommand('command.id', async () => {
+      await ErrorHandler.withErrorHandling(async () => {
+          await resourceManager.withProgress("Operation...", async (progress) => {
+              // Command logic with proper error handling
+          });
+      });
+  });
+  ```
+- **Resource Management**:
+  - Implement proper dispose pattern
+  - Clean up subscriptions in deactivate()
+  - Use VS Code's built-in progress API
+- **Error Handling**:
+  ```typescript
+  const outputChannel = vscode.window.createOutputChannel('Team X-Ray');
+  try {
+      // Operation
+  } catch (error) {
+      outputChannel.appendLine(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      vscode.window.showErrorMessage('Operation failed. Check output for details.');
+  }
+  ```
+
 ## 🎯 Mission Statement
 > *"Feeling like a stranger on my own team, surrounded by brilliant minds whose talents hide in code and commits."*
 
@@ -146,7 +172,28 @@ MCP Team X-Ray transforms GitHub Copilot into a lens that reveals the **humans b
 - **Blocking operations**: Keep VS Code responsive during repository analysis
 - **Redundant API calls**: Cache and batch GitHub/AI requests intelligently
 
-## 🔧 Configuration & Testing
+## � Development Workflow
+
+### Local Development Loop
+- **Watch Mode**: Run `npm run watch` for automatic compilation
+- **Test Watch**: Run `npm run watch-tests` in parallel
+- **Debug Mode**: Use F5 strategically for deeper investigation
+- **Hot Reload**: Leverage VS Code's extension development host
+
+### Extension Packaging
+1. **Version Management**: Update package.json version
+2. **Quality Gates**:
+   - Run full test suite
+   - Check bundle size
+   - Verify in clean window
+3. **Release Process**:
+   ```bash
+   npm run lint && npm run test
+   vsce package
+   # Test vsix locally before publishing
+   ```
+
+## �🔧 Configuration & Testing
 
 ### Performance Monitoring
 - **Bundle analysis**: Regularly audit extension size and load times
@@ -155,10 +202,30 @@ MCP Team X-Ray transforms GitHub Copilot into a lens that reveals the **humans b
 - **User experience metrics**: Measure time-to-insight for team discovery
 
 ### Testing Strategy
-- **Unit tests**: Focus on human analysis algorithms and data transformations
-- **Integration tests**: Verify MCP and GitHub API interactions
-- **Performance tests**: Ensure responsive UI with large teams/repositories
-- **Security tests**: Validate credential handling and input sanitization
+1. **Unit Tests**
+   ```typescript
+   describe('ExpertiseAnalyzer', () => {
+     it('should handle empty repositories', async () => {
+       const analysis = await analyzer.analyzeRepository();
+       expect(analysis.experts).toHaveLength(0);
+     });
+   });
+   ```
+
+2. **Integration Tests**
+   - Test GitHub API integration
+   - Test MCP service interactions
+   - Test file system operations
+
+3. **Extension Tests**
+   - Test command registration
+   - Test webview communication
+   - Test tree view updates
+
+4. **UI Tests**
+   - Test in both light and dark themes
+   - Test with different VS Code versions
+   - Test accessibility features
 
 ## 🎯 Remember: The Mission
 This extension is about **discovering the humans behind the code** - their unique gifts, communication styles, and the ways they make their teams stronger. Every optimization and feature should serve this human-centric mission while maintaining elegant, efficient engineering practices.
