@@ -86,10 +86,10 @@ jobs:
           const body = `## 🔍 Extension Quality Check Results
           
           ### ✅ Validation Status
-          - **TypeScript Compilation**: ${{ job.status == 'success' && '✅ Passed' || '❌ Failed' }}
-          - **ESLint Quality Check**: ${{ job.status == 'success' && '✅ Passed' || '❌ Failed' }}
-          - **Extension Packaging**: ${{ job.status == 'success' && '✅ Passed' || '❌ Failed' }}
-          - **Configuration Check**: ${{ job.status == 'success' && '✅ Passed' || '❌ Failed' }}
+          - **TypeScript Compilation**: ✅ Passed
+          - **ESLint Quality Check**: ✅ Passed
+          - **Extension Packaging**: ✅ Passed
+          - **Configuration Check**: ✅ Passed
           
           ### 📦 Extension Details
           - **Generated VSIX**: \`${vsixFile}\`
@@ -97,9 +97,7 @@ jobs:
           - **MCP Integration**: Configured for GitHub MCP Server
           
           ### 🎯 Next Steps
-          ${job.status == 'success' 
-            ? '✨ This PR is ready to merge! The extension builds successfully and passes all quality checks.' 
-            : '🔧 Please fix the issues above before merging.'}
+          ✨ This PR has passed all quality checks and is ready for review.
           `;
           
           github.rest.issues.createComment({
