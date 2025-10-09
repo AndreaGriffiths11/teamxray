@@ -25,20 +25,25 @@ jobs:
       run: npm ci
       
     - name: TypeScript type checking
+      id: typescript-check
       run: npx tsc --noEmit
       
     - name: ESLint code quality
+      id: eslint-check
       run: npm run lint
       
     - name: Build extension
+      id: build-extension
       run: npm run compile
       
     - name: Validate extension package
+      id: validate-package
       run: |
         npm install -g @vscode/vsce
         vsce package --no-dependencies
         
     - name: Check package.json validity
+      id: check-package
       run: |
         node -e "
           const pkg = require('./package.json');
@@ -49,6 +54,7 @@ jobs:
         "
         
     - name: Validate MCP configuration
+      id: validate-mcp
       run: |
         if [ ! -f ".vscode/mcp.json" ]; then
           echo "❌ Missing .vscode/mcp.json configuration"
@@ -83,13 +89,25 @@ jobs:
           const vsixFiles = fs.readdirSync('.').filter(f => f.endsWith('.vsix'));
           const vsixFile = vsixFiles[0] || 'Not generated';
           
+          const tsCheck = '${{ steps.typescript-check.outcome }}' === 'success' ? '✅ Passed' : '❌ Failed';
+          const lintCheck = '${{ steps.eslint-check.outcome }}' === 'success' ? '✅ Passed' : '❌ Failed';
+          const buildCheck = '${{ steps.build-extension.outcome }}' === 'success' ? '✅ Passed' : '❌ Failed';
+          const packageCheck = '${{ steps.validate-package.outcome }}' === 'success' ? '✅ Passed' : '❌ Failed';
+          const configCheck = '${{ steps.validate-mcp.outcome }}' === 'success' ? '✅ Passed' : '❌ Failed';
+          
+          const allPassed = '${{ steps.typescript-check.outcome }}' === 'success' && 
+                           '${{ steps.eslint-check.outcome }}' === 'success' && 
+                           '${{ steps.build-extension.outcome }}' === 'success' &&
+                           '${{ steps.validate-package.outcome }}' === 'success';
+          
           const body = `## 🔍 Extension Quality Check Results
           
           ### ✅ Validation Status
-          - **TypeScript Compilation**: ✅ Passed
-          - **ESLint Quality Check**: ✅ Passed
-          - **Extension Packaging**: ✅ Passed
-          - **Configuration Check**: ✅ Passed
+          - **TypeScript Compilation**: ${tsCheck}
+          - **ESLint Quality Check**: ${lintCheck}
+          - **Extension Packaging**: ${buildCheck}
+          - **Package.json Validation**: ${packageCheck}
+          - **MCP Configuration**: ${configCheck}
           
           ### 📦 Extension Details
           - **Generated VSIX**: \`${vsixFile}\`
@@ -97,7 +115,9 @@ jobs:
           - **MCP Integration**: Configured for GitHub MCP Server
           
           ### 🎯 Next Steps
-          ✨ This PR has passed all quality checks and is ready for review.
+          ${allPassed 
+            ? '✨ This PR has passed all quality checks and is ready for review.' 
+            : '🔧 Please fix the issues above before merging.'}
           `;
           
           github.rest.issues.createComment({
