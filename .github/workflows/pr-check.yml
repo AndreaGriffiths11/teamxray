@@ -98,7 +98,9 @@ jobs:
           const allPassed = '${{ steps.typescript-check.outcome }}' === 'success' && 
                            '${{ steps.eslint-check.outcome }}' === 'success' && 
                            '${{ steps.build-extension.outcome }}' === 'success' &&
-                           '${{ steps.validate-package.outcome }}' === 'success';
+                           '${{ steps.validate-package.outcome }}' === 'success' &&
+                           '${{ steps.check-package.outcome }}' === 'success' &&
+                           '${{ steps.validate-mcp.outcome }}' === 'success';
           
           const body = `## 🔍 Extension Quality Check Results
           
