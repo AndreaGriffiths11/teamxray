@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import axios from 'axios';
 import { ValidationResult, TokenValidationResult, GitHubUser, GitHubRepository } from '../types/expert';
-import { ErrorHandler } from './error-handler';
 
 /**
  * Input validation utilities for the Team X-Ray extension
@@ -247,7 +247,7 @@ export class Validator {
     /**
      * Validates API response structure
      */
-    static validateApiResponse<T>(response: any, requiredFields: string[]): ValidationResult {
+    static validateApiResponse(response: any, requiredFields: string[]): ValidationResult {
         const result: ValidationResult = {
             isValid: false,
             errors: [],
@@ -264,7 +264,7 @@ export class Validator {
             return result;
         }
 
-        const missingFields = requiredFields.filter(field => 
+        const missingFields = requiredFields.filter(field =>
             !response.hasOwnProperty(field) || response[field] === null || response[field] === undefined
         );
 
@@ -274,6 +274,172 @@ export class Validator {
         }
 
         result.isValid = true;
+        return result;
+    }
+
+    /**
+     * Sanitizes file path to prevent path traversal attacks
+     * @param filePath - File path to sanitize
+     * @param workspaceRoot - Workspace root directory
+     * @returns Sanitized absolute path within workspace
+     * @throws Error if path traversal is detected
+     */
+    static sanitizeFilePath(filePath: string, workspaceRoot: string): string {
+        // Normalize the path to resolve any '..' or '.' segments
+        const normalized = path.normalize(filePath);
+
+        // Resolve to absolute path
+        const resolved = path.resolve(workspaceRoot, normalized);
+
+        // Ensure the resolved path is within the workspace root
+        if (!resolved.startsWith(workspaceRoot)) {
+            throw new Error(
+                `Path traversal detected: "${filePath}" resolves outside workspace root`
+            );
+        }
+
+        return resolved;
+    }
+
+    /**
+     * Sanitizes email address to prevent command injection
+     * @param email - Email address to sanitize
+     * @returns Sanitized email safe for shell commands
+     */
+    static sanitizeEmail(email: string): string {
+        // Remove potentially dangerous characters while preserving valid email chars
+        return email
+            .replace(/[;&|`$()<>\\]/g, '')  // Remove shell metacharacters
+            .replace(/[\n\r]/g, '')          // Remove newlines
+            .replace(/\s+/g, '')             // Remove whitespace
+            .trim();
+    }
+
+    /**
+     * Validates Git command output for safety
+     * @param output - Output from git command
+     * @returns Validation result
+     */
+    static validateGitOutput(output: string): ValidationResult {
+        const result: ValidationResult = {
+            isValid: false,
+            errors: [],
+            warnings: []
+        };
+
+        if (!output) {
+            result.errors.push('Git output is empty');
+            return result;
+        }
+
+        // Check for shell metacharacters that shouldn't be in git output
+        const dangerousPatterns = [
+            /;\s*rm\s+-rf/i,      // Dangerous rm commands
+            /;\s*curl\s+/i,       // Command injection via curl
+            /;\s*wget\s+/i,       // Command injection via wget
+            /`[^`]*`/,            // Command substitution
+            /\$\([^)]*\)/,        // Command substitution
+            /&&\s*rm\s+/i,        // Chained rm commands
+            /\|\s*bash/i,         // Pipe to bash
+            /\|\s*sh/i            // Pipe to sh
+        ];
+
+        for (const pattern of dangerousPatterns) {
+            if (pattern.test(output)) {
+                result.errors.push(`Potentially malicious content detected in git output`);
+                return result;
+            }
+        }
+
+        result.isValid = true;
+        return result;
+    }
+
+    /**
+     * Escapes special characters for safe use in shell commands
+     * More comprehensive than sanitizeShellInput - preserves valid content
+     * @param input - Input to escape
+     * @returns Escaped string safe for shell
+     */
+    static escapeShellArg(input: string): string {
+        return input
+            .replace(/\\/g, '\\\\')   // Escape backslashes first
+            .replace(/"/g, '\\"')      // Escape double quotes
+            .replace(/\$/g, '\\$')     // Escape dollar signs
+            .replace(/`/g, '\\`')      // Escape backticks
+            .replace(/!/g, '\\!')      // Escape exclamation marks
+            .replace(/\n/g, '')        // Remove newlines
+            .replace(/\r/g, '');       // Remove carriage returns
+    }
+
+    /**
+     * Validates JSON structure from AI responses
+     * @param jsonString - JSON string to validate
+     * @returns Validation result with parsed object if valid
+     */
+    static validateAndParseJSON(jsonString: string): ValidationResult & { parsed?: any } {
+        const result: ValidationResult & { parsed?: any } = {
+            isValid: false,
+            errors: [],
+            warnings: []
+        };
+
+        if (!jsonString || !jsonString.trim()) {
+            result.errors.push('JSON string is empty');
+            return result;
+        }
+
+        try {
+            const parsed = JSON.parse(jsonString);
+            result.parsed = parsed;
+            result.isValid = true;
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            result.errors.push(`Invalid JSON: ${errorMessage}`);
+        }
+
+        return result;
+    }
+
+    /**
+     * Validates URL for safety before external requests
+     * @param url - URL to validate
+     * @returns Validation result
+     */
+    static validateURL(url: string): ValidationResult {
+        const result: ValidationResult = {
+            isValid: false,
+            errors: [],
+            warnings: []
+        };
+
+        if (!url) {
+            result.errors.push('URL is required');
+            return result;
+        }
+
+        try {
+            const parsedUrl = new URL(url);
+
+            // Only allow https (or http for localhost)
+            if (parsedUrl.protocol !== 'https:' &&
+                parsedUrl.protocol !== 'http:' &&
+                !parsedUrl.hostname.includes('localhost')) {
+                result.errors.push('Only HTTPS URLs are allowed');
+                return result;
+            }
+
+            // Block potentially dangerous URLs
+            const blockedHosts = ['0.0.0.0', '127.0.0.1', 'localhost', '169.254.169.254'];
+            if (blockedHosts.includes(parsedUrl.hostname) && parsedUrl.protocol === 'https:') {
+                result.warnings.push('Request to localhost/internal IP detected');
+            }
+
+            result.isValid = true;
+        } catch (error) {
+            result.errors.push('Invalid URL format');
+        }
+
         return result;
     }
 }

@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { Expert, FileExpertise } from '../types/expert';
+import { Expert } from '../types/expert';
 import { ExpertiseAnalysis } from './expertise-analyzer';
 
 export class ExpertiseWebviewProvider {
