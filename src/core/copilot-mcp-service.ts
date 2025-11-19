@@ -438,7 +438,7 @@ Just call the tool and format the response. Don't explain anything else.`;
         commits.forEach(commit => {
             const email = commit.author.email;
             const name = commit.author.name;
-            const commitDate = new Date(commit.author.date);
+            const commitDate = new Date(commit.date);
 
             if (contributorMap.has(email)) {
                 const contributor = contributorMap.get(email)!;
@@ -784,7 +784,7 @@ Execute now.`;
                 const recentCommits = commits.map(commit => ({
                     repo: "Current Repository",
                     message: commit.message || "No message",
-                    date: commit.author.date.split(' ')[0] || new Date().toISOString().split('T')[0],
+                    date: commit.date.split(' ')[0] || new Date().toISOString().split('T')[0],
                     url: `#${commit.sha.substring(0, 7)}`
                 }));
 

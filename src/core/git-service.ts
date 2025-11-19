@@ -1,25 +1,11 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as vscode from 'vscode';
+import * as fs from 'fs';
+import * as path from 'path';
+import type { GitCommit, GitContributor, GitAuthor } from '../types/expert';
 
 const execFileAsync = promisify(execFile);
-
-export interface GitCommit {
-    sha: string;
-    author: {
-        name: string;
-        email: string;
-        date: string;
-    };
-    message: string;
-}
-
-export interface GitContributor {
-    name: string;
-    email: string;
-    commits: number;
-    lastCommit: string;
-}
 
 /**
  * Secure Git service that prevents command injection vulnerabilities
@@ -40,8 +26,6 @@ export class GitService {
         }
 
         // Resolve to absolute path
-        const fs = require('fs');
-        const path = require('path');
         const resolvedPath = path.resolve(repoPath);
 
         // Verify path exists and is a directory
@@ -68,7 +52,6 @@ export class GitService {
      * @returns Cached or new GitService instance
      */
     static getInstance(repoPath: string, outputChannel?: vscode.OutputChannel): GitService {
-        const path = require('path');
         const normalizedPath = path.resolve(repoPath);
 
         if (!GitService.instanceCache.has(normalizedPath)) {
@@ -114,15 +97,18 @@ export class GitService {
             .map(line => {
                 const parts = line.split('|');
                 if (parts.length >= 5) {
-                    return {
-                        sha: parts[0],
-                        author: {
-                            name: parts[1],
-                            email: parts[2],
-                            date: parts[3]
-                        },
-                        message: parts.slice(4).join('|')
+                    const author: GitAuthor = {
+                        name: parts[1],
+                        email: parts[2]
                     };
+                    const commit: GitCommit = {
+                        sha: parts[0],
+                        author: author,
+                        message: parts.slice(4).join('|'),
+                        date: parts[3],
+                        files: [] as string[]  // Files not fetched in basic log, would require --name-only
+                    };
+                    return commit;
                 }
                 return null;
             })
@@ -187,7 +173,10 @@ export class GitService {
                         name: match[2],
                         email: match[3],
                         commits: parseInt(match[1], 10),
-                        lastCommit: ''  // Will be populated below for top 20 contributors
+                        additions: 0,      // Would require git log --numstat to calculate
+                        deletions: 0,      // Would require git log --numstat to calculate
+                        firstCommit: '',   // Will be populated below for top 20 contributors
+                        lastCommit: ''     // Will be populated below for top 20 contributors
                     };
                 }
                 return null;
@@ -195,17 +184,22 @@ export class GitService {
             .filter((contributor): contributor is GitContributor => contributor !== null)
             .sort((a, b) => b.commits - a.commits);
 
-        // Get last commit date for top 20 contributors
+        // Get first and last commit dates for top 20 contributors
         for (const contributor of contributors.slice(0, 20)) {
             try {
                 const lastCommitDate = await this.getLastCommitDate(contributor.email);
                 if (lastCommitDate) {
                     contributor.lastCommit = lastCommitDate;
                 }
+
+                const firstCommitDate = await this.getFirstCommitDate(contributor.email);
+                if (firstCommitDate) {
+                    contributor.firstCommit = firstCommitDate;
+                }
             } catch (error) {
-                // Continue with default date if this fails
+                // Continue with default dates if this fails
                 this.outputChannel?.appendLine(
-                    `Warning: Could not get last commit for ${contributor.email}`
+                    `Warning: Could not get commit dates for ${contributor.email}`
                 );
             }
         }
@@ -225,6 +219,30 @@ export class GitService {
                 `--author=${email}`,  // No quotes/escaping needed with execFile
                 '--pretty=format:%ad',
                 '--date=iso',
+                '-n',
+                '1'
+            ];
+
+            const output = await this.executeGitCommand(args);
+            return output.trim() || null;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    /**
+     * Get the first commit date for a specific author
+     * @param email - Author email
+     * @returns ISO date string of first commit
+     */
+    async getFirstCommitDate(email: string): Promise<string | null> {
+        try {
+            const args = [
+                'log',
+                `--author=${email}`,  // No quotes/escaping needed with execFile
+                '--pretty=format:%ad',
+                '--date=iso',
+                '--reverse',  // Reverse order to get oldest first
                 '-n',
                 '1'
             ];

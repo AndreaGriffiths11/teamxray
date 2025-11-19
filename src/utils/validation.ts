@@ -333,9 +333,9 @@ export class Validator {
     static sanitizeEmail(email: string): string {
         // Remove potentially dangerous characters while preserving valid email chars
         const sanitized = email
-            .replace(/[;&|`$()<>\\\\]/g, '')  // Remove shell metacharacters (including backslash)
-            .replace(/[\n\r]/g, '')           // Remove newlines
-            .replace(/\s+/g, '')              // Remove whitespace
+            .replace(/[;&|`$()<>\\]/g, '')  // Remove shell metacharacters (including backslash)
+            .replace(/[\n\r]/g, '')         // Remove newlines
+            .replace(/\s+/g, '')            // Remove whitespace
             .trim();
 
         // Validate email format after sanitization
@@ -452,14 +452,14 @@ export class Validator {
             const hostname = parsedUrl.hostname;
             const isLocalhost =
                 hostname === 'localhost' ||
-                hostname === '127.0.0.1' ||
+                hostname.startsWith('127.') ||  // All loopback addresses (127.0.0.0/8)
                 hostname === '0.0.0.0' ||
                 hostname === '[::1]';
 
             if (!isLocalhost) {
                 // Block private IP ranges and metadata endpoints
+                // Note: 127.* is handled by isLocalhost check above
                 const isPrivateIP =
-                    hostname.startsWith('127.') ||
                     hostname.startsWith('10.') ||
                     hostname.startsWith('192.168.') ||
                     hostname === '169.254.169.254' ||  // AWS metadata
