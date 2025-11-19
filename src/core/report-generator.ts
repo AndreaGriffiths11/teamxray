@@ -1,4 +1,3 @@
-import * as vscode from 'vscode';
 import { ExpertiseAnalysis } from './expertise-analyzer';
 
 export class ReportGenerator {
@@ -7,7 +6,6 @@ export class ReportGenerator {
      */
     public static generateHTMLReport(analysis: ExpertiseAnalysis): string {
         const repoName = analysis.repository.split('/').pop() || 'analysis';
-        const timestamp = new Date().toISOString().slice(0, 16).replace('T', '_').replace(/:/g, '-');
         
         return `<!DOCTYPE html>
 <html lang="en">

@@ -1,9 +1,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import axios from 'axios';
-import { TokenManager } from './token-manager';
 import { ExpertiseAnalyzer, ExpertiseAnalysis } from './expertise-analyzer';
 import { Expert } from '../types/expert';
+import { GitService } from './git-service';
 
 export interface GitHubRepository {
     owner: string;
@@ -30,11 +29,9 @@ export interface MCPServerStatus {
 
 export class CopilotMCPService {
     private outputChannel: vscode.OutputChannel;
-    private tokenManager: TokenManager;
 
-    constructor(outputChannel: vscode.OutputChannel, tokenManager: TokenManager) {
+    constructor(outputChannel: vscode.OutputChannel) {
         this.outputChannel = outputChannel;
-        this.tokenManager = tokenManager;
     }
 
     //Check the status of GitHub MCP Server containers
@@ -125,9 +122,9 @@ export class CopilotMCPService {
         }
     }
 
-    
-    //Detect GitHub repository information from the current workspace
-     
+
+    //Detect GitHub repository information from the current workspace (using secure GitService)
+
     async detectRepository(): Promise<GitHubRepository | null> {
         try {
             const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -135,16 +132,15 @@ export class CopilotMCPService {
                 throw new Error('No workspace folder open');
             }
 
-            // Try to parse git remote to get owner/repo
-            const { exec } = require('child_process');
-            const util = require('util');
-            const execAsync = util.promisify(exec);
+            // Use secure GitService to get remote URL
+            const gitService = new GitService(workspaceFolder.uri.fsPath, this.outputChannel);
+            const remoteUrl = await gitService.getRemoteUrl();
 
-            const { stdout } = await execAsync('git config --get remote.origin.url', {
-                cwd: workspaceFolder.uri.fsPath
-            });
+            if (!remoteUrl) {
+                this.outputChannel.appendLine('No git remote URL found');
+                return null;
+            }
 
-            const remoteUrl = stdout.trim();
             this.outputChannel.appendLine(`Git remote URL: ${remoteUrl}`);
 
             // Parse GitHub URL (supports both HTTPS and SSH)
@@ -342,29 +338,6 @@ Just call the tool and format the response. Don't explain anything else.`;
     }
 
     /**
-     * Create an enhanced prompt specifically designed for MCP usage
-     */
-    private createEnhancedMCPPrompt(basePrompt: string): string {
-        // Extract repository info from the base prompt
-        const repoMatch = basePrompt.match(/(\w+\/\w+)/);
-        const repoPath = repoMatch ? repoMatch[1] : 'owner/repo';
-        const [owner, repo] = repoPath.split('/');
-
-        return `Call mcp_github_list_commits with owner: "${owner}", repo: "${repo}", perPage: 5
-
-Then respond with JSON format:
-{
-  "commits": [{"sha": "...", "author": {"name": "...", "email": "...", "date": "..."}, "message": "..."}],
-  "contributors": [{"name": "...", "email": "...", "totalCommits": 0}],
-  "issues": [],
-  "pullRequests": [],
-  "collaborationInsights": ["Analysis complete"]
-}
-
-Execute now.`;
-    }
-
-    /**
      * Parse repository response from Copilot Chat
      */
     private parseRepositoryResponse(response: string, repository: GitHubRepository): any {
@@ -437,29 +410,19 @@ Execute now.`;
     }
 
     /**
-     * Get commits from local git repository
+     * Get commits from local git repository (using secure GitService)
      */
     private async getLocalCommits(repoPath: string): Promise<any[]> {
-        const { exec } = require('child_process');
-        const util = require('util');
-        const execAsync = util.promisify(exec);
-
         try {
-            const { stdout } = await execAsync('git log --pretty=format:"%H|%an|%ae|%ad|%s" --date=iso -n 50', {
-                cwd: repoPath
-            });
+            const gitService = new GitService(repoPath, this.outputChannel);
+            const commits = await gitService.getCommits(50);
 
-            return stdout.split('\n')
-                .filter((line: string) => line.trim())
-                .map((line: string) => {
-                    const [sha, author, email, date, message] = line.split('|');
-                    return {
-                        sha,
-                        author: { name: author, email, date },
-                        message,
-                        files: [] // Would need additional git commands to get files per commit
-                    };
-                });
+            return commits.map(commit => ({
+                sha: commit.sha,
+                author: commit.author,
+                message: commit.message,
+                files: [] // Would need additional git commands to get files per commit
+            }));
         } catch (error) {
             this.outputChannel.appendLine(`Error getting local commits: ${error}`);
             return [];
@@ -475,7 +438,7 @@ Execute now.`;
         commits.forEach(commit => {
             const email = commit.author.email;
             const name = commit.author.name;
-            const commitDate = new Date(commit.author.date);
+            const commitDate = new Date(commit.date);
 
             if (contributorMap.has(email)) {
                 const contributor = contributorMap.get(email)!;
@@ -502,7 +465,7 @@ Execute now.`;
     /**
      * Get workspace files for analysis
      */
-    private async getWorkspaceFiles(repoPath: string): Promise<string[]> {
+    private async getWorkspaceFiles(_repoPath: string): Promise<string[]> {
         try {
             const files = await vscode.workspace.findFiles('**/*', '**/node_modules/**');
             return files.map(file => vscode.workspace.asRelativePath(file));
@@ -727,17 +690,6 @@ Execute now.`;
         // vscode.window.showInformationMessage('suggestExpertForIssueDetails called. See logs.');
     }
 
-
-    private extractIssueDataFromResponse(responseData: any): any {
-        return {
-            title: responseData.title,
-            body: responseData.body,
-            labels: responseData.labels?.map((label: any) => label.name) || [],
-            number: responseData.number,
-            url: responseData.html_url
-        };
-    }
-
     private findBestExpertForIssue(issueData: any, experts: Expert[], extractKeywords: (text: string) => string[]): Expert | null {
         if (!experts || experts.length === 0) return null;
         const issueKeywords = extractKeywords(`${issueData.title} ${issueData.body}`);
@@ -790,32 +742,28 @@ Execute now.`;
         vscode.window.showInformationMessage(message, { modal: true }, 'Notify Expert')
             .then(async (selection) => {
                 if (selection === 'Notify Expert') {
-                    await this.notifyExpert(expert, issueData, issueNumber);
+                    await this._notifyExpert(expert, issueData, issueNumber);
                 }
             });
     }
 
     /**
      * Notify the expert about the issue (e.g., via GitHub comment, email, etc.)
+     * @private - Placeholder for future email integration
      */
-    private async notifyExpert(expert: Expert, issueData: any, issueNumber?: number): Promise<void> {
+    private async _notifyExpert(expert: Expert, _issueData: any, issueNumber?: number): Promise<void> {
         if (!expert.email) {
             vscode.window.showErrorMessage('No email available for the expert. Cannot send notification.');
             return;
         }
 
-        // Simple email notification (placeholder, integrate with actual email service)
-        const subject = `Expertise Requested for Issue #${issueNumber}: ${issueData.title}`;
-        const body = `Hello ${expert.name},\n\n` +
-                     `You have been suggested as an expert for GitHub Issue #${issueNumber} - ${issueData.title}.\n` +
-                     `Issue URL: ${issueData.url}\n\n` +
-                     `Please check the issue for details and consider contributing your expertise.\n\n` +
-                     `Thank you!`;
+        // TODO: Integrate with actual email service
+        // Email subject: `Expertise Requested for Issue #${issueNumber}: ${issueData.title}`
+        // Email body: Expert details and issue URL
 
-        this.outputChannel.appendLine(`Sending email to ${expert.email}...`);
-        // Integrate with email service here
+        this.outputChannel.appendLine(`Would send email to ${expert.email} for issue #${issueNumber}`);
 
-        vscode.window.showInformationMessage(`Notification sent to ${expert.name} <${expert.email}>`, { modal: true });
+        vscode.window.showInformationMessage(`Notification would be sent to ${expert.name} <${expert.email}>`, { modal: true });
     }
 
     // Add getExpertRecentActivity and showExpertActivity methods back to CopilotMCPService
@@ -827,28 +775,21 @@ Execute now.`;
             if (!workspaceFolder) {
                 return { success: false, error: 'No workspace folder found' };
             }
-            const { exec } = require('child_process');
-            const { promisify } = require('util');
-            const execAsync = promisify(exec);
+
             try {
-                const commitCommand = `git log --author="${expertEmail}" --pretty=format:"%H|%s|%ad" --date=short -n 10`;
-                const { stdout: commitOutput } = await execAsync(commitCommand, { cwd: workspaceFolder.uri.fsPath });
-                const recentCommits = commitOutput.split('\n')
-                    .filter((line: string) => line.trim())
-                    .map((line: string) => {
-                        const [sha, message, date] = line.split('|');
-                        return {
-                            repo: "Current Repository",
-                            message: message || "No message",
-                            date: date || new Date().toISOString().split('T')[0],
-                            url: `#${sha?.substring(0, 7) || 'unknown'}`
-                        };
-                    });
-                const fileCommand = `git log --author=\"${expertEmail}\" --name-only --pretty=format: -n 20 | sort | uniq | head -10`;
-                const { stdout: fileOutput } = await execAsync(fileCommand, { cwd: workspaceFolder.uri.fsPath });
-                const recentFiles = fileOutput.split('\n')
-                    .filter((file: string) => file.trim())
-                    .slice(0, 5);
+                // Use secure GitService instead of direct git commands
+                const gitService = new GitService(workspaceFolder.uri.fsPath, this.outputChannel);
+
+                const commits = await gitService.getCommitsByAuthor(expertEmail, 10);
+                const recentCommits = commits.map(commit => ({
+                    repo: "Current Repository",
+                    message: commit.message || "No message",
+                    date: commit.date.split(' ')[0] || new Date().toISOString().split('T')[0],
+                    url: `#${commit.sha.substring(0, 7)}`
+                }));
+
+                const recentFiles = await gitService.getFilesByAuthor(expertEmail, 10);
+
                 const activity = {
                     expertName,
                     expertEmail,
@@ -863,7 +804,7 @@ Execute now.`;
                         recentFiles.length > 0 ? `Recently worked on: ${recentFiles.slice(0, 3).join(', ')}` : "No recent file activity found",
                         `Last commit: ${recentCommits[0]?.date || 'Unknown'}`
                     ],
-                    currentFocus: recentCommits.length > 0 ? 
+                    currentFocus: recentCommits.length > 0 ?
                         `Recent work: ${recentCommits[0]?.message?.substring(0, 100) || 'No recent activity'}` :
                         "No recent activity in this repository"
                 };

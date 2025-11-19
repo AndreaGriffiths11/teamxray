@@ -144,7 +144,7 @@ export class ExpertiseTreeProvider implements vscode.TreeDataProvider<ExpertiseT
 
             case 'insights':
                 return Promise.resolve(
-                    this.analysis.insights.map((insight, index) =>
+                    this.analysis.insights.map((insight) =>
                         new ExpertiseTreeItem(
                             typeof insight === 'string' ? insight : insight.title,
                             vscode.TreeItemCollapsibleState.None,
@@ -173,9 +173,9 @@ export class ExpertiseTreeProvider implements vscode.TreeDataProvider<ExpertiseT
 
 class ExpertiseTreeItem extends vscode.TreeItem {
     constructor(
-        public readonly label: string,
-        public readonly collapsibleState: vscode.TreeItemCollapsibleState,
-        public readonly contextValue: string,
+        public override readonly label: string,
+        public override readonly collapsibleState: vscode.TreeItemCollapsibleState,
+        public override readonly contextValue: string,
         public readonly expert?: Expert,
         public readonly fileExpertise?: FileExpertise
     ) {

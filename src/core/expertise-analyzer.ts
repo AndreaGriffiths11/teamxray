@@ -1,24 +1,18 @@
 import * as vscode from 'vscode';
 import axios from 'axios';
-import { CopilotMCPService, GitHubRepository } from './copilot-mcp-service';
+import { CopilotMCPService } from './copilot-mcp-service';
 import { TokenManager } from './token-manager';
-import { 
-    Expert, 
-    FileExpertise, 
-    AnalysisResult, 
-    GitCommit, 
-    GitContributor, 
+import { GitService } from './git-service';
+import {
+    Expert,
+    FileExpertise,
+    AnalysisResult,
     RepositoryStats,
-    RepositoryData,
-    CollaborationData,
-    TeamInsight,
     ManagementInsight,
-    TeamHealthMetrics,
-    ValidationResult
+    TeamHealthMetrics
 } from '../types/expert';
 import { ErrorHandler } from '../utils/error-handler';
 import { ResourceManager } from '../utils/resource-manager';
-import { Validator } from '../utils/validation';
 
 export interface ExpertiseAnalysis extends AnalysisResult {
     teamDynamics?: TeamDynamics;
@@ -59,6 +53,7 @@ export class ExpertiseAnalyzer {
     private copilotMCPService: CopilotMCPService;
     private tokenManager: TokenManager;
     private resourceManager: ResourceManager;
+    private gitService: GitService | null = null;
 
     // Limits for different repository sizes
     private readonly SIZE_LIMITS = {
@@ -72,7 +67,7 @@ export class ExpertiseAnalyzer {
         this.context = context;
         this.tokenManager = tokenManager;
         this.outputChannel = vscode.window.createOutputChannel('Team Expertise Analysis');
-        this.copilotMCPService = new CopilotMCPService(this.outputChannel, this.tokenManager);
+        this.copilotMCPService = new CopilotMCPService(this.outputChannel);
         this.resourceManager = ResourceManager.getInstance();
         
         // Initialize utilities
@@ -1100,31 +1095,13 @@ Respond with JSON only (NO markdown, NO explanations):
                 return [];
             }
 
-            const { exec } = require('child_process');
-            const { promisify } = require('util');
-            const execAsync = promisify(exec);
+            // Initialize GitService if not already done
+            if (!this.gitService) {
+                this.gitService = new GitService(workspaceFolder.uri.fsPath, this.outputChannel);
+            }
 
-            const command = 'git log --pretty=format:"%H|%an|%ae|%ad|%s" --date=iso -n 500';
-            const { stdout } = await execAsync(command, { cwd: workspaceFolder.uri.fsPath });
-
-            const commits = stdout.split('\n')
-                .filter((line: string) => line.trim())
-                .map((line: string) => {
-                    const parts = line.split('|');
-                    if (parts.length >= 5) {
-                        return {
-                            sha: parts[0],
-                            author: {
-                                name: parts[1],
-                                email: parts[2]
-                            },
-                            date: parts[3],
-                            message: parts.slice(4).join('|')
-                        };
-                    }
-                    return null;
-                })
-                .filter(Boolean);
+            // Use secure GitService instead of direct git commands
+            const commits = await this.gitService.getCommits(500);
 
             return commits;
 
@@ -1141,46 +1118,13 @@ Respond with JSON only (NO markdown, NO explanations):
                 return [];
             }
 
-            const { exec } = require('child_process');
-            const { promisify } = require('util');
-            const execAsync = promisify(exec);
-
-            const command = 'git shortlog -sne --all';
-            const { stdout } = await execAsync(command, { cwd: workspaceFolder.uri.fsPath });
-
-            const contributors = stdout.split('\n')
-                .filter((line: string) => line.trim())
-                .map((line: string) => {
-                    const match = line.match(/^\s*(\d+)\s+(.+?)\s+<(.+?)>\s*$/);
-                    if (match) {
-                        const commits = parseInt(match[1]);
-                        const name = match[2];
-                        const email = match[3];
-                        
-                        return {
-                            name,
-                            email,
-                            commits,
-                            lastCommit: new Date().toISOString()
-                        };
-                    }
-                    return null;
-                })
-                .filter(Boolean)
-                .sort((a: any, b: any) => b.commits - a.commits);
-
-            // Get last commit date for top contributors
-            for (const contributor of contributors.slice(0, 20)) {
-                try {
-                    const lastCommitCommand = `git log --author="${contributor.email}" --pretty=format:"%ad" --date=iso -n 1`;
-                    const { stdout: lastCommitDate } = await execAsync(lastCommitCommand, { cwd: workspaceFolder.uri.fsPath });
-                    if (lastCommitDate.trim()) {
-                        contributor.lastCommit = lastCommitDate.trim();
-                    }
-                } catch (error) {
-                    // Continue with default date
-                }
+            // Initialize GitService if not already done
+            if (!this.gitService) {
+                this.gitService = new GitService(workspaceFolder.uri.fsPath, this.outputChannel);
             }
+
+            // Use secure GitService instead of direct git commands
+            const contributors = await this.gitService.getContributors();
 
             return contributors;
 

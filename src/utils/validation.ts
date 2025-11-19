@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import axios from 'axios';
 import { ValidationResult, TokenValidationResult, GitHubUser, GitHubRepository } from '../types/expert';
-import { ErrorHandler } from './error-handler';
 
 /**
  * Input validation utilities for the Team X-Ray extension
@@ -247,7 +247,7 @@ export class Validator {
     /**
      * Validates API response structure
      */
-    static validateApiResponse<T>(response: any, requiredFields: string[]): ValidationResult {
+    static validateApiResponse(response: any, requiredFields: string[]): ValidationResult {
         const result: ValidationResult = {
             isValid: false,
             errors: [],
@@ -264,7 +264,7 @@ export class Validator {
             return result;
         }
 
-        const missingFields = requiredFields.filter(field => 
+        const missingFields = requiredFields.filter(field =>
             !response.hasOwnProperty(field) || response[field] === null || response[field] === undefined
         );
 
@@ -275,5 +275,251 @@ export class Validator {
 
         result.isValid = true;
         return result;
+    }
+
+    /**
+     * Sanitizes file path to prevent path traversal attacks
+     * Resolves paths without TOCTOU vulnerability by using string operations
+     * @param filePath - File path to sanitize
+     * @param workspaceRoot - Workspace root directory
+     * @returns Sanitized absolute path within workspace
+     * @throws Error if path traversal is detected
+     */
+    static sanitizeFilePath(filePath: string, workspaceRoot: string): string {
+        try {
+            // Resolve workspace root to absolute path first
+            const resolvedWorkspaceRoot = path.resolve(workspaceRoot);
+
+            // Normalize the file path to resolve any '..' or '.' segments
+            const normalized = path.normalize(filePath);
+
+            // Resolve to absolute path
+            const resolved = path.resolve(resolvedWorkspaceRoot, normalized);
+
+            // Ensure resolved path starts with workspace root
+            // Use path separator to prevent partial matches (e.g., /workspace vs /workspace2)
+            const workspaceWithSep = resolvedWorkspaceRoot.endsWith(path.sep)
+                ? resolvedWorkspaceRoot
+                : resolvedWorkspaceRoot + path.sep;
+
+            const resolvedWithSep = resolved.endsWith(path.sep)
+                ? resolved
+                : resolved + path.sep;
+
+            // Check if resolved path is within workspace (or is the workspace itself)
+            if (resolved !== resolvedWorkspaceRoot && !resolvedWithSep.startsWith(workspaceWithSep)) {
+                throw new Error(
+                    `Path traversal detected: "${filePath}" resolves outside workspace root`
+                );
+            }
+
+            return resolved;
+        } catch (error) {
+            if (error instanceof Error && error.message.includes('Path traversal')) {
+                throw error;  // Re-throw our security error
+            }
+            throw new Error(
+                `Invalid file path: "${filePath}" - ${error instanceof Error ? error.message : 'Unknown error'}`
+            );
+        }
+    }
+
+    /**
+     * Sanitizes email address to prevent command injection
+     * @param email - Email address to sanitize
+     * @returns Sanitized email safe for shell commands
+     * @throws Error if email format is invalid after sanitization
+     */
+    static sanitizeEmail(email: string): string {
+        // Remove potentially dangerous characters while preserving valid email chars
+        const sanitized = email
+            .replace(/[;&|`$()<>\\]/g, '')  // Remove shell metacharacters (including backslash)
+            .replace(/[\n\r]/g, '')         // Remove newlines
+            .replace(/\s+/g, '')            // Remove whitespace
+            .trim();
+
+        // Validate email format after sanitization
+        const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+        if (!emailRegex.test(sanitized)) {
+            throw new Error('Invalid email format after sanitization');
+        }
+
+        return sanitized;
+    }
+
+    /**
+     * Validates Git command output for safety
+     * @param output - Output from git command
+     * @returns Validation result
+     */
+    static validateGitOutput(output: string): ValidationResult {
+        const result: ValidationResult = {
+            isValid: false,
+            errors: [],
+            warnings: []
+        };
+
+        if (!output) {
+            result.errors.push('Git output is empty');
+            return result;
+        }
+
+        // Check for shell metacharacters that shouldn't be in git output
+        const dangerousPatterns = [
+            /;\s*rm\s+-rf/i,      // Dangerous rm commands
+            /;\s*curl\s+/i,       // Command injection via curl
+            /;\s*wget\s+/i,       // Command injection via wget
+            /`[^`]*`/,            // Command substitution
+            /\$\([^)]*\)/,        // Command substitution
+            /&&\s*rm\s+/i,        // Chained rm commands
+            /\|\s*bash/i,         // Pipe to bash
+            /\|\s*sh/i            // Pipe to sh
+        ];
+
+        for (const pattern of dangerousPatterns) {
+            if (pattern.test(output)) {
+                result.errors.push(`Potentially malicious content detected in git output`);
+                return result;
+            }
+        }
+
+        result.isValid = true;
+        return result;
+    }
+
+    /**
+     * Validates JSON structure from AI responses
+     * @param jsonString - JSON string to validate
+     * @returns Validation result with parsed object if valid
+     */
+    static validateAndParseJSON(jsonString: string): ValidationResult & { parsed?: any } {
+        const result: ValidationResult & { parsed?: any } = {
+            isValid: false,
+            errors: [],
+            warnings: []
+        };
+
+        if (!jsonString || !jsonString.trim()) {
+            result.errors.push('JSON string is empty');
+            return result;
+        }
+
+        try {
+            const parsed = JSON.parse(jsonString);
+            result.parsed = parsed;
+            result.isValid = true;
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            result.errors.push(`Invalid JSON: ${errorMessage}`);
+        }
+
+        return result;
+    }
+
+    /**
+     * Validates URL for safety before external requests
+     * @param url - URL to validate
+     * @returns Validation result
+     */
+    static validateURL(url: string): ValidationResult {
+        const result: ValidationResult = {
+            isValid: false,
+            errors: [],
+            warnings: []
+        };
+
+        if (!url) {
+            result.errors.push('URL is required');
+            return result;
+        }
+
+        try {
+            const parsedUrl = new URL(url);
+
+            // Only allow https (or http for localhost only)
+            if (parsedUrl.protocol !== 'https:') {
+                if (parsedUrl.protocol !== 'http:' ||
+                    !(parsedUrl.hostname === 'localhost' ||
+                      parsedUrl.hostname === '127.0.0.1' ||
+                      parsedUrl.hostname === '0.0.0.0')) {
+                    result.errors.push('Only HTTPS URLs are allowed (except http for localhost)');
+                    return result;
+                }
+            }
+
+            // Block potentially dangerous URLs (SSRF protection)
+            // Allow localhost (http or https) for development, but block all other internal IPs
+            const hostname = parsedUrl.hostname;
+            const isLocalhost =
+                hostname === 'localhost' ||
+                hostname.startsWith('127.') ||  // All loopback addresses (127.0.0.0/8)
+                hostname === '0.0.0.0' ||
+                hostname === '[::1]';
+
+            if (!isLocalhost) {
+                // Block private IP ranges and metadata endpoints
+                // Note: 127.* is handled by isLocalhost check above
+                const isPrivateIP =
+                    hostname.startsWith('10.') ||
+                    hostname.startsWith('192.168.') ||
+                    hostname === '169.254.169.254' ||  // AWS metadata
+                    /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname); // 172.16.0.0/12
+
+                if (isPrivateIP) {
+                    result.errors.push('Requests to internal/private IPs are not allowed');
+                    return result;
+                }
+            }
+
+            result.isValid = true;
+        } catch (error) {
+            result.errors.push('Invalid URL format');
+        }
+
+        return result;
+    }
+    /**
+     * Sanitizes a file path to prevent directory traversal and injection attacks.
+     * Only allows relative paths within the workspace, strips dangerous characters.
+     * @param filePath - The file path to sanitize
+     * @returns Sanitized file path or throws error if invalid
+     */
+    static sanitizeFilePath(filePath: string): string {
+        if (!filePath || typeof filePath !== 'string') {
+            throw new Error('Invalid file path');
+        }
+        // Remove null bytes and normalize
+        let sanitized = filePath.replace(/\0/g, '');
+        sanitized = path.normalize(sanitized);
+        // Prevent absolute paths
+        if (path.isAbsolute(sanitized)) {
+            throw new Error('Absolute paths are not allowed');
+        }
+        // Prevent directory traversal
+        if (sanitized.startsWith('..') || sanitized.includes('../')) {
+            throw new Error('Directory traversal is not allowed');
+        }
+        // Optionally, restrict to certain file extensions or patterns here
+        return sanitized;
+    }
+
+    /**
+     * Sanitizes an email address for use in git commands.
+     * Allows only valid email characters, strips dangerous input.
+     * @param email - The email address to sanitize
+     * @returns Sanitized email address or throws error if invalid
+     */
+    static sanitizeEmail(email: string): string {
+        if (!email || typeof email !== 'string') {
+            throw new Error('Invalid email');
+        }
+        // Basic email validation (RFC 5322 simplified)
+        const emailPattern = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*$/;
+        if (!emailPattern.test(email)) {
+            throw new Error('Invalid email format');
+        }
+        // Remove any shell metacharacters just in case
+        const sanitized = email.replace(/[;&|`$><\\]/g, '');
+        return sanitized;
     }
 }

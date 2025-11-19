@@ -236,7 +236,7 @@ export class ResourceManager {
         });
 
         // Handle unhandled promise rejections
-        process.on('unhandledRejection', (reason, promise) => {
+        process.on('unhandledRejection', (reason, _promise) => {
             if (this.outputChannel) {
                 this.outputChannel.appendLine(`Unhandled promise rejection: ${reason}`);
             }
