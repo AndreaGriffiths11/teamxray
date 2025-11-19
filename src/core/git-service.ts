@@ -154,7 +154,7 @@ export class GitService {
                         name: match[2],
                         email: match[3],
                         commits: parseInt(match[1], 10),
-                        lastCommit: new Date().toISOString()
+                        lastCommit: ''  // Will be populated below for top 20 contributors
                     };
                 }
                 return null;

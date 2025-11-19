@@ -199,9 +199,9 @@ Specializations: ${(expert.specializations || []).join(', ')}`;
             return;
         }
         const outputChannel = vscode.window.createOutputChannel('Team X-Ray Expert Activity');
-        
+
         try {
-            const mcpService = new CopilotMCPService(outputChannel, tokenManager);
+            const mcpService = new CopilotMCPService(outputChannel);
             
             vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,

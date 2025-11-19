@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { TokenManager } from './token-manager';
 import { ExpertiseAnalyzer, ExpertiseAnalysis } from './expertise-analyzer';
 import { Expert } from '../types/expert';
 import { GitService } from './git-service';
@@ -31,9 +30,8 @@ export interface MCPServerStatus {
 export class CopilotMCPService {
     private outputChannel: vscode.OutputChannel;
 
-    constructor(outputChannel: vscode.OutputChannel, _tokenManager: TokenManager) {
+    constructor(outputChannel: vscode.OutputChannel) {
         this.outputChannel = outputChannel;
-        // TokenManager kept as parameter for future use, prefixed with _ to indicate intentionally unused
     }
 
     //Check the status of GitHub MCP Server containers

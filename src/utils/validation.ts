@@ -395,23 +395,6 @@ export class Validator {
     }
 
     /**
-     * Escapes special characters for safe use in shell commands
-     * More comprehensive than sanitizeShellInput - preserves valid content
-     * @param input - Input to escape
-     * @returns Escaped string safe for shell
-     */
-    static escapeShellArg(input: string): string {
-        return input
-            .replace(/\\/g, '\\\\')   // Escape backslashes first
-            .replace(/"/g, '\\"')      // Escape double quotes
-            .replace(/\$/g, '\\$')     // Escape dollar signs
-            .replace(/`/g, '\\`')      // Escape backticks
-            .replace(/!/g, '\\!')      // Escape exclamation marks
-            .replace(/\n/g, '')        // Remove newlines
-            .replace(/\r/g, '');       // Remove carriage returns
-    }
-
-    /**
      * Validates JSON structure from AI responses
      * @param jsonString - JSON string to validate
      * @returns Validation result with parsed object if valid
@@ -472,20 +455,27 @@ export class Validator {
             }
 
             // Block potentially dangerous URLs (SSRF protection)
-            const blockedHosts = ['0.0.0.0', '127.0.0.1', 'localhost', '[::1]', '169.254.169.254'];
+            // Allow http for localhost/127.0.0.1/0.0.0.0, but block all other internal IPs
             const hostname = parsedUrl.hostname;
+            const isLocalhostHttp =
+                parsedUrl.protocol === 'http:' &&
+                (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0');
 
-            // Check for blocked hosts and private IP ranges
-            const isBlocked =
-                blockedHosts.includes(hostname) ||
-                hostname.startsWith('127.') ||
-                hostname.startsWith('10.') ||
-                hostname.startsWith('192.168.') ||
-                /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname); // 172.16.0.0 - 172.31.255.255
+            if (!isLocalhostHttp) {
+                const blockedHosts = ['localhost', '127.0.0.1', '0.0.0.0', '[::1]', '169.254.169.254'];
 
-            if (isBlocked) {
-                result.errors.push('Requests to internal/private IPs are not allowed');
-                return result;
+                // Check for blocked hosts and private IP ranges
+                const isBlocked =
+                    blockedHosts.includes(hostname) ||
+                    hostname.startsWith('127.') ||
+                    hostname.startsWith('10.') ||
+                    hostname.startsWith('192.168.') ||
+                    /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname); // 172.16.0.0 - 172.31.255.255
+
+                if (isBlocked) {
+                    result.errors.push('Requests to internal/private IPs are not allowed');
+                    return result;
+                }
             }
 
             result.isValid = true;

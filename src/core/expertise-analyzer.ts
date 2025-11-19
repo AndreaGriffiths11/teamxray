@@ -67,7 +67,7 @@ export class ExpertiseAnalyzer {
         this.context = context;
         this.tokenManager = tokenManager;
         this.outputChannel = vscode.window.createOutputChannel('Team Expertise Analysis');
-        this.copilotMCPService = new CopilotMCPService(this.outputChannel, this.tokenManager);
+        this.copilotMCPService = new CopilotMCPService(this.outputChannel);
         this.resourceManager = ResourceManager.getInstance();
         
         // Initialize utilities
