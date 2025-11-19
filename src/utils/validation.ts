@@ -429,10 +429,21 @@ export class Validator {
                 return result;
             }
 
-            // Block potentially dangerous URLs
-            const blockedHosts = ['0.0.0.0', '127.0.0.1', 'localhost', '169.254.169.254'];
-            if (blockedHosts.includes(parsedUrl.hostname) && parsedUrl.protocol === 'https:') {
-                result.warnings.push('Request to localhost/internal IP detected');
+            // Block potentially dangerous URLs (SSRF protection)
+            const blockedHosts = ['0.0.0.0', '127.0.0.1', 'localhost', '[::1]', '169.254.169.254'];
+            const hostname = parsedUrl.hostname;
+
+            // Check for blocked hosts and private IP ranges
+            const isBlocked =
+                blockedHosts.includes(hostname) ||
+                hostname.startsWith('127.') ||
+                hostname.startsWith('10.') ||
+                hostname.startsWith('192.168.') ||
+                /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname); // 172.16.0.0 - 172.31.255.255
+
+            if (isBlocked) {
+                result.errors.push('Requests to internal/private IPs are not allowed');
+                return result;
             }
 
             result.isValid = true;
