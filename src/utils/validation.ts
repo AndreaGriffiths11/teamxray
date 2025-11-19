@@ -478,4 +478,48 @@ export class Validator {
 
         return result;
     }
+    /**
+     * Sanitizes a file path to prevent directory traversal and injection attacks.
+     * Only allows relative paths within the workspace, strips dangerous characters.
+     * @param filePath - The file path to sanitize
+     * @returns Sanitized file path or throws error if invalid
+     */
+    static sanitizeFilePath(filePath: string): string {
+        if (!filePath || typeof filePath !== 'string') {
+            throw new Error('Invalid file path');
+        }
+        // Remove null bytes and normalize
+        let sanitized = filePath.replace(/\0/g, '');
+        sanitized = path.normalize(sanitized);
+        // Prevent absolute paths
+        if (path.isAbsolute(sanitized)) {
+            throw new Error('Absolute paths are not allowed');
+        }
+        // Prevent directory traversal
+        if (sanitized.startsWith('..') || sanitized.includes('../')) {
+            throw new Error('Directory traversal is not allowed');
+        }
+        // Optionally, restrict to certain file extensions or patterns here
+        return sanitized;
+    }
+
+    /**
+     * Sanitizes an email address for use in git commands.
+     * Allows only valid email characters, strips dangerous input.
+     * @param email - The email address to sanitize
+     * @returns Sanitized email address or throws error if invalid
+     */
+    static sanitizeEmail(email: string): string {
+        if (!email || typeof email !== 'string') {
+            throw new Error('Invalid email');
+        }
+        // Basic email validation (RFC 5322 simplified)
+        const emailPattern = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*$/;
+        if (!emailPattern.test(email)) {
+            throw new Error('Invalid email format');
+        }
+        // Remove any shell metacharacters just in case
+        const sanitized = email.replace(/[;&|`$><\\]/g, '');
+        return sanitized;
+    }
 }
