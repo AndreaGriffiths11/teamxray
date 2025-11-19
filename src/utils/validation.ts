@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
 import axios from 'axios';
 import { ValidationResult, TokenValidationResult, GitHubUser, GitHubRepository } from '../types/expert';
 
@@ -278,11 +279,11 @@ export class Validator {
     }
 
     /**
-     * Sanitizes file path to prevent path traversal attacks
+     * Sanitizes file path to prevent path traversal attacks (including symlink attacks)
      * @param filePath - File path to sanitize
      * @param workspaceRoot - Workspace root directory
      * @returns Sanitized absolute path within workspace
-     * @throws Error if path traversal is detected
+     * @throws Error if path traversal is detected or path is invalid
      */
     static sanitizeFilePath(filePath: string, workspaceRoot: string): string {
         // Normalize the path to resolve any '..' or '.' segments
@@ -291,28 +292,66 @@ export class Validator {
         // Resolve to absolute path
         const resolved = path.resolve(workspaceRoot, normalized);
 
-        // Ensure the resolved path is within the workspace root
-        if (!resolved.startsWith(workspaceRoot)) {
+        // Resolve symbolic links to get the real path
+        let realPath: string;
+        try {
+            // First, try to resolve the real workspace root
+            const realWorkspaceRoot = fs.realpathSync(workspaceRoot);
+
+            // Try to resolve the file path
+            if (fs.existsSync(resolved)) {
+                realPath = fs.realpathSync(resolved);
+            } else {
+                // File doesn't exist yet - verify parent directory exists and resolve it
+                const dir = path.dirname(resolved);
+                if (fs.existsSync(dir)) {
+                    const realDir = fs.realpathSync(dir);
+                    realPath = path.join(realDir, path.basename(resolved));
+                } else {
+                    // Parent directory doesn't exist - just use resolved path (will fail later if used)
+                    realPath = resolved;
+                }
+            }
+
+            // Ensure the real path is within the real workspace root
+            if (!realPath.startsWith(realWorkspaceRoot)) {
+                throw new Error(
+                    `Path traversal detected: "${filePath}" resolves outside workspace root`
+                );
+            }
+
+            return realPath;
+        } catch (error) {
+            if (error instanceof Error && error.message.includes('Path traversal')) {
+                throw error;  // Re-throw our security error
+            }
             throw new Error(
-                `Path traversal detected: "${filePath}" resolves outside workspace root`
+                `Invalid file path: "${filePath}" - ${error instanceof Error ? error.message : 'Unknown error'}`
             );
         }
-
-        return resolved;
     }
 
     /**
      * Sanitizes email address to prevent command injection
      * @param email - Email address to sanitize
      * @returns Sanitized email safe for shell commands
+     * @throws Error if email format is invalid after sanitization
      */
     static sanitizeEmail(email: string): string {
         // Remove potentially dangerous characters while preserving valid email chars
-        return email
+        const sanitized = email
             .replace(/[;&|`$()<>\\]/g, '')  // Remove shell metacharacters
             .replace(/[\n\r]/g, '')          // Remove newlines
             .replace(/\s+/g, '')             // Remove whitespace
             .trim();
+
+        // Validate email format after sanitization
+        const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+        if (!emailRegex.test(sanitized)) {
+            throw new Error('Invalid email format after sanitization');
+        }
+
+        return sanitized;
     }
 
     /**
@@ -421,12 +460,15 @@ export class Validator {
         try {
             const parsedUrl = new URL(url);
 
-            // Only allow https (or http for localhost)
-            if (parsedUrl.protocol !== 'https:' &&
-                parsedUrl.protocol !== 'http:' &&
-                !parsedUrl.hostname.includes('localhost')) {
-                result.errors.push('Only HTTPS URLs are allowed');
-                return result;
+            // Only allow https (or http for localhost only)
+            if (parsedUrl.protocol !== 'https:') {
+                if (parsedUrl.protocol !== 'http:' ||
+                    !(parsedUrl.hostname === 'localhost' ||
+                      parsedUrl.hostname === '127.0.0.1' ||
+                      parsedUrl.hostname === '0.0.0.0')) {
+                    result.errors.push('Only HTTPS URLs are allowed (except http for localhost)');
+                    return result;
+                }
             }
 
             // Block potentially dangerous URLs (SSRF protection)

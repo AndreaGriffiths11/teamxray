@@ -1,8 +1,8 @@
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as vscode from 'vscode';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export interface GitCommit {
     sha: string;
@@ -35,35 +35,16 @@ export class GitService {
     ) {}
 
     /**
-     * Escapes special shell characters to prevent command injection
-     * @param input - User input that needs to be escaped
-     * @returns Safely escaped string
-     */
-    private escapeShellArg(input: string): string {
-        // Remove or escape potentially dangerous characters
-        return input
-            .replace(/\\/g, '\\\\')
-            .replace(/"/g, '\\"')
-            .replace(/\$/g, '\\$')
-            .replace(/`/g, '\\`')
-            .replace(/!/g, '\\!')
-            .replace(/\n/g, '')
-            .replace(/\r/g, '');
-    }
-
-    /**
-     * Executes a git command with security measures
-     * @param args - Git command arguments (NOT a full command string)
+     * Executes a git command with security measures using execFile (no shell invocation)
+     * @param args - Git command arguments as separate array elements
      * @returns Command output
      */
     private async executeGitCommand(args: string[]): Promise<string> {
         try {
-            // Build command with proper escaping
-            const command = `git ${args.join(' ')}`;
+            this.outputChannel?.appendLine(`Executing: git ${args.join(' ')}`);
 
-            this.outputChannel?.appendLine(`Executing: ${command}`);
-
-            const { stdout } = await execAsync(command, {
+            // Use execFile instead of exec - doesn't invoke shell, prevents command injection
+            const { stdout } = await execFileAsync('git', args, {
                 cwd: this.repoPath,
                 timeout: this.GIT_TIMEOUT_MS,
                 maxBuffer: this.MAX_BUFFER
@@ -87,7 +68,8 @@ export class GitService {
             'log',
             '--pretty=format:%H|%an|%ae|%ad|%s',
             '--date=iso',
-            `-n ${Math.max(1, Math.min(limit, 1000))}` // Clamp between 1 and 1000
+            '-n',
+            String(Math.max(1, Math.min(limit, 1000))) // Clamp between 1 and 1000
         ];
 
         const output = await this.executeGitCommand(args);
@@ -120,15 +102,14 @@ export class GitService {
      * @returns Array of commits by that author
      */
     async getCommitsByAuthor(email: string, limit: number = 10): Promise<GitCommit[]> {
-        // SECURITY: Escape the email to prevent command injection
-        const escapedEmail = this.escapeShellArg(email);
-
+        // No escaping needed - execFile passes arguments directly without shell interpretation
         const args = [
             'log',
-            `--author="${escapedEmail}"`,
+            `--author=${email}`,  // No quotes needed with execFile
             '--pretty=format:%H|%an|%ae|%ad|%s',
             '--date=iso',
-            `-n ${Math.max(1, Math.min(limit, 100))}`
+            '-n',
+            String(Math.max(1, Math.min(limit, 100)))
         ];
 
         const output = await this.executeGitCommand(args);
@@ -206,14 +187,13 @@ export class GitService {
      */
     async getLastCommitDate(email: string): Promise<string | null> {
         try {
-            const escapedEmail = this.escapeShellArg(email);
-
             const args = [
                 'log',
-                `--author="${escapedEmail}"`,
+                `--author=${email}`,  // No quotes/escaping needed with execFile
                 '--pretty=format:%ad',
                 '--date=iso',
-                '-n 1'
+                '-n',
+                '1'
             ];
 
             const output = await this.executeGitCommand(args);
@@ -234,10 +214,11 @@ export class GitService {
 
         const args = [
             'log',
-            `--since="${sinceDate}"`,
+            `--since=${sinceDate}`,  // No quotes needed with execFile
             '--pretty=format:%H|%an|%ae|%ad|%s',
             '--date=iso',
-            `-n ${Math.max(1, Math.min(limit, 1000))}`
+            '-n',
+            String(Math.max(1, Math.min(limit, 1000)))
         ];
 
         const output = await this.executeGitCommand(args);
@@ -271,14 +252,13 @@ export class GitService {
      */
     async getFilesByAuthor(email: string, limit: number = 20): Promise<string[]> {
         try {
-            const escapedEmail = this.escapeShellArg(email);
-
             const args = [
                 'log',
-                `--author="${escapedEmail}"`,
+                `--author=${email}`,  // No quotes/escaping needed with execFile
                 '--name-only',
                 '--pretty=format:',
-                `-n ${Math.max(1, Math.min(limit, 100))}`
+                '-n',
+                String(Math.max(1, Math.min(limit, 100)))
             ];
 
             const output = await this.executeGitCommand(args);
