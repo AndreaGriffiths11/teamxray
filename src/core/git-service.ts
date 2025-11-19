@@ -28,11 +28,55 @@ export interface GitContributor {
 export class GitService {
     private readonly GIT_TIMEOUT_MS = 30000; // 30 seconds
     private readonly MAX_BUFFER = 10 * 1024 * 1024; // 10MB
+    private static instanceCache = new Map<string, GitService>();
 
     constructor(
         private readonly repoPath: string,
         private readonly outputChannel?: vscode.OutputChannel
-    ) {}
+    ) {
+        // Validate repository path
+        if (!repoPath || typeof repoPath !== 'string') {
+            throw new Error('Invalid repository path: path must be a non-empty string');
+        }
+
+        // Resolve to absolute path
+        const fs = require('fs');
+        const path = require('path');
+        const resolvedPath = path.resolve(repoPath);
+
+        // Verify path exists and is a directory
+        try {
+            const stats = fs.statSync(resolvedPath);
+            if (!stats.isDirectory()) {
+                throw new Error(`Invalid repository path: "${repoPath}" is not a directory`);
+            }
+        } catch (error) {
+            if (error instanceof Error && error.message.includes('Invalid repository path')) {
+                throw error;
+            }
+            throw new Error(`Invalid repository path: "${repoPath}" does not exist or is not accessible`);
+        }
+
+        // Update repoPath to use validated absolute path
+        (this as any).repoPath = resolvedPath;
+    }
+
+    /**
+     * Get or create a cached GitService instance for a repository
+     * @param repoPath - Repository path
+     * @param outputChannel - Optional output channel
+     * @returns Cached or new GitService instance
+     */
+    static getInstance(repoPath: string, outputChannel?: vscode.OutputChannel): GitService {
+        const path = require('path');
+        const normalizedPath = path.resolve(repoPath);
+
+        if (!GitService.instanceCache.has(normalizedPath)) {
+            GitService.instanceCache.set(normalizedPath, new GitService(normalizedPath, outputChannel));
+        }
+
+        return GitService.instanceCache.get(normalizedPath)!;
+    }
 
     /**
      * Executes a git command with security measures using execFile (no shell invocation)
@@ -59,21 +103,11 @@ export class GitService {
     }
 
     /**
-     * Get commits from the repository
-     * @param limit - Maximum number of commits to retrieve
-     * @returns Array of git commits
+     * Parse git log output into GitCommit objects (DRY helper method)
+     * @param output - Raw git log output with format %H|%an|%ae|%ad|%s
+     * @returns Array of parsed GitCommit objects
      */
-    async getCommits(limit: number = 500): Promise<GitCommit[]> {
-        const args = [
-            'log',
-            '--pretty=format:%H|%an|%ae|%ad|%s',
-            '--date=iso',
-            '-n',
-            String(Math.max(1, Math.min(limit, 1000))) // Clamp between 1 and 1000
-        ];
-
-        const output = await this.executeGitCommand(args);
-
+    private parseCommitOutput(output: string): GitCommit[] {
         return output
             .split('\n')
             .filter(line => line.trim())
@@ -96,7 +130,25 @@ export class GitService {
     }
 
     /**
-     * Get commits by a specific author (safely escaped)
+     * Get commits from the repository
+     * @param limit - Maximum number of commits to retrieve
+     * @returns Array of git commits
+     */
+    async getCommits(limit: number = 500): Promise<GitCommit[]> {
+        const args = [
+            'log',
+            '--pretty=format:%H|%an|%ae|%ad|%s',
+            '--date=iso',
+            '-n',
+            String(Math.max(1, Math.min(limit, 1000))) // Clamp between 1 and 1000
+        ];
+
+        const output = await this.executeGitCommand(args);
+        return this.parseCommitOutput(output);
+    }
+
+    /**
+     * Get commits by a specific author
      * @param email - Author email address
      * @param limit - Maximum number of commits
      * @returns Array of commits by that author
@@ -113,26 +165,7 @@ export class GitService {
         ];
 
         const output = await this.executeGitCommand(args);
-
-        return output
-            .split('\n')
-            .filter(line => line.trim())
-            .map(line => {
-                const parts = line.split('|');
-                if (parts.length >= 5) {
-                    return {
-                        sha: parts[0],
-                        author: {
-                            name: parts[1],
-                            email: parts[2],
-                            date: parts[3]
-                        },
-                        message: parts.slice(4).join('|')
-                    };
-                }
-                return null;
-            })
-            .filter((commit): commit is GitCommit => commit !== null);
+        return this.parseCommitOutput(output);
     }
 
     /**
@@ -222,26 +255,7 @@ export class GitService {
         ];
 
         const output = await this.executeGitCommand(args);
-
-        return output
-            .split('\n')
-            .filter(line => line.trim())
-            .map(line => {
-                const parts = line.split('|');
-                if (parts.length >= 5) {
-                    return {
-                        sha: parts[0],
-                        author: {
-                            name: parts[1],
-                            email: parts[2],
-                            date: parts[3]
-                        },
-                        message: parts.slice(4).join('|')
-                    };
-                }
-                return null;
-            })
-            .filter((commit): commit is GitCommit => commit !== null);
+        return this.parseCommitOutput(output);
     }
 
     /**

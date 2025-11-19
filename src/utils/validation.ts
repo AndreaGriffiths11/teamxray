@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import * as fs from 'fs';
 import axios from 'axios';
 import { ValidationResult, TokenValidationResult, GitHubUser, GitHubRepository } from '../types/expert';
 
@@ -279,48 +278,42 @@ export class Validator {
     }
 
     /**
-     * Sanitizes file path to prevent path traversal attacks (including symlink attacks)
+     * Sanitizes file path to prevent path traversal attacks
+     * Resolves paths without TOCTOU vulnerability by using string operations
      * @param filePath - File path to sanitize
      * @param workspaceRoot - Workspace root directory
      * @returns Sanitized absolute path within workspace
-     * @throws Error if path traversal is detected or path is invalid
+     * @throws Error if path traversal is detected
      */
     static sanitizeFilePath(filePath: string, workspaceRoot: string): string {
-        // Normalize the path to resolve any '..' or '.' segments
-        const normalized = path.normalize(filePath);
-
-        // Resolve to absolute path
-        const resolved = path.resolve(workspaceRoot, normalized);
-
-        // Resolve symbolic links to get the real path
-        let realPath: string;
         try {
-            // First, try to resolve the real workspace root
-            const realWorkspaceRoot = fs.realpathSync(workspaceRoot);
+            // Resolve workspace root to absolute path first
+            const resolvedWorkspaceRoot = path.resolve(workspaceRoot);
 
-            // Try to resolve the file path
-            if (fs.existsSync(resolved)) {
-                realPath = fs.realpathSync(resolved);
-            } else {
-                // File doesn't exist yet - verify parent directory exists and resolve it
-                const dir = path.dirname(resolved);
-                if (fs.existsSync(dir)) {
-                    const realDir = fs.realpathSync(dir);
-                    realPath = path.join(realDir, path.basename(resolved));
-                } else {
-                    // Parent directory doesn't exist - just use resolved path (will fail later if used)
-                    realPath = resolved;
-                }
-            }
+            // Normalize the file path to resolve any '..' or '.' segments
+            const normalized = path.normalize(filePath);
 
-            // Ensure the real path is within the real workspace root
-            if (!realPath.startsWith(realWorkspaceRoot)) {
+            // Resolve to absolute path
+            const resolved = path.resolve(resolvedWorkspaceRoot, normalized);
+
+            // Ensure resolved path starts with workspace root
+            // Use path separator to prevent partial matches (e.g., /workspace vs /workspace2)
+            const workspaceWithSep = resolvedWorkspaceRoot.endsWith(path.sep)
+                ? resolvedWorkspaceRoot
+                : resolvedWorkspaceRoot + path.sep;
+
+            const resolvedWithSep = resolved.endsWith(path.sep)
+                ? resolved
+                : resolved + path.sep;
+
+            // Check if resolved path is within workspace (or is the workspace itself)
+            if (resolved !== resolvedWorkspaceRoot && !resolvedWithSep.startsWith(workspaceWithSep)) {
                 throw new Error(
                     `Path traversal detected: "${filePath}" resolves outside workspace root`
                 );
             }
 
-            return realPath;
+            return resolved;
         } catch (error) {
             if (error instanceof Error && error.message.includes('Path traversal')) {
                 throw error;  // Re-throw our security error
@@ -340,9 +333,9 @@ export class Validator {
     static sanitizeEmail(email: string): string {
         // Remove potentially dangerous characters while preserving valid email chars
         const sanitized = email
-            .replace(/[;&|`$()<>\\]/g, '')  // Remove shell metacharacters
-            .replace(/[\n\r]/g, '')          // Remove newlines
-            .replace(/\s+/g, '')             // Remove whitespace
+            .replace(/[;&|`$()<>\\\\]/g, '')  // Remove shell metacharacters (including backslash)
+            .replace(/[\n\r]/g, '')           // Remove newlines
+            .replace(/\s+/g, '')              // Remove whitespace
             .trim();
 
         // Validate email format after sanitization
@@ -455,24 +448,24 @@ export class Validator {
             }
 
             // Block potentially dangerous URLs (SSRF protection)
-            // Allow http for localhost/127.0.0.1/0.0.0.0, but block all other internal IPs
+            // Allow localhost (http or https) for development, but block all other internal IPs
             const hostname = parsedUrl.hostname;
-            const isLocalhostHttp =
-                parsedUrl.protocol === 'http:' &&
-                (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0');
+            const isLocalhost =
+                hostname === 'localhost' ||
+                hostname === '127.0.0.1' ||
+                hostname === '0.0.0.0' ||
+                hostname === '[::1]';
 
-            if (!isLocalhostHttp) {
-                const blockedHosts = ['localhost', '127.0.0.1', '0.0.0.0', '[::1]', '169.254.169.254'];
-
-                // Check for blocked hosts and private IP ranges
-                const isBlocked =
-                    blockedHosts.includes(hostname) ||
+            if (!isLocalhost) {
+                // Block private IP ranges and metadata endpoints
+                const isPrivateIP =
                     hostname.startsWith('127.') ||
                     hostname.startsWith('10.') ||
                     hostname.startsWith('192.168.') ||
-                    /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname); // 172.16.0.0 - 172.31.255.255
+                    hostname === '169.254.169.254' ||  // AWS metadata
+                    /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname); // 172.16.0.0/12
 
-                if (isBlocked) {
+                if (isPrivateIP) {
                     result.errors.push('Requests to internal/private IPs are not allowed');
                     return result;
                 }
