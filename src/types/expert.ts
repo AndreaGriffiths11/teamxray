@@ -183,7 +183,7 @@ export interface TeamXRayError {
     message: string;
     userMessage: string;
     recoverable: boolean;
-    context?: Record<string, any>;
+    context?: Record<string, unknown>;
 }
 
 export type ErrorCode = 

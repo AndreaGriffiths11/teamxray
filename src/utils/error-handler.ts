@@ -133,7 +133,7 @@ export class RateLimitError extends TeamXRayBaseError {
             : '';
         
         super(
-            'NETWORK_ERROR',
+            'RATE_LIMIT_ERROR',
             'rate_limit',
             message,
             `GitHub API rate limit exceeded.${resetInfo} Please wait before retrying.`,
