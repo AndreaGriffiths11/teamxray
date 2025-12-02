@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import { CopilotMCPService } from './copilot-mcp-service';
 import { TokenManager } from './token-manager';
 import { GitService } from './git-service';
@@ -11,7 +11,15 @@ import {
     ManagementInsight,
     TeamHealthMetrics
 } from '../types/expert';
-import { ErrorHandler } from '../utils/error-handler';
+import { 
+    ErrorHandler,
+    NetworkError,
+    AuthenticationError,
+    RateLimitError,
+    AIServiceError,
+    RepositoryError,
+    ValidationError
+} from '../utils/error-handler';
 import { ResourceManager } from '../utils/resource-manager';
 
 export interface ExpertiseAnalysis extends AnalysisResult {
@@ -359,12 +367,12 @@ export class ExpertiseAnalyzer {
     }
 
     /**
-     * Performs AI analysis with smart chunking and error handling
+     * Performs AI analysis with smart chunking and enhanced error handling
      */
     private async performSmartAIAnalysis(repositoryData: any, repoStats: RepositoryStats): Promise<ExpertiseAnalysis | null> {
-        try {
-            this.outputChannel.appendLine('🤖 Performing smart AI analysis...');
+        this.outputChannel.appendLine('\n🤖 Performing smart AI analysis...');
 
+        try {
             // Estimate prompt size and adjust if needed
             const promptSize = this.estimatePromptSize(repositoryData);
             this.outputChannel.appendLine(`📏 Estimated prompt size: ${Math.round(promptSize / 1024)}KB`);
@@ -378,7 +386,35 @@ export class ExpertiseAnalyzer {
             }
 
         } catch (error) {
-            this.outputChannel.appendLine(`❌ AI analysis failed: ${error}`);
+            // Log the error with full details
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.outputChannel.appendLine(`\n❌ AI analysis failed: ${errorMessage}`);
+            
+            // Classify and handle specific error types
+            if (error instanceof AuthenticationError) {
+                this.outputChannel.appendLine('🔑 Authentication error - please check your GitHub token');
+                ErrorHandler.handleError(error);
+                return null; // Don't fall back on auth errors
+            }
+            
+            if (error instanceof RateLimitError) {
+                this.outputChannel.appendLine(`⏱️ Rate limit exceeded${error.resetTime ? ` - resets at ${error.resetTime.toLocaleTimeString()}` : ''}`);
+                ErrorHandler.handleError(error);
+                this.outputChannel.appendLine('📊 Using fallback analysis instead...');
+            }
+            
+            if (error instanceof NetworkError) {
+                this.outputChannel.appendLine('🌐 Network error - please check your internet connection');
+                ErrorHandler.handleError(error);
+            }
+            
+            if (error instanceof AIServiceError) {
+                this.outputChannel.appendLine(`🤖 AI service error${error.statusCode ? ` (${error.statusCode})` : ''}`);
+                ErrorHandler.handleError(error);
+            }
+            
+            // Fall back to local analysis for recoverable errors
+            this.outputChannel.appendLine('📂 Creating fallback analysis from local data...');
             return this.createFallbackAnalysis(repositoryData);
         }
     }
@@ -402,41 +438,73 @@ export class ExpertiseAnalyzer {
 
     /**
      * Performs standard AI analysis for smaller datasets
+     * Enhanced with specific error handling for AI service failures
      */
     private async performStandardAnalysis(repositoryData: any, repoStats: RepositoryStats): Promise<ExpertiseAnalysis | null> {
         const apiKey = await this.tokenManager.ensureToken('GitHub token required for team expertise analysis');
         
         if (!apiKey) {
-            vscode.window.showErrorMessage('GitHub token is required for team expertise analysis.');
-            return null;
+            throw new AuthenticationError(
+                'GitHub token is required for team expertise analysis',
+                { context: { repository: repositoryData.repository } }
+            );
         }
 
         const prompt = this.buildOptimizedAnalysisPrompt(repositoryData, repoStats);
         
         try {
-            const response = await axios.post(
-                'https://models.github.ai/inference/chat/completions',
-                {
-                    model: 'openai/gpt-4o',
-                    messages: [
+            // Use retry logic for transient AI service failures
+            const response = await ErrorHandler.withRetry(
+                async () => {
+                    return await axios.post(
+                        'https://models.github.ai/inference/chat/completions',
                         {
-                            role: 'system',
-                            content: 'You are an expert code analyst that helps identify team expertise patterns. Respond with valid JSON only.'
+                            model: 'openai/gpt-4o',
+                            messages: [
+                                {
+                                    role: 'system',
+                                    content: 'You are an expert code analyst that helps identify team expertise patterns. Respond with valid JSON only.'
+                                },
+                                {
+                                    role: 'user',
+                                    content: prompt
+                                }
+                            ],
+                            temperature: 0.7,
+                            max_tokens: 2000
                         },
                         {
-                            role: 'user',
-                            content: prompt
+                            headers: {
+                                'Accept': 'application/vnd.github+json',
+                                'Authorization': `Bearer ${apiKey}`,
+                                'X-GitHub-Api-Version': '2022-11-28',
+                                'Content-Type': 'application/json'
+                            },
+                            timeout: 60000 // 60 second timeout
                         }
-                    ],
-                    temperature: 0.7,
-                    max_tokens: 2000
+                    );
                 },
+                'AI analysis request',
                 {
-                    headers: {
-                        'Accept': 'application/vnd.github+json',
-                        'Authorization': `Bearer ${apiKey}`,
-                        'X-GitHub-Api-Version': '2022-11-28',
-                        'Content-Type': 'application/json'
+                    maxRetries: 2,
+                    baseDelayMs: 2000,
+                    shouldRetry: (error: Error) => {
+                        // Retry on network errors and 5xx errors, but not on auth errors
+                        if (error instanceof AxiosError) {
+                            const status = error.response?.status;
+                            if (status === 401 || status === 403) {
+                                return false; // Don't retry auth errors
+                            }
+                            if (status === 429) {
+                                return true; // Retry rate limits with backoff
+                            }
+                            if (status && status >= 500) {
+                                return true; // Retry server errors
+                            }
+                        }
+                        return error.message.includes('ECONNREFUSED') || 
+                               error.message.includes('ETIMEDOUT') ||
+                               error.message.includes('network');
                     }
                 }
             );
@@ -444,11 +512,66 @@ export class ExpertiseAnalyzer {
             const aiResponse = (response.data as any).choices[0].message.content;
             return this.parseAIResponse(aiResponse, repositoryData);
 
-        } catch (error: any) {
-            if (error.response?.status === 413) {
-                this.outputChannel.appendLine('⚠️ Request too large, falling back to chunked analysis...');
-                return await this.performChunkedAnalysis(repositoryData, repoStats);
+        } catch (error) {
+            // Handle specific error types with appropriate responses
+            if (error instanceof AxiosError) {
+                const status = error.response?.status;
+                const errorMessage = error.response?.data?.error?.message || error.message;
+                
+                this.outputChannel.appendLine(`\n❌ AI Service Error (${status}): ${errorMessage}`);
+                
+                // Handle specific HTTP status codes
+                switch (status) {
+                    case 401:
+                    case 403:
+                        throw new AuthenticationError(
+                            `GitHub Models API authentication failed: ${errorMessage}`,
+                            { cause: error, context: { statusCode: status } }
+                        );
+                    
+                    case 429:
+                        // Extract rate limit reset time if available
+                        const resetHeader = error.response?.headers?.['x-ratelimit-reset'];
+                        const resetTime = resetHeader ? new Date(parseInt(resetHeader) * 1000) : undefined;
+                        throw new RateLimitError(
+                            `GitHub Models API rate limit exceeded: ${errorMessage}`,
+                            { resetTime, context: { statusCode: status } }
+                        );
+                    
+                    case 413:
+                        this.outputChannel.appendLine('⚠️ Request too large, falling back to chunked analysis...');
+                        return await this.performChunkedAnalysis(repositoryData, repoStats);
+                    
+                    case 500:
+                    case 502:
+                    case 503:
+                    case 504:
+                        throw new AIServiceError(
+                            `GitHub Models API service error: ${errorMessage}`,
+                            { statusCode: status, cause: error }
+                        );
+                    
+                    default:
+                        throw new AIServiceError(
+                            `GitHub Models API request failed: ${errorMessage}`,
+                            { statusCode: status, cause: error }
+                        );
+                }
             }
+            
+            // Handle network errors
+            if (error instanceof Error) {
+                if (error.message.includes('ECONNREFUSED') || 
+                    error.message.includes('ENOTFOUND') ||
+                    error.message.includes('ETIMEDOUT')) {
+                    throw new NetworkError(
+                        `Cannot connect to GitHub Models API: ${error.message}`,
+                        { cause: error }
+                    );
+                }
+            }
+            
+            // Re-throw unknown errors
             throw error;
         }
     }
@@ -694,22 +817,42 @@ Respond with JSON only (NO markdown, NO explanations):
      */
 
     async findExpertForFile(filePath: string): Promise<Expert[] | null> {
-        try {
-            this.outputChannel.appendLine(`🔍 Finding experts for file: ${filePath}`);
+        this.outputChannel.appendLine(`\n🔍 Finding experts for file: ${filePath}`);
 
-            const repository = await this.copilotMCPService.detectRepository();
-            if (repository) {
-                const fileExperts = await this.copilotMCPService.analyzeFileExperts(filePath, repository);
-                if (fileExperts && fileExperts.length > 0) {
-                    this.outputChannel.appendLine(`✅ Found ${fileExperts.length} experts via MCP for file`);
-                    return fileExperts;
-                }
+        try {
+            // Validate file path
+            if (!filePath || typeof filePath !== 'string') {
+                throw new ValidationError('Invalid file path provided', {
+                    context: { filePath }
+                });
             }
 
-            this.outputChannel.appendLine('⚡ MCP analysis unavailable, using local file analysis...');
+            // Try MCP-based analysis first
+            const repository = await this.copilotMCPService.detectRepository();
+            if (repository) {
+                try {
+                    const fileExperts = await this.copilotMCPService.analyzeFileExperts(filePath, repository);
+                    if (fileExperts && fileExperts.length > 0) {
+                        this.outputChannel.appendLine(`✅ Found ${fileExperts.length} experts via MCP for file`);
+                        return fileExperts;
+                    }
+                } catch (mcpError) {
+                    const error = mcpError instanceof Error ? mcpError : new Error(String(mcpError));
+                    this.outputChannel.appendLine(`⚠️ MCP analysis failed: ${error.message}`);
+                    // Continue to fallback
+                }
+            } else {
+                this.outputChannel.appendLine('⚠️ Could not detect repository for MCP analysis');
+            }
+
+            // Fallback to local file analysis
+            this.outputChannel.appendLine('⚡ Using local file analysis...');
             const fileData = await this.gatherFileData(filePath);
             if (!fileData) {
-                return null;
+                throw new RepositoryError(
+                    `Could not gather data for file: ${filePath}`,
+                    { context: { filePath } }
+                );
             }
 
             const experts = await this.analyzeFileExperts(fileData);
@@ -718,9 +861,16 @@ Respond with JSON only (NO markdown, NO explanations):
             return experts;
 
         } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-            this.outputChannel.appendLine(`❌ Error finding experts: ${errorMessage}`);
-            vscode.window.showErrorMessage(`Failed to find experts: ${errorMessage}`);
+            // Classify and handle the error
+            const classifiedError = error instanceof Error 
+                ? ErrorHandler.classifyError(error, `find experts for ${filePath}`)
+                : new ValidationError(String(error));
+            
+            this.outputChannel.appendLine(`\n❌ Error finding experts:`);
+            this.outputChannel.appendLine(`   Type: ${classifiedError.name}`);
+            this.outputChannel.appendLine(`   Message: ${classifiedError.message}`);
+            
+            ErrorHandler.handleError(classifiedError);
             return null;
         }
     }

@@ -193,7 +193,10 @@ export type ErrorCode =
     | 'INSUFFICIENT_PERMISSIONS'
     | 'ANALYSIS_FAILED'
     | 'VALIDATION_ERROR'
-    | 'RESOURCE_ERROR';
+    | 'RESOURCE_ERROR'
+    | 'RATE_LIMIT_ERROR'
+    | 'MCP_SERVICE_ERROR'
+    | 'AI_SERVICE_ERROR';
 
 // Validation types
 export interface ValidationResult {

@@ -3,6 +3,12 @@ import * as path from 'path';
 import { ExpertiseAnalyzer, ExpertiseAnalysis } from './expertise-analyzer';
 import { Expert } from '../types/expert';
 import { GitService } from './git-service';
+import { 
+    ErrorHandler, 
+    MCPServiceError, 
+    RepositoryError,
+    ValidationError 
+} from '../utils/error-handler';
 
 export interface GitHubRepository {
     owner: string;
@@ -160,42 +166,112 @@ export class CopilotMCPService {
 
     /**
      * Use Copilot Chat with MCP to gather comprehensive repository data
+     * Enhanced with specific error handling for different failure scenarios
      */
     async gatherRepositoryData(repository: GitHubRepository): Promise<any> {
-        try {
-            this.outputChannel.appendLine(`Gathering repository data for ${repository.owner}/${repository.repo} via Copilot Chat + MCP...`);
+        const repoFullName = `${repository.owner}/${repository.repo}`;
+        this.outputChannel.appendLine(`\n📊 Gathering repository data for ${repoFullName} via Copilot Chat + MCP...`);
 
-            // Always try MCP first - even in debug mode
+        try {
+            // Validate repository input
+            if (!repository.owner || !repository.repo) {
+                throw new ValidationError(
+                    'Invalid repository: owner and repo are required',
+                    { context: { repository } }
+                );
+            }
+
+            // Build prompt for MCP data gathering
             const prompt = this.buildMCPDataGatheringPrompt(repository);
             
-            // Check MCP server status for user information (but don't block on it)
-            const mcpStatus = await this.checkMCPServerStatus();
-            this.outputChannel.appendLine(`MCP Server Check: ${mcpStatus.isAvailable ? 'Available' : 'Not detected'}`);
-            
-            if (mcpStatus.containerName) {
-                this.outputChannel.appendLine(`Using container: ${mcpStatus.containerName} (${mcpStatus.containerStatus})`);
+            // Check MCP server status with enhanced error handling
+            let mcpStatus: MCPServerStatus;
+            try {
+                mcpStatus = await this.checkMCPServerStatus();
+                this.outputChannel.appendLine(`MCP Server Check: ${mcpStatus.isAvailable ? '✅ Available' : '⚠️ Not detected'}`);
+                
+                if (mcpStatus.containerName) {
+                    this.outputChannel.appendLine(`Using container: ${mcpStatus.containerName} (${mcpStatus.containerStatus})`);
+                }
+            } catch (mcpError) {
+                // MCP check failed - log but continue with fallback
+                const error = mcpError instanceof Error ? mcpError : new Error(String(mcpError));
+                this.outputChannel.appendLine(`⚠️ MCP status check failed: ${error.message}`);
+                ErrorHandler.handleError(new MCPServiceError(
+                    `MCP server status check failed: ${error.message}`,
+                    { cause: error, context: { repository: repoFullName } }
+                ));
+                mcpStatus = { isAvailable: false, error: error.message };
             }
 
-            // Try Copilot Chat with MCP regardless of container detection
-            // The user might have MCP configured differently or in the main VS Code instance
-            const chatResponse = await this.queryCopilotWithMCP(prompt, mcpStatus);
-            
-            if (chatResponse === 'user_chose_mcp') {
-                // User chose to use MCP manually - don't run fallback automatically
-                this.outputChannel.appendLine('User chose to use MCP manually - skipping automatic fallback');
-                throw new Error('User opted for manual MCP usage - analysis paused');
-            } else if (chatResponse) {
-                this.outputChannel.appendLine('Successfully gathered repository data via Copilot + MCP');
+            // Try Copilot Chat with MCP with retry logic for transient failures
+            try {
+                const chatResponse = await ErrorHandler.withRetry(
+                    async () => {
+                        const response = await this.queryCopilotWithMCP(prompt, mcpStatus);
+                        if (response === null) {
+                            // User cancelled or Copilot unavailable - not a retryable error
+                            throw new MCPServiceError('Copilot Chat unavailable or user cancelled');
+                        }
+                        return response;
+                    },
+                    'query Copilot with MCP',
+                    { maxRetries: 2, baseDelayMs: 500 }
+                );
+                
+                if (chatResponse === 'user_chose_mcp') {
+                    this.outputChannel.appendLine('User chose to use MCP manually - skipping automatic fallback');
+                    throw new ValidationError(
+                        'User opted for manual MCP usage - analysis paused',
+                        { context: { userChoice: 'manual_mcp' } }
+                    );
+                }
+                
+                this.outputChannel.appendLine('✅ Successfully gathered repository data via Copilot + MCP');
                 return this.parseRepositoryResponse(chatResponse, repository);
-            } else {
-                // Only use fallback if user explicitly chooses it or Copilot Chat is unavailable
-                this.outputChannel.appendLine('Using local git analysis as requested or Copilot unavailable');
-                return await this.fallbackLocalAnalysis(repository);
+                
+            } catch (chatError) {
+                // Determine if we should fall back to local analysis
+                const error = chatError instanceof Error ? chatError : new Error(String(chatError));
+                
+                // If user explicitly chose manual MCP, don't fall back
+                if (error.message.includes('manual MCP usage')) {
+                    throw chatError;
+                }
+                
+                this.outputChannel.appendLine(`⚠️ Copilot Chat failed: ${error.message}`);
+                this.outputChannel.appendLine('📂 Falling back to local git analysis...');
             }
+
+            // Fallback to local git analysis
+            return await this.fallbackLocalAnalysis(repository);
 
         } catch (error) {
-            this.outputChannel.appendLine(`Error gathering repository data: ${error}`);
-            return await this.fallbackLocalAnalysis(repository);
+            // Classify and handle the error appropriately
+            const classifiedError = error instanceof Error 
+                ? ErrorHandler.classifyError(error, `gather repository data for ${repoFullName}`)
+                : new ValidationError(String(error));
+            
+            // Log detailed diagnostics
+            this.outputChannel.appendLine(`\n❌ Error gathering repository data:`);
+            this.outputChannel.appendLine(`   Type: ${classifiedError.name}`);
+            this.outputChannel.appendLine(`   Message: ${classifiedError.message}`);
+            this.outputChannel.appendLine(`   Recoverable: ${classifiedError.recoverable}`);
+            
+            if (classifiedError.recoverable) {
+                this.outputChannel.appendLine('📂 Attempting fallback to local git analysis...');
+                try {
+                    return await this.fallbackLocalAnalysis(repository);
+                } catch (fallbackError) {
+                    const fbError = fallbackError instanceof Error ? fallbackError : new Error(String(fallbackError));
+                    throw new RepositoryError(
+                        `Both MCP and local analysis failed: ${fbError.message}`,
+                        { cause: fbError, context: { repository: repoFullName, originalError: classifiedError.message } }
+                    );
+                }
+            }
+            
+            throw classifiedError;
         }
     }
 
