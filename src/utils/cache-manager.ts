@@ -31,6 +31,19 @@ export interface CacheConfig {
 }
 
 /**
+ * Constants for repository data sampling in cache hash generation
+ * These values determine how much data is used to create the cache key hash
+ */
+const HASH_SAMPLING = {
+    /** Number of top contributors to include in the hash */
+    TOP_CONTRIBUTORS: 5,
+    /** Number of recent commits to include in the hash */
+    RECENT_COMMITS: 10,
+    /** Number of sample files to include in the hash */
+    SAMPLE_FILES: 20
+} as const;
+
+/**
  * Intelligent cache manager for AI analysis results
  * Implements LRU eviction, TTL-based expiration, and change detection
  */
@@ -138,6 +151,7 @@ export class CacheManager {
 
     /**
      * Creates a hash from repository data for cache invalidation
+     * Uses sampling constants to include representative data in the hash
      */
     hashRepositoryData(data: {
         contributors: Array<{ name: string; email: string; commits: number }>;
@@ -147,14 +161,14 @@ export class CacheManager {
         const significantData = {
             contributorCount: data.contributors?.length || 0,
             topContributors: (data.contributors || [])
-                .slice(0, 5)
+                .slice(0, HASH_SAMPLING.TOP_CONTRIBUTORS)
                 .map(c => `${c.name}:${c.commits}`),
             commitCount: data.commits?.length || 0,
             recentCommits: (data.commits || [])
-                .slice(0, 10)
+                .slice(0, HASH_SAMPLING.RECENT_COMMITS)
                 .map(c => c.sha || c.date || ''),
             fileCount: data.files?.length || 0,
-            sampleFiles: (data.files || []).slice(0, 20)
+            sampleFiles: (data.files || []).slice(0, HASH_SAMPLING.SAMPLE_FILES)
         };
 
         const hashInput = JSON.stringify(significantData);

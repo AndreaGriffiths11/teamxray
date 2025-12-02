@@ -141,6 +141,13 @@
           "minimum": 1,
           "maximum": 168,
           "description": "Time-to-live for cached analysis results in hours (1-168)"
+        },
+        "teamxray.cache.maxEntries": {
+          "type": "number",
+          "default": 100,
+          "minimum": 1,
+          "maximum": 1000,
+          "description": "Maximum number of cached analysis entries (1-1000)"
         }
       }
     }

@@ -8,6 +8,7 @@ import { TokenManager } from './core/token-manager';
 import { ErrorHandler } from './utils/error-handler';
 import { ResourceManager } from './utils/resource-manager';
 import { Validator } from './utils/validation';
+import { formatTimeAgo } from './utils/time-utils';
 
 // This method is called when the extension is activated
 // extension is activated the very first time the command is executed
@@ -92,7 +93,7 @@ export function activate(context: vscode.ExtensionContext) {
                     // Show cache status notification
                     if (analysis.cacheStatus?.isCached) {
                         const cachedAt = analysis.cacheStatus.cachedAt;
-                        const timeAgo = cachedAt ? getTimeAgo(cachedAt) : 'recently';
+                        const timeAgo = cachedAt ? formatTimeAgo(cachedAt) : 'recently';
                         vscode.window.showInformationMessage(
                             `📦 Analysis loaded from cache (cached ${timeAgo}). Use "Team X-Ray: Clear Analysis Cache" to force refresh.`
                         );
@@ -101,24 +102,6 @@ export function activate(context: vscode.ExtensionContext) {
             });
         }, 'analyze repository');
     });
-    
-    // Helper function to format time ago
-    function getTimeAgo(date: Date): string {
-        const now = new Date();
-        const diffMs = now.getTime() - date.getTime();
-        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-        const diffMinutes = Math.floor(diffMs / (1000 * 60));
-        
-        if (diffHours >= 24) {
-            const days = Math.floor(diffHours / 24);
-            return `${days} day${days > 1 ? 's' : ''} ago`;
-        } else if (diffHours >= 1) {
-            return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-        } else if (diffMinutes >= 1) {
-            return `${diffMinutes} minute${diffMinutes > 1 ? 's' : ''} ago`;
-        }
-        return 'just now';
-    }
 
     // Register clear cache command
     const clearCacheCommand = vscode.commands.registerCommand('teamxray.clearCache', async () => {

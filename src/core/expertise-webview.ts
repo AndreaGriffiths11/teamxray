@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { Expert } from '../types/expert';
 import { ExpertiseAnalysis } from './expertise-analyzer';
+import { formatTimeAgo } from '../utils/time-utils';
 
 export class ExpertiseWebviewProvider {
     private context: vscode.ExtensionContext;
@@ -152,31 +153,11 @@ export class ExpertiseWebviewProvider {
 
         if (analysis.cacheStatus.isCached) {
             const cachedAt = analysis.cacheStatus.cachedAt;
-            const timeInfo = cachedAt ? this.getTimeAgo(cachedAt) : '';
+            const timeInfo = cachedAt ? formatTimeAgo(cachedAt, 'short') : '';
             return `<span class="cache-badge cached" title="Analysis loaded from cache${timeInfo ? ` (${timeInfo})` : ''}">📦 Cached${timeInfo ? ` • ${timeInfo}` : ''}</span>`;
         } else {
             return `<span class="cache-badge fresh" title="Fresh analysis just performed">✨ Fresh</span>`;
         }
-    }
-
-    /**
-     * Formats time difference as human-readable string
-     */
-    private getTimeAgo(date: Date): string {
-        const now = new Date();
-        const diffMs = now.getTime() - date.getTime();
-        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-        const diffMinutes = Math.floor(diffMs / (1000 * 60));
-        
-        if (diffHours >= 24) {
-            const days = Math.floor(diffHours / 24);
-            return `${days}d ago`;
-        } else if (diffHours >= 1) {
-            return `${diffHours}h ago`;
-        } else if (diffMinutes >= 1) {
-            return `${diffMinutes}m ago`;
-        }
-        return 'just now';
     }
 
     /**
