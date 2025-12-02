@@ -143,6 +143,43 @@ export class ExpertiseWebviewProvider {
     }
 
     /**
+     * Renders the cache status indicator
+     */
+    private renderCacheStatus(analysis: ExpertiseAnalysis): string {
+        if (!analysis.cacheStatus) {
+            return '';
+        }
+
+        if (analysis.cacheStatus.isCached) {
+            const cachedAt = analysis.cacheStatus.cachedAt;
+            const timeInfo = cachedAt ? this.getTimeAgo(cachedAt) : '';
+            return `<span class="cache-badge cached" title="Analysis loaded from cache${timeInfo ? ` (${timeInfo})` : ''}">📦 Cached${timeInfo ? ` • ${timeInfo}` : ''}</span>`;
+        } else {
+            return `<span class="cache-badge fresh" title="Fresh analysis just performed">✨ Fresh</span>`;
+        }
+    }
+
+    /**
+     * Formats time difference as human-readable string
+     */
+    private getTimeAgo(date: Date): string {
+        const now = new Date();
+        const diffMs = now.getTime() - date.getTime();
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        const diffMinutes = Math.floor(diffMs / (1000 * 60));
+        
+        if (diffHours >= 24) {
+            const days = Math.floor(diffHours / 24);
+            return `${days}d ago`;
+        } else if (diffHours >= 1) {
+            return `${diffHours}h ago`;
+        } else if (diffMinutes >= 1) {
+            return `${diffMinutes}m ago`;
+        }
+        return 'just now';
+    }
+
+    /**
      * Renders management insights section
      */
     private renderManagementInsights(analysis: ExpertiseAnalysis): string {
@@ -813,6 +850,28 @@ export class ExpertiseWebviewProvider {
             color: var(--vscode-descriptionForeground);
             font-size: 16px;
             opacity: 0.8;
+        }
+
+        .cache-badge {
+            display: inline-block;
+            margin-left: 12px;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+            vertical-align: middle;
+        }
+
+        .cache-badge.cached {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(99, 102, 241, 0.2) 100%);
+            color: var(--vscode-textLink-foreground);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+
+        .cache-badge.fresh {
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.2) 0%, rgba(16, 185, 129, 0.2) 100%);
+            color: #22c55e;
+            border: 1px solid rgba(34, 197, 94, 0.3);
         }
 
         .section {
@@ -1777,6 +1836,7 @@ export class ExpertiseWebviewProvider {
         <h1>✨ Team Expertise Analysis</h1>
         <div class="metadata">
             📊 ${analysis.repository} • Generated ${this.safeFormatDate(analysis.generatedAt)} • ${analysis.totalFiles} files • ${analysis.totalExperts} experts
+            ${this.renderCacheStatus(analysis)}
         </div>
     </div>
 

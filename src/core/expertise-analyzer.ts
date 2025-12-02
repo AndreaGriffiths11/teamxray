@@ -13,12 +13,20 @@ import {
 } from '../types/expert';
 import { ErrorHandler } from '../utils/error-handler';
 import { ResourceManager } from '../utils/resource-manager';
+import { CacheManager } from '../utils/cache-manager';
 
 export interface ExpertiseAnalysis extends AnalysisResult {
     teamDynamics?: TeamDynamics;
     challengeMatching?: ChallengeMatching;
     managementInsights?: ManagementInsight[];
     teamHealthMetrics?: TeamHealthMetrics;
+    cacheStatus?: CacheStatus;
+}
+
+export interface CacheStatus {
+    isCached: boolean;
+    cachedAt?: Date;
+    expiresAt?: Date;
 }
 
 export interface TeamDynamics {
@@ -53,6 +61,7 @@ export class ExpertiseAnalyzer {
     private copilotMCPService: CopilotMCPService;
     private tokenManager: TokenManager;
     private resourceManager: ResourceManager;
+    private cacheManager: CacheManager;
     private gitService: GitService | null = null;
 
     // Limits for different repository sizes
@@ -69,17 +78,19 @@ export class ExpertiseAnalyzer {
         this.outputChannel = vscode.window.createOutputChannel('Team Expertise Analysis');
         this.copilotMCPService = new CopilotMCPService(this.outputChannel);
         this.resourceManager = ResourceManager.getInstance();
+        this.cacheManager = CacheManager.getInstance();
         
         // Initialize utilities
         ErrorHandler.initialize(this.outputChannel);
         this.resourceManager.initialize(this.outputChannel);
+        this.cacheManager.initialize(context, this.outputChannel);
     }
 
     /**
      * Analyzes repository expertise using local git analysis and AI analysis
-     * Now with smart data chunking for large repositories
+     * Now with smart data chunking for large repositories and intelligent caching
      */
-    async analyzeRepository(): Promise<ExpertiseAnalysis | null> {
+    async analyzeRepository(forceRefresh: boolean = false): Promise<ExpertiseAnalysis | null> {
         return await ErrorHandler.withErrorHandling(async () => {
             this.outputChannel.show();
             this.outputChannel.appendLine('🚀 Starting repository expertise analysis...');
@@ -119,7 +130,31 @@ export class ExpertiseAnalyzer {
                 );
             }
 
-            // Step 5: Perform AI analysis with chunking for large repos
+            // Step 5: Check cache for existing analysis
+            const dataHash = this.cacheManager.hashRepositoryData(repositoryData);
+            const cacheKey = this.cacheManager.generateCacheKey(repositoryName, dataHash);
+
+            if (!forceRefresh && this.cacheManager.isEnabled()) {
+                const cachedResult = this.cacheManager.get<ExpertiseAnalysis>(cacheKey);
+                if (cachedResult.isCached && cachedResult.data) {
+                    const cachedAt = this.cacheManager.getEntryTimestamp(cacheKey);
+                    this.outputChannel.appendLine(`📦 Using cached analysis from ${cachedAt?.toLocaleString() || 'cache'}`);
+                    
+                    // Add cache status to the result
+                    const cachedAnalysis: ExpertiseAnalysis = {
+                        ...cachedResult.data,
+                        cacheStatus: {
+                            isCached: true,
+                            cachedAt: cachedAt || undefined
+                        }
+                    };
+                    
+                    return cachedAnalysis;
+                }
+            }
+
+            // Step 6: Perform AI analysis with chunking for large repos
+            this.outputChannel.appendLine('🤖 Performing fresh AI analysis...');
             const analysis = await this.performSmartAIAnalysis(repositoryData, repoStats);
             if (!analysis) {
                 throw ErrorHandler.createError(
@@ -129,6 +164,17 @@ export class ExpertiseAnalyzer {
                     true
                 );
             }
+
+            // Step 7: Cache the analysis result
+            if (this.cacheManager.isEnabled()) {
+                await this.cacheManager.set(cacheKey, analysis, dataHash);
+                this.outputChannel.appendLine('💾 Analysis cached for future use');
+            }
+
+            // Add cache status to indicate fresh analysis
+            analysis.cacheStatus = {
+                isCached: false
+            };
 
             this.outputChannel.appendLine('✅ Analysis completed successfully!');
             return analysis;
@@ -1153,5 +1199,20 @@ Respond with JSON only (NO markdown, NO explanations):
                 lastCommit: expert.lastCommit ? new Date(expert.lastCommit) : new Date()
             })) || []
         } as ExpertiseAnalysis;
+    }
+
+    /**
+     * Clears the analysis cache
+     */
+    async clearCache(): Promise<void> {
+        await this.cacheManager.clearAll();
+        this.outputChannel.appendLine('🗑️ Analysis cache cleared');
+    }
+
+    /**
+     * Gets cache information for display
+     */
+    getCacheInfo(): { enabled: boolean; size: number; hitRate: string; ttlHours: number } {
+        return this.cacheManager.getCacheInfo();
     }
 }

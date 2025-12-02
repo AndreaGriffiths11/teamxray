@@ -88,9 +88,59 @@ export function activate(context: vscode.ExtensionContext) {
                     treeProvider.refresh(analysis);
                     progress.report({ increment: 100, message: "Complete!" });
                     webviewProvider.showAnalysisResults(analysis);
+                    
+                    // Show cache status notification
+                    if (analysis.cacheStatus?.isCached) {
+                        const cachedAt = analysis.cacheStatus.cachedAt;
+                        const timeAgo = cachedAt ? getTimeAgo(cachedAt) : 'recently';
+                        vscode.window.showInformationMessage(
+                            `📦 Analysis loaded from cache (cached ${timeAgo}). Use "Team X-Ray: Clear Analysis Cache" to force refresh.`
+                        );
+                    }
                 }
             });
         }, 'analyze repository');
+    });
+    
+    // Helper function to format time ago
+    function getTimeAgo(date: Date): string {
+        const now = new Date();
+        const diffMs = now.getTime() - date.getTime();
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        const diffMinutes = Math.floor(diffMs / (1000 * 60));
+        
+        if (diffHours >= 24) {
+            const days = Math.floor(diffHours / 24);
+            return `${days} day${days > 1 ? 's' : ''} ago`;
+        } else if (diffHours >= 1) {
+            return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+        } else if (diffMinutes >= 1) {
+            return `${diffMinutes} minute${diffMinutes > 1 ? 's' : ''} ago`;
+        }
+        return 'just now';
+    }
+
+    // Register clear cache command
+    const clearCacheCommand = vscode.commands.registerCommand('teamxray.clearCache', async () => {
+        await ErrorHandler.withErrorHandling(async () => {
+            const cacheInfo = analyzer.getCacheInfo();
+            
+            if (cacheInfo.size === 0) {
+                vscode.window.showInformationMessage('Cache is already empty.');
+                return;
+            }
+            
+            const choice = await vscode.window.showWarningMessage(
+                `Clear ${cacheInfo.size} cached analysis result${cacheInfo.size > 1 ? 's' : ''}?`,
+                'Clear Cache',
+                'Cancel'
+            );
+            
+            if (choice === 'Clear Cache') {
+                await analyzer.clearCache();
+                vscode.window.showInformationMessage('✅ Analysis cache cleared successfully.');
+            }
+        }, 'clear cache');
     });
 
     // Register find expert for file command
@@ -310,6 +360,7 @@ Specializations: ${(expert.specializations || []).join(', ')}`;
         showOverviewCommand,
         openFileFromTreeCommand,
         showExpertDetailsCommand,
+        clearCacheCommand,
         statusBarItem
     );
 
