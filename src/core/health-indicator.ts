@@ -35,6 +35,16 @@ export class HealthIndicator {
     private currentScore: HealthScore | null = null;
     private outputChannel: vscode.OutputChannel;
 
+    // Score calculation constants
+    private static readonly SINGLE_POINT_OF_FAILURE_PENALTY = 15;
+    private static readonly OVERLOADED_MEMBER_PENALTY = 10;
+    private static readonly UNDERUTILIZED_MEMBER_PENALTY = 5;
+    private static readonly SILOED_MEMBER_PENALTY = 10;
+    // Mentoring is weighted higher than collaborative because mentors actively share knowledge
+    private static readonly MENTORING_WEIGHT_MULTIPLIER = 1.5;
+    private static readonly TEAM_SIZE_BONUS_PER_MEMBER = 2;
+    private static readonly MAX_TEAM_SIZE_BONUS = 20;
+
     constructor(outputChannel: vscode.OutputChannel) {
         this.outputChannel = outputChannel;
         this.statusBarItem = vscode.window.createStatusBarItem(
@@ -129,12 +139,14 @@ export class HealthIndicator {
             const { riskScore, singlePointsOfFailure } = analysis.teamHealthMetrics.knowledgeDistribution;
             
             // Risk score is 0-100 where higher = more risk, so we invert it
+            // Also factor in single points of failure for a combined score
             if (typeof riskScore === 'number') {
-                return Math.max(0, 100 - riskScore);
+                const spofPenalty = singlePointsOfFailure.length * HealthIndicator.SINGLE_POINT_OF_FAILURE_PENALTY;
+                return Math.max(0, 100 - riskScore - spofPenalty);
             }
 
-            // Penalize for single points of failure
-            const spofPenalty = singlePointsOfFailure.length * 15;
+            // Fallback: Penalize only for single points of failure
+            const spofPenalty = singlePointsOfFailure.length * HealthIndicator.SINGLE_POINT_OF_FAILURE_PENALTY;
             return Math.max(0, 100 - spofPenalty);
         }
 
@@ -156,7 +168,10 @@ export class HealthIndicator {
         const distributionScore = Math.round((1 - Math.abs(gini)) * 100);
         
         // Bonus for having multiple experts
-        const teamSizeBonus = Math.min(20, experts.length * 2);
+        const teamSizeBonus = Math.min(
+            HealthIndicator.MAX_TEAM_SIZE_BONUS,
+            experts.length * HealthIndicator.TEAM_SIZE_BONUS_PER_MEMBER
+        );
         
         return Math.min(100, distributionScore + teamSizeBonus);
     }
@@ -198,7 +213,9 @@ export class HealthIndicator {
         const activityPercentage = (activeCount / experts.length) * 100;
         
         // Penalize for workload imbalances
-        const workloadPenalty = (overloadedCount * 10) + (underutilizedCount * 5);
+        const workloadPenalty = 
+            (overloadedCount * HealthIndicator.OVERLOADED_MEMBER_PENALTY) + 
+            (underutilizedCount * HealthIndicator.UNDERUTILIZED_MEMBER_PENALTY);
         
         return Math.max(0, Math.min(100, Math.round(activityPercentage - workloadPenalty)));
     }
@@ -209,6 +226,7 @@ export class HealthIndicator {
      */
     private calculateCollaborationScore(analysis: ExpertiseAnalysis): number {
         // Use team health metrics if available
+        // Note: crossTeamWork, codeReviewParticipation, and knowledgeSharing are expected to be 0-100 percentages
         if (analysis.teamHealthMetrics?.collaborationMetrics) {
             const metrics = analysis.teamHealthMetrics.collaborationMetrics;
             const avgScore = (
@@ -218,7 +236,7 @@ export class HealthIndicator {
             ) / 3;
             
             // Penalize for siloed members
-            const siloPenalty = metrics.siloedMembers.length * 10;
+            const siloPenalty = metrics.siloedMembers.length * HealthIndicator.SILOED_MEMBER_PENALTY;
             
             return Math.max(0, Math.min(100, Math.round(avgScore - siloPenalty)));
         }
@@ -241,7 +259,10 @@ export class HealthIndicator {
         }
 
         // Score based on collaborative/mentoring ratio
-        const collaborationRatio = (collaborativeCount + mentoringCount * 1.5) / experts.length;
+        // Mentoring is weighted higher because mentors actively share knowledge
+        const collaborationRatio = (
+            collaborativeCount + mentoringCount * HealthIndicator.MENTORING_WEIGHT_MULTIPLIER
+        ) / experts.length;
         return Math.min(100, Math.round(collaborationRatio * 100));
     }
 
