@@ -82,6 +82,10 @@
       {
         "command": "teamxray.analyzeFile",
         "title": "Team X-Ray: Analyze This File"
+      },
+      {
+        "command": "teamxray.showHealthDetails",
+        "title": "Team X-Ray: Show Team Health Details"
       }
     ],
     "menus": {

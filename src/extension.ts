@@ -5,6 +5,7 @@ import { ExpertiseWebviewProvider } from './core/expertise-webview';
 import { ExpertiseTreeProvider } from './core/expertise-tree-provider';
 import { CopilotMCPService } from './core/copilot-mcp-service';
 import { TokenManager } from './core/token-manager';
+import { HealthIndicator } from './core/health-indicator';
 import { ErrorHandler } from './utils/error-handler';
 import { ResourceManager } from './utils/resource-manager';
 import { Validator } from './utils/validation';
@@ -45,6 +46,7 @@ export function activate(context: vscode.ExtensionContext) {
     const analyzer = new ExpertiseAnalyzer(context, tokenManager);
     const webviewProvider = new ExpertiseWebviewProvider(context);
     const treeProvider = new ExpertiseTreeProvider();
+    const healthIndicator = new HealthIndicator(outputChannel);
 
     // Register tree data provider
     vscode.window.registerTreeDataProvider('teamxray.expertiseView', treeProvider);
@@ -86,6 +88,7 @@ export function activate(context: vscode.ExtensionContext) {
                     progress.report({ increment: 50, message: "Generating report..." });
                     await analyzer.saveAnalysis(analysis);
                     treeProvider.refresh(analysis);
+                    healthIndicator.update(analysis);
                     progress.report({ increment: 100, message: "Complete!" });
                     webviewProvider.showAnalysisResults(analysis);
                 }
@@ -303,6 +306,11 @@ Specializations: ${(expert.specializations || []).join(', ')}`;
     statusBarItem.tooltip = 'Show team expertise overview';
     statusBarItem.show();
 
+    // Register health details command
+    const showHealthDetailsCommand = vscode.commands.registerCommand('teamxray.showHealthDetails', async () => {
+        await healthIndicator.showDetailedBreakdown();
+    });
+
     // Add all commands to subscriptions 
     context.subscriptions.push(
         analyzeRepositoryCommand,
@@ -310,13 +318,16 @@ Specializations: ${(expert.specializations || []).join(', ')}`;
         showOverviewCommand,
         openFileFromTreeCommand,
         showExpertDetailsCommand,
-        statusBarItem
+        showHealthDetailsCommand,
+        statusBarItem,
+        healthIndicator
     );
 
     // Check if we have a previous analysis and update the tree view
     const lastAnalysis = analyzer.getLastAnalysis();
     if (lastAnalysis) {
         treeProvider.refresh(lastAnalysis);
+        healthIndicator.update(lastAnalysis);
         vscode.commands.executeCommand('setContext', 'teamxray.hasAnalysis', true);
     }
 
