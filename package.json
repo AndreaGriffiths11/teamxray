@@ -124,7 +124,38 @@
       "properties": {
         "teamxray.githubToken": {
           "type": "string",
-          "description": "GitHub token for MCP access and API calls"
+          "description": "GitHub token for API calls (not required when using Copilot)"
+        },
+        "teamxray.aiProvider": {
+          "type": "string",
+          "enum": [
+            "copilot",
+            "byok-openai",
+            "byok-anthropic",
+            "byok-azure",
+            "github-models"
+          ],
+          "default": "copilot",
+          "enumDescriptions": [
+            "GitHub Copilot (auto-detects, zero config)",
+            "Bring Your Own Key — OpenAI-compatible API",
+            "Bring Your Own Key — Anthropic API",
+            "Bring Your Own Key — Azure OpenAI",
+            "GitHub Models API (requires GitHub token)"
+          ],
+          "description": "AI provider for team expertise analysis"
+        },
+        "teamxray.byokBaseUrl": {
+          "type": "string",
+          "description": "Base URL for BYOK provider (e.g. https://api.openai.com/v1)"
+        },
+        "teamxray.byokApiKey": {
+          "type": "string",
+          "description": "API key for BYOK provider"
+        },
+        "teamxray.byokModel": {
+          "type": "string",
+          "description": "Model name for BYOK provider (e.g. gpt-4o, claude-sonnet-4-5-20250929)"
         }
       }
     }
@@ -148,7 +179,9 @@
     "webpack-cli": "^6.0.1"
   },
   "dependencies": {
+    "@github/copilot-sdk": "^0.1.30",
     "axios": "^1.7.0",
-    "dotenv": "^16.5.0"
+    "dotenv": "^16.5.0",
+    "zod": "^4.3.6"
   }
 }

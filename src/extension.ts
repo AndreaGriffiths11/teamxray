@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { ExpertiseAnalyzer } from './core/expertise-analyzer';
+import { CopilotService } from './core/copilot-service';
 import { Expert } from './types/expert';
 import { ExpertiseWebviewProvider } from './core/expertise-webview';
 import { ExpertiseTreeProvider } from './core/expertise-tree-provider';
@@ -8,6 +9,9 @@ import { TokenManager } from './core/token-manager';
 import { ErrorHandler } from './utils/error-handler';
 import { ResourceManager } from './utils/resource-manager';
 import { Validator } from './utils/validation';
+
+// Module-level reference for cleanup in deactivate()
+let copilotService: CopilotService | undefined;
 
 // This method is called when the extension is activated
 // extension is activated the very first time the command is executed
@@ -41,8 +45,20 @@ export function activate(context: vscode.ExtensionContext) {
         })
     );
 
-    // Initialize core components with token manager
-    const analyzer = new ExpertiseAnalyzer(context, tokenManager);
+    // Initialize Copilot SDK (non-blocking — falls back gracefully)
+    copilotService = new CopilotService(outputChannel);
+    copilotService.initialize().then(() => {
+        if (copilotService?.isAvailable()) {
+            outputChannel.appendLine('Copilot SDK connected — AI analysis will use Copilot');
+        } else {
+            outputChannel.appendLine('Copilot SDK not available — will use GitHub Models API or local analysis');
+        }
+    }).catch(() => {
+        outputChannel.appendLine('Copilot SDK initialization failed — falling back');
+    });
+
+    // Initialize core components with token manager and optional Copilot service
+    const analyzer = new ExpertiseAnalyzer(context, tokenManager, copilotService);
     const webviewProvider = new ExpertiseWebviewProvider(context);
     const treeProvider = new ExpertiseTreeProvider();
 
@@ -61,12 +77,17 @@ export function activate(context: vscode.ExtensionContext) {
     };
 
     /**
-     * Ensures a GitHub token is available, showing an error message if not
+     * Ensures AI analysis is possible — either via Copilot SDK or GitHub token.
      */
-    async function ensureGitHubToken(): Promise<boolean> {
+    async function ensureAIAccess(): Promise<boolean> {
+        if (copilotService?.isAvailable()) {
+            return true; // Copilot handles its own auth
+        }
         const token = await tokenManager.getToken();
         if (!token) {
-            vscode.window.showErrorMessage('GitHub token is required. Please set your token using "Team X-Ray: Set GitHub Token" command.');
+            vscode.window.showErrorMessage(
+                'No AI provider available. Install the Copilot CLI, or set a GitHub token via "Team X-Ray: Set GitHub Token".'
+            );
             return false;
         }
         return true;
@@ -75,7 +96,7 @@ export function activate(context: vscode.ExtensionContext) {
     // Register main analysis command
     const analyzeRepositoryCommand = vscode.commands.registerCommand('teamxray.analyzeRepository', async () => {
         await ErrorHandler.withErrorHandling(async () => {
-            if (!await ensureGitHubToken()) {
+            if (!await ensureAIAccess()) {
                 return;
             }
             
@@ -96,9 +117,8 @@ export function activate(context: vscode.ExtensionContext) {
     // Register find expert for file command
     const findExpertCommand = vscode.commands.registerCommand('teamxray.findExpertForFile', async (uri?: vscode.Uri) => {
         await ErrorHandler.withErrorHandling(async () => {
-            const token = await tokenManager.getToken();
-            if (!token) {
-                throw ErrorHandler.createTokenError('GitHub token is required to find file experts');
+            if (!await ensureAIAccess()) {
+                return;
             }
             
             let filePath: string;
@@ -351,9 +371,15 @@ Specializations: ${(expert.specializations || []).join(', ')}`;
 }
 
 // This method is called when your extension is deactivated
-export function deactivate() {
-    console.log('MCP Team X-Ray extension deactivated');
-    
+export async function deactivate() {
+    console.log('Team X-Ray extension deactivated');
+
+    // Dispose Copilot SDK client
+    if (copilotService) {
+        await copilotService.dispose();
+        copilotService = undefined;
+    }
+
     // Cleanup resources
     const resourceManager = ResourceManager.getInstance();
     resourceManager.cleanup();
