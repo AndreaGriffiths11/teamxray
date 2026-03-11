@@ -157,10 +157,13 @@ export class CopilotService {
             });
 
             const prompt = this.buildAnalysisPrompt(data.repository, repoStats);
+            this.outputChannel.appendLine(`[CopilotService] Sending prompt (${prompt.length} chars) to session ${session.sessionId}...`);
+            this.outputChannel.appendLine(`[CopilotService] Waiting for session.idle (timeout: 180s)...`);
             const response = await session.sendAndWait(
                 { prompt },
                 180_000 // 3 minute timeout for large repos
             );
+            this.outputChannel.appendLine(`[CopilotService] Got response: ${response ? 'yes' : 'none'}`);
 
             if (!response) {
                 throw new Error('No response from Copilot agent');
@@ -224,14 +227,15 @@ export class CopilotService {
 
         const providerConfig = await this.getProviderConfig();
 
+        this.outputChannel.appendLine(`[CopilotService] Creating session with ${tools.length} custom tools`);
+
         const sessionConfig: SessionConfig = {
             tools,
             onPermissionRequest: (await loadSdk()).approveAll,
             systemMessage: {
-                mode: 'replace' as const,
+                mode: 'append' as const,
                 content: SYSTEM_MESSAGE,
             },
-            // Let the agent use both custom and built-in tools — no restrictions
             // Disable infinite sessions — single-shot analysis
             infiniteSessions: { enabled: false },
         };
@@ -246,7 +250,10 @@ export class CopilotService {
             sessionConfig.model = model;
         }
 
-        return this.client.createSession(sessionConfig);
+        this.outputChannel.appendLine(`[CopilotService] Calling client.createSession()...`);
+        const session = await this.client.createSession(sessionConfig);
+        this.outputChannel.appendLine(`[CopilotService] Session created: ${session.sessionId}`);
+        return session;
     }
 
     // ── BYOK provider config ──────────────────────────────────────────
