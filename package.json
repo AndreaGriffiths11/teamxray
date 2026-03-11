@@ -180,13 +180,11 @@
     "ts-loader": "^9.5.2",
     "typescript": "^5.8.3",
     "vitest": "^2.0.0",
-    "webpack": "^5.99.7",
+    "webpack": "^5.105.0",
     "webpack-cli": "^6.0.1"
   },
   "dependencies": {
-    "@github/copilot-sdk": "^0.1.30",
-    "axios": "^1.7.0",
-    "dotenv": "^16.5.0",
-    "zod": "^4.3.6"
+    "axios": "^1.13.5",
+    "dotenv": "^16.5.0"
   }
 }
