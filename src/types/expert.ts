@@ -12,6 +12,7 @@ export interface Expert {
     workloadIndicator?: 'balanced' | 'overloaded' | 'underutilized';
     collaborationStyle?: 'independent' | 'collaborative' | 'mentoring';
     riskFactors?: string[];
+    isBot?: boolean;
 }
 
 export interface FileExpertise {

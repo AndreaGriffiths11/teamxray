@@ -465,6 +465,7 @@ export class ExpertiseWebviewProvider {
         .expert-card{background:#12121a;border:1px solid #1e293b;border-radius:8px;padding:20px;transition:box-shadow 0.2s}
         .expert-card.high{border-left:3px solid #06b6d4;box-shadow:inset 4px 0 12px -4px rgba(6,182,212,0.15)}
         .expert-card.low{opacity:0.6}
+        .expert-card.bot{opacity:0.65}
         .expert-name{font-weight:700;font-size:1.15em;color:#e2e8f0;margin-bottom:2px}
         .expert-email{font-size:0.85em;color:#64748b;margin-bottom:12px}
         .role-badge{display:inline-block;font-size:0.7em;text-transform:uppercase;letter-spacing:0.08em;color:#8b5cf6;border:1px solid rgba(139,92,246,0.3);border-radius:4px;padding:2px 8px;margin-left:8px;vertical-align:middle}
@@ -504,7 +505,7 @@ export class ExpertiseWebviewProvider {
         <div class="stats">
             <span class="pill">Generated <strong>${this.safeFormatDate(analysis.generatedAt)}</strong></span>
             <span class="pill"><strong>${analysis.totalFiles}</strong> files scanned</span>
-            <span class="pill"><strong>${analysis.totalExperts}</strong> experts identified</span>
+            <span class="pill"><strong>${analysis.expertProfiles.filter((e: any) => !e.isBot).length}</strong> humans · <strong>${analysis.expertProfiles.filter((e: any) => e.isBot).length}</strong> agents</span>
         </div>
     </div>
 
@@ -512,10 +513,10 @@ export class ExpertiseWebviewProvider {
         <h2><span class="accent">▸</span> Expert Profiles</h2>
         <div class="expert-grid">
             ${analysis.expertProfiles.map((expert: any) => {
-                const barColor = expert.expertise >= 20 ? '#06b6d4' : '#374151';
-                const cardClass = expert.expertise >= 60 ? 'high' : expert.expertise < 20 ? 'low' : '';
+                const barColor = expert.isBot ? '#374151' : (expert.expertise >= 20 ? '#06b6d4' : '#374151');
+                const cardClass = expert.isBot ? 'bot' : (expert.expertise >= 60 ? 'high' : expert.expertise < 20 ? 'low' : '');
                 return `<div class="expert-card ${cardClass}">
-                    <div class="expert-name">${expert.name}${expert.teamRole ? `<span class="role-badge">${expert.teamRole}</span>` : ''}</div>
+                    <div class="expert-name">${expert.isBot ? '🤖 ' : ''}${expert.name}${expert.teamRole ? `<span class="role-badge">${expert.teamRole}</span>` : ''}</div>
                     <div class="expert-email">${expert.email}</div>
                     <div class="bar-chart"><svg viewBox="0 0 400 24"><rect width="400" height="24" fill="#1e293b"/><rect width="${expert.expertise * 4}" height="24" fill="${barColor}"/><text x="${Math.max(expert.expertise * 4 - 8, 30)}" y="17" text-anchor="end" fill="#fff" font-size="12" font-weight="bold" font-family="sans-serif">${expert.expertise}%</text></svg></div>
                     <div class="expert-stats">
@@ -713,6 +714,7 @@ export class ExpertiseWebviewProvider {
         .expert-card{background:#12121a;border:1px solid #1e293b;border-radius:8px;padding:20px;transition:box-shadow 0.2s,border-color 0.2s;display:flex;flex-direction:column;position:relative;overflow:hidden}
         .expert-card.high{border-left:3px solid #06b6d4;box-shadow:inset 4px 0 12px -4px rgba(6,182,212,0.15)}
         .expert-card.low{opacity:0.6}
+        .expert-card.bot{opacity:0.65}
         .expert-card:hover{border-color:#1e293b}
 
         .expert-header{display:flex;align-items:center;margin-bottom:12px}
@@ -855,7 +857,7 @@ export class ExpertiseWebviewProvider {
         <div class="stats">
             <span class="pill">Generated <strong>${this.safeFormatDate(analysis.generatedAt)}</strong></span>
             <span class="pill"><strong>${analysis.totalFiles}</strong> files scanned</span>
-            <span class="pill"><strong>${analysis.totalExperts}</strong> experts identified</span>
+            <span class="pill"><strong>${analysis.expertProfiles.filter((e: any) => !e.isBot).length}</strong> humans · <strong>${analysis.expertProfiles.filter((e: any) => e.isBot).length}</strong> agents</span>
             <span class="pill"><strong>${analysis.insights.length}</strong> insights</span>
         </div>
     </div>
@@ -864,8 +866,8 @@ export class ExpertiseWebviewProvider {
         <h2><span class="accent">▸</span> Expert Profiles</h2>
         <div class="experts-grid">
             ${analysis.expertProfiles.map(expert => {
-                const barColor = expert.expertise >= 20 ? '#06b6d4' : '#374151';
-                const cardClass = expert.expertise >= 60 ? 'high' : expert.expertise < 20 ? 'low' : '';
+                const barColor = expert.isBot ? '#374151' : (expert.expertise >= 20 ? '#06b6d4' : '#374151');
+                const cardClass = expert.isBot ? 'bot' : (expert.expertise >= 60 ? 'high' : expert.expertise < 20 ? 'low' : '');
                 return `
                 <div class="expert-card ${cardClass}">
                     <div class="expert-header">
@@ -880,7 +882,7 @@ export class ExpertiseWebviewProvider {
                             </div>
                         </div>
                         <div class="expert-info">
-                            <h3>${expert.name}${expert.teamRole ? `<span class="role-badge">${expert.teamRole}</span>` : ''}</h3>
+                            <h3>${expert.isBot ? '🤖 ' : ''}${expert.name}${expert.teamRole ? `<span class="role-badge">${expert.teamRole}</span>` : ''}</h3>
                             <div class="expert-email">${expert.email}</div>
                         </div>
                     </div>

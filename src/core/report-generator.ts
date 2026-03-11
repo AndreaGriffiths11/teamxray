@@ -9,7 +9,6 @@ export class ReportGenerator {
         
         const priorityDots = (p: string) => p === 'HIGH' ? '●●●' : p === 'MEDIUM' ? '●●○' : '●○○';
         const categoryColor = (c: string) => ({ RISK: '#ef4444', OPPORTUNITY: '#10b981', EFFICIENCY: '#3b82f6', GROWTH: '#f59e0b' }[c] || '#64748b');
-        const isBot = (name: string) => /bot|dependabot|renovate|greenkeeper/i.test(name);
 
         return `<!DOCTYPE html>
 <html lang="en">
@@ -69,6 +68,7 @@ export class ReportGenerator {
         }
         .expert-card.glow{border-color:rgba(6,182,212,0.3);box-shadow:0 0 20px rgba(6,182,212,0.08)}
         .expert-card.muted-card{opacity:0.6}
+        .expert-card.bot{opacity:0.65}
         .expert-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px}
         .expert-name{font-size:1.25em;font-weight:700;color:var(--text)}
         .expert-email{font-size:0.8em;color:var(--muted);margin-top:2px}
@@ -153,7 +153,7 @@ export class ReportGenerator {
             <div class="repo"><code class="mono">${analysis.repository}</code></div>
             <div>
                 <span class="pill">${analysis.totalFiles} files scanned</span>
-                <span class="pill">${analysis.expertProfiles.length} experts identified</span>
+                <span class="pill">${analysis.expertProfiles.filter(e => !e.isBot).length} humans · ${analysis.expertProfiles.filter(e => e.isBot).length} agents</span>
             </div>
         </div>
 
@@ -161,14 +161,14 @@ export class ReportGenerator {
             <div class="section-title">Expert Profiles</div>
             <div class="expert-grid">
                 ${analysis.expertProfiles.map(expert => {
-                    const bot = isBot(expert.name);
+                    const bot = expert.isBot || false;
                     const barColor = bot ? '#475569' : 'var(--accent)';
-                    const glowClass = expert.expertise >= 70 ? ' glow' : expert.expertise < 20 ? ' muted-card' : '';
+                    const glowClass = bot ? ' bot' : (expert.expertise >= 70 ? ' glow' : expert.expertise < 20 ? ' muted-card' : '');
                     return `
                     <div class="expert-card${glowClass}">
                         <div class="expert-top">
                             <div>
-                                <div class="expert-name">${expert.name}</div>
+                                <div class="expert-name">${expert.isBot ? '🤖 ' : ''}${expert.name}</div>
                                 <div class="expert-email mono">${expert.email}</div>
                             </div>
                             ${expert.teamRole ? `<span class="role-badge">${expert.teamRole}</span>` : ''}

@@ -16,6 +16,24 @@ import {
 import { ErrorHandler } from '../utils/error-handler';
 import { ResourceManager } from '../utils/resource-manager';
 
+function detectBot(name: string, email: string): boolean {
+    const lowerName = name.toLowerCase();
+    const lowerEmail = email.toLowerCase();
+    if (lowerEmail.includes('[bot]@') ||
+        (lowerEmail.includes('noreply@github.com') && lowerName.includes('[bot]')) ||
+        (/^\d+\+(dependabot|copilot|codex|renovate|github-actions)\[bot\]@users\.noreply\.github\.com$/i).test(lowerEmail) ||
+        (lowerEmail.includes('@users.noreply.github.com') && lowerName.includes('[bot]'))) {
+        return true;
+    }
+    if (lowerName.endsWith('[bot]') || lowerName === 'dependabot' || lowerName === 'renovate' || lowerName === 'github-actions') {
+        return true;
+    }
+    if (lowerEmail.includes('noreply@anthropic.com') || lowerEmail.includes('bot@substrate.run') || lowerEmail.includes('claude@users.noreply.github.com')) {
+        return true;
+    }
+    return false;
+}
+
 export interface ExpertiseAnalysis extends AnalysisResult {
     teamDynamics?: TeamDynamics;
     challengeMatching?: ChallengeMatching;
@@ -879,7 +897,8 @@ Respond with JSON only (NO markdown, NO explanations):
                     communicationStyle: 'Inferred from commit patterns',
                     teamRole: contributor.commits > 10 ? 'Regular contributor' : 'Occasional contributor',
                     hiddenStrengths: ['Code review', 'Documentation'],
-                    idealChallenges: ['Bug fixes', 'Feature development']
+                    idealChallenges: ['Bug fixes', 'Feature development'],
+                    isBot: detectBot(contributor.name, contributor.email)
                 }))
                 .sort((a: any, b: any) => b.contributions - a.contributions)
                 .slice(0, 5);
@@ -985,7 +1004,8 @@ Respond with JSON only (NO markdown, NO explanations):
                     idealChallenges: Array.isArray(expert.idealChallenges) ? expert.idealChallenges : undefined,
                     workloadIndicator: expert.workloadIndicator || undefined,
                     collaborationStyle: expert.collaborationStyle || undefined,
-                    riskFactors: Array.isArray(expert.riskFactors) ? expert.riskFactors : undefined
+                    riskFactors: Array.isArray(expert.riskFactors) ? expert.riskFactors : undefined,
+                    isBot: detectBot(expert.name || '', expert.email || '')
                 };
             });
 
@@ -1071,7 +1091,8 @@ Respond with JSON only (NO markdown, NO explanations):
             communicationStyle: 'Analysis unavailable - local data only',
             teamRole: 'Team member',
             hiddenStrengths: ['Code contribution'],
-            idealChallenges: ['General development tasks']
+            idealChallenges: ['General development tasks'],
+            isBot: detectBot(contributor.name || '', contributor.email || '')
         }));
 
         const insights = [
