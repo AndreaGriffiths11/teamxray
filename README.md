@@ -1,86 +1,130 @@
-# Team X-Ray VS Code Extension
+# Team X-Ray
 
 > *"Feeling like a stranger on my own team, surrounded by brilliant minds whose talents hide in code and commits."*
 
-Transform GitHub Copilot into team X-ray vision. Discover the humans behind your codebase, reveal hidden expertise, and understand how your teammates collaborate.
+Transform your repository into a team expertise map. Discover who knows what, reveal hidden collaboration patterns, and get AI-powered management insights — all from your git history.
 
 [![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/AndreaGriffiths.teamxray?color=blue&label=Marketplace)](https://marketplace.visualstudio.com/items?itemName=AndreaGriffiths.teamxray)
 
-## What's New in v1.0.5
-
-- 🎨 Redesigned reports with modern UI
-- ⚡ Improved startup performance  
-- 🐛 Bug fixes
-
-See [CHANGELOG](CHANGELOG.md) for full history.
-
 ## Features
 
-- **🔍 File Expert Discovery** – Right-click any file to find who knows it best
-- **🧠 Team Expertise Overview** – AI-powered analysis of communication styles and collaboration patterns  
-- **🎯 Smart Challenge Matching** – Discover who thrives on different types of problems
-- **⚡ MCP Integration** – Uses GitHub's Model Context Protocol for deep repository analysis (optional, falls back to local Git)
-- **🎨 Modern UI** – Beautiful HTML reports with expert cards, management insights, and AI recommendations
+- **🔍 File Expert Discovery** — Right-click any file to find who knows it best
+- **🧠 Team Expertise Analysis** — AI-powered profiles with communication styles, specializations, and collaboration patterns
+- **📊 Management Insights** — Actionable recommendations: bus factor risks, growth opportunities, efficiency gaps
+- **🤖 GitHub Copilot SDK Integration** — Uses the Copilot SDK with custom tools for deep, context-aware analysis
+- **📄 Dark-themed Reports** — Exportable HTML reports with SVG charts and an X-Ray visual identity
+- **⚡ Smart Fallback Chain** — Copilot SDK → BYOK (OpenAI/Anthropic/Azure) → GitHub Models API → Local-only analysis
 
-![Team X-Ray Demo](demo.gif)
+## How It Works
+
+Team X-Ray reads your git history — commits, contributors, file ownership — and feeds it to an AI agent through custom tools. The agent calls back into your repo data to build expertise profiles, identify risks, and generate management-ready insights.
+
+```
+Git History → Data Gathering → AI Agent (Copilot SDK) → Expert Profiles + Insights
+                                    ↕
+                              5 Custom Tools
+                         (contributors, commits,
+                          file experts, stats,
+                          collaboration patterns)
+```
+
+### AI Provider Fallback
+
+| Priority | Provider | Requirements |
+|----------|----------|-------------|
+| 1 | **GitHub Copilot SDK** | Copilot CLI installed + authenticated |
+| 2 | **BYOK** | Your own API key (OpenAI, Anthropic, or Azure) |
+| 3 | **GitHub Models API** | GitHub token with models access |
+| 4 | **Local-only** | No AI — git stats only |
 
 ## Installation
 
 **From Marketplace:**
 
-```bash
+```
 ext install AndreaGriffiths.teamxray
 ```
 
-Or [install directly from the VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=AndreaGriffiths.teamxray)
-
-**Optional: Set up GitHub Token for AI-powered insights**
-
-Run `Team X-Ray: Set GitHub Token` from the Command Palette, or:
-
-```bash
-export GITHUB_TOKEN="your_github_token_here"
-```
+Or [install from the VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=AndreaGriffiths.teamxray)
 
 ## Usage
 
-- **Right-click files** → "Team X-Ray: Find Expert for This File"
-- **Command Palette** → "Team X-Ray: Analyze Repository Expertise"
-- **Command Palette** → "Team X-Ray: Show Team Expertise Overview"
+| Command | How |
+|---------|-----|
+| **Analyze Repository** | Command Palette → `Team X-Ray: Analyze Repository Expertise` |
+| **Find File Expert** | Right-click a file → `Team X-Ray: Find Expert for This File` |
+| **Team Overview** | Command Palette → `Team X-Ray: Show Team Expertise Overview` |
+| **Set API Key** | Command Palette → `Team X-Ray: Set GitHub Token` |
+| **Export Report** | Click export button in the analysis webview |
 
-## How It Works
+## Configuration
 
-- **🔄 Real Git Analysis** – Analyzes commit history and contributor patterns
-- **🤖 AI Analysis** – Uses GitHub Models API (GPT-4o) for human-centered insights (optional, in Preview)
-- **🔌 MCP Integration** – Leverages VS Code's Model Context Protocol with GitHub's official server; falls back to local analysis if unavailable
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `teamxray.aiProvider` | AI provider: `copilot`, `openai`, `anthropic`, `azure`, `github-models` | `copilot` |
+| `teamxray.byokModel` | Model override for BYOK providers | — |
+| `teamxray.byokBaseUrl` | Custom API endpoint for BYOK | — |
 
-> **Note:** This extension uses the GitHub Models API, which is currently in Preview. During the Preview period, API usage is free up to a credit limit.
+### Copilot SDK Setup
 
-## Requirements
+For the best experience, install and authenticate the [Copilot CLI](https://docs.github.com/en/copilot/using-github-copilot/using-github-copilot-in-the-command-line):
 
-- VS Code 1.100.0+
-- GitHub repository with commit history
-- GitHub token for AI-powered insights (optional)
+```bash
+# Install
+npm install -g @githubnext/github-copilot-cli
+
+# Authenticate
+copilot auth login
+```
+
+Team X-Ray will automatically detect and use the Copilot SDK when available.
+
+### BYOK (Bring Your Own Key)
+
+Run `Team X-Ray: Set API Key` from the Command Palette. Keys are stored securely in VS Code's SecretStorage.
+
+## Architecture
+
+```
+src/
+├── extension.ts                 # Entry point, command registration
+├── core/
+│   ├── copilot-service.ts       # Copilot SDK integration (5 custom tools)
+│   ├── expertise-analyzer.ts    # Analysis orchestrator + fallback chain
+│   ├── expertise-webview.ts     # VS Code webview UI
+│   ├── report-generator.ts      # Standalone HTML report export
+│   └── git-data-service.ts      # Git history data gathering
+├── types/
+│   └── expert.ts                # TypeScript interfaces
+└── utils/
+    ├── error-handler.ts         # Error handling + telemetry
+    ├── resource-manager.ts      # Disposable resource management
+    └── validation.ts            # Input validation
+```
+
+### Custom Tools (Copilot SDK)
+
+The extension registers 5 tools that the Copilot agent calls during analysis:
+
+| Tool | Description |
+|------|-------------|
+| `get_contributors` | Contributor profiles with commit counts and activity dates |
+| `get_recent_commits` | Recent commit history with authors and messages |
+| `get_file_experts` | Per-file ownership and expertise breakdown |
+| `get_repo_stats` | Repository-level statistics (size, languages, age) |
+| `get_collaboration_patterns` | Cross-contributor collaboration and review patterns |
 
 ## Development
-
-**Prerequisites:** Node.js 20+, Git
 
 ```bash
 git clone https://github.com/AndreaGriffiths11/teamxray.git
 cd teamxray
 npm install
 npm run compile
-# Press F5 in VS Code to test
+# Press F5 in VS Code to launch Extension Development Host
 ```
 
-## Coming Soon
-
-- Cross-repository expertise aggregation
-- Team health dashboards
-- Slack/Teams integration for expert recommendations
-
----
+**Requirements:** Node.js 20+, VS Code 1.100.0+
 
 ## Links
 
@@ -90,5 +134,4 @@ npm run compile
 
 ---
 
-**Stop being a stranger on your own team. Discover the brilliant minds around you.** 🚀
-
+**Stop being a stranger on your own team.** 🔬
