@@ -1,12 +1,14 @@
 import * as vscode from 'vscode';
 import axios from 'axios';
 import { CopilotMCPService } from './copilot-mcp-service';
+import { CopilotService } from './copilot-service';
 import { TokenManager } from './token-manager';
 import { GitService } from './git-service';
 import {
     Expert,
     FileExpertise,
     AnalysisResult,
+    RepositoryData,
     RepositoryStats,
     ManagementInsight,
     TeamHealthMetrics
@@ -51,6 +53,7 @@ export class ExpertiseAnalyzer {
     private context: vscode.ExtensionContext;
     private outputChannel: vscode.OutputChannel;
     private copilotMCPService: CopilotMCPService;
+    private copilotService: CopilotService | null;
     private tokenManager: TokenManager;
     private resourceManager: ResourceManager;
     private gitService: GitService | null = null;
@@ -63,13 +66,14 @@ export class ExpertiseAnalyzer {
         enterprise: { files: 1000, contributors: 50, commits: 500 }
     };
 
-    constructor(context: vscode.ExtensionContext, tokenManager: TokenManager) {
+    constructor(context: vscode.ExtensionContext, tokenManager: TokenManager, copilotService?: CopilotService) {
         this.context = context;
         this.tokenManager = tokenManager;
+        this.copilotService = copilotService ?? null;
         this.outputChannel = vscode.window.createOutputChannel('Team Expertise Analysis');
         this.copilotMCPService = new CopilotMCPService(this.outputChannel);
         this.resourceManager = ResourceManager.getInstance();
-        
+
         // Initialize utilities
         ErrorHandler.initialize(this.outputChannel);
         this.resourceManager.initialize(this.outputChannel);
@@ -98,10 +102,13 @@ export class ExpertiseAnalyzer {
             const repositoryName = workspaceFolder.name;
             this.outputChannel.appendLine(`📊 Analyzing repository: ${repositoryName}`);
 
-            // Step 2: Validate GitHub token
-            const token = await this.tokenManager.getTokenForHeaders();
-            if (!token) {
-                throw ErrorHandler.createTokenError('GitHub token is required for analysis');
+            // Step 2: Validate GitHub token (only required when Copilot SDK is unavailable)
+            const hasCopilot = this.copilotService?.isAvailable() ?? false;
+            if (!hasCopilot) {
+                const token = await this.tokenManager.getTokenForHeaders();
+                if (!token) {
+                    throw ErrorHandler.createTokenError('GitHub token is required for analysis (Copilot CLI not available)');
+                }
             }
 
             // Step 3: Assess repository size and characteristics
@@ -359,11 +366,24 @@ export class ExpertiseAnalyzer {
     }
 
     /**
-     * Performs AI analysis with smart chunking and error handling
+     * Performs AI analysis with smart chunking and error handling.
+     * Tries Copilot SDK first, then falls back to GitHub Models API.
      */
     private async performSmartAIAnalysis(repositoryData: any, repoStats: RepositoryStats): Promise<ExpertiseAnalysis | null> {
+        // Try Copilot SDK first
+        if (this.copilotService?.isAvailable()) {
+            try {
+                this.outputChannel.appendLine('🤖 Analyzing with Copilot SDK...');
+                const repoData = this.toRepositoryData(repositoryData, repoStats);
+                return await this.copilotService.analyzeTeam(repoData, repoStats);
+            } catch (error) {
+                this.outputChannel.appendLine(`⚠️ Copilot SDK analysis failed, falling back to GitHub Models: ${error}`);
+            }
+        }
+
+        // Fall back to GitHub Models API
         try {
-            this.outputChannel.appendLine('🤖 Performing smart AI analysis...');
+            this.outputChannel.appendLine('🤖 Performing smart AI analysis via GitHub Models...');
 
             // Estimate prompt size and adjust if needed
             const promptSize = this.estimatePromptSize(repositoryData);
@@ -381,6 +401,31 @@ export class ExpertiseAnalyzer {
             this.outputChannel.appendLine(`❌ AI analysis failed: ${error}`);
             return this.createFallbackAnalysis(repositoryData);
         }
+    }
+
+    /**
+     * Convert the internal repositoryData shape to the typed RepositoryData interface
+     * expected by CopilotService.
+     */
+    private toRepositoryData(raw: any, stats: RepositoryStats): RepositoryData {
+        return {
+            repository: raw.repository,
+            files: raw.files ?? [],
+            commits: raw.commits ?? [],
+            contributors: raw.contributors ?? [],
+            stats,
+            collaborationData: {
+                teamSize: (raw.contributors ?? []).length,
+                communicationPatterns: (raw.contributors ?? []).map((c: any) => ({
+                    author: c.name,
+                    frequency: c.commits ?? 0,
+                    style: 'technical' as const,
+                    avgMessageLength: 50,
+                })),
+                knowledgeSharing: [],
+                expertiseDistribution: [],
+            },
+        };
     }
 
     /**
@@ -697,6 +742,40 @@ Respond with JSON only (NO markdown, NO explanations):
         try {
             this.outputChannel.appendLine(`🔍 Finding experts for file: ${filePath}`);
 
+            // Try Copilot SDK first
+            if (this.copilotService?.isAvailable()) {
+                try {
+                    // Gather only file-scoped git data instead of full repo scan
+                    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+                    if (workspaceFolder) {
+                        if (!this.gitService) {
+                            this.gitService = new GitService(workspaceFolder.uri.fsPath, this.outputChannel);
+                        }
+                        const commits = await this.gitService.getCommits(200);
+                        const fileCommits = commits.filter((c: any) =>
+                            c.files?.some((f: string) => f.includes(filePath) || filePath.includes(f))
+                        );
+                        const repoStats = await this.assessRepositorySize();
+                        const minimalData: RepositoryData = {
+                            repository: workspaceFolder.name,
+                            files: [],
+                            contributors: this.extractContributorsFromCommits(fileCommits),
+                            commits: fileCommits,
+                            collaborationData: { teamSize: 0, communicationPatterns: [], knowledgeSharing: [], expertiseDistribution: [] },
+                            stats: repoStats,
+                        };
+                        const experts = await this.copilotService.analyzeFileExpert(filePath, minimalData);
+                        if (experts.length > 0) {
+                            this.outputChannel.appendLine(`✅ Found ${experts.length} experts via Copilot SDK`);
+                            return experts;
+                        }
+                    }
+                } catch (err) {
+                    this.outputChannel.appendLine(`⚠️ Copilot SDK file expert failed: ${err}`);
+                }
+            }
+
+            // Try MCP service
             const repository = await this.copilotMCPService.detectRepository();
             if (repository) {
                 const fileExperts = await this.copilotMCPService.analyzeFileExperts(filePath, repository);
@@ -757,6 +836,26 @@ Respond with JSON only (NO markdown, NO explanations):
             this.outputChannel.appendLine(`❌ Failed to gather file data: ${error}`);
             return null;
         }
+    }
+
+        private extractContributorsFromCommits(commits: any[]): any[] {
+        const authorMap = new Map<string, { name: string; email: string; commits: number; lastCommit: string }>();
+        for (const c of commits) {
+            const key = c.author?.email ?? 'unknown';
+            const existing = authorMap.get(key);
+            if (existing) {
+                existing.commits++;
+                if (c.date > existing.lastCommit) { existing.lastCommit = c.date; }
+            } else {
+                authorMap.set(key, {
+                    name: c.author?.name ?? 'Unknown',
+                    email: key,
+                    commits: 1,
+                    lastCommit: c.date ?? new Date().toISOString(),
+                });
+            }
+        }
+        return Array.from(authorMap.values()).sort((a, b) => b.commits - a.commits);
     }
 
     private async analyzeFileExperts(fileData: any): Promise<Expert[]> {
