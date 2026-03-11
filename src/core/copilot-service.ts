@@ -143,12 +143,16 @@ export class CopilotService {
         data: RepositoryData,
         repoStats: RepositoryStats
     ): Promise<ExpertiseAnalysis> {
+        this.outputChannel.appendLine(`[CopilotService] analyzeTeam() called`);
         if (!this.client) {
             throw new Error('CopilotService is not initialized');
         }
 
+        this.outputChannel.appendLine(`[CopilotService] Building tools...`);
         const tools = await this.buildTools(data, repoStats);
+        this.outputChannel.appendLine(`[CopilotService] Built ${tools.length} tools, creating session...`);
         const session = await this.createAnalysisSession(tools);
+        this.outputChannel.appendLine(`[CopilotService] Session created: ${session.sessionId}`);
 
         try {
             // Log all session events for debugging
@@ -157,8 +161,7 @@ export class CopilotService {
             });
 
             const prompt = this.buildAnalysisPrompt(data.repository, repoStats);
-            this.outputChannel.appendLine(`[CopilotService] Sending prompt (${prompt.length} chars) to session ${session.sessionId}...`);
-            this.outputChannel.appendLine(`[CopilotService] Waiting for session.idle (timeout: 180s)...`);
+            this.outputChannel.appendLine(`[CopilotService] Sending prompt (${prompt.length} chars)...`);
             const response = await session.sendAndWait(
                 { prompt },
                 180_000 // 3 minute timeout for large repos
