@@ -689,1045 +689,185 @@ export class ExpertiseWebviewProvider {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource} 'unsafe-inline'; script-src ${cspSource} 'unsafe-inline'; img-src ${cspSource} https://github.com https://avatars.githubusercontent.com data:;">
-    <title>Team Expertise Analysis</title>
+    <title>Team X-Ray Analysis</title>
     <style>
-        * {
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-            font-size: 14px;
-            line-height: 1.6;
-            color: var(--vscode-foreground);
-            background: linear-gradient(135deg, var(--vscode-editor-background) 0%, var(--vscode-sideBar-background) 100%);
-            padding: 0;
-            margin: 0;
-            min-height: 100vh;
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 32px 24px;
-        }
-
-        .header {
-            text-align: center;
-            margin-bottom: 48px;
-            background: rgba(255, 255, 255, 0.02);
-            backdrop-filter: blur(10px);
-            border-radius: 16px;
-            padding: 32px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .header h1 {
-            background: linear-gradient(135deg, var(--vscode-textLink-foreground) 0%, #3b82f6 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            margin: 0 0 16px 0;
-            font-size: 36px;
-            font-weight: 700;
-            letter-spacing: -0.02em;
-        }
-
-        .metadata {
-            color: var(--vscode-descriptionForeground);
-            font-size: 16px;
-            opacity: 0.8;
-        }
-
-        .section {
-            margin-bottom: 56px;
-        }
-
-        .section h2 {
-            color: var(--vscode-foreground);
-            font-size: 24px;
-            font-weight: 600;
-            margin: 0 0 24px 0;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .section h2::before {
-            content: '';
-            width: 4px;
-            height: 24px;
-            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-            border-radius: 2px;
-        }
-
-        .experts-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-            gap: 16px;
-            margin-bottom: 32px;
-        }
-
-        .expert-card {
-            background: rgba(255, 255, 255, 0.03);
-            backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 12px;
-            padding: 16px;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            position: relative;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .expert-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 3px;
-            background: linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899);
-            opacity: 0;
-            transition: opacity 0.3s ease;
-        }
-
-        .expert-card:hover::before {
-            opacity: 1;
-        }
-
-        .expert-header {
-            display: flex;
-            align-items: center;
-            margin-bottom: 12px;
-        }
-
-        .expert-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 8px;
-            margin-right: 12px;
-            overflow: hidden;
-            position: relative;
-            flex-shrink: 0;
-        }
-
-        .expert-avatar-fallback {
-            width: 100%;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-            color: white;
-            font-size: 16px;
-            font-weight: 600;
-            position: absolute;
-            top: 0;
-            left: 0;
-            z-index: 1;
-        }
-
-        .expert-info {
-            flex: 1;
-            min-width: 0; /* Enables text truncation */
-        }
-
-        .expert-info h3 {
-            margin: 0 0 2px 0;
-            font-size: 16px;
-            font-weight: 600;
-            color: var(--vscode-foreground);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .expert-email {
-            font-size: 12px;
-            color: var(--vscode-descriptionForeground);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .expert-content {
-            display: flex;
-            align-items: center;
-            margin-bottom: 12px;
-        }
-
-        .expert-stats {
-            display: flex;
-            gap: 8px;
-            flex: 1;
-        }
-
-        .stat {
-            background: rgba(255, 255, 255, 0.05);
-            padding: 8px;
-            border-radius: 8px;
-            text-align: center;
-            flex: 1;
-        }
-
-        .stat-value {
-            display: block;
-            font-size: 18px;
-            font-weight: 700;
-            color: var(--vscode-textLink-foreground);
-            margin-bottom: 2px;
-        }
-
-        .stat-label {
-            font-size: 10px;
-            color: var(--vscode-descriptionForeground);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .expertise-indicator {
-            width: 70px;
-            height: 70px;
-            flex-shrink: 0;
-            margin-left: 8px;
-        }
-
-        .expertise-ring {
-            position: relative;
-            width: 100%;
-            height: 100%;
-        }
-
-        .expertise-circle {
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            background: conic-gradient(from 0deg, #3b82f6, #8b5cf6, #ec4899, #3b82f6);
-            padding: 3px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .expertise-inner {
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            background: var(--vscode-editor-background);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-direction: column;
-        }
-
-        .expertise-score {
-            font-size: 18px;
-            font-weight: 700;
-            color: var(--vscode-textLink-foreground);
-            line-height: 1;
-        }
-
-        .expertise-text {
-            font-size: 8px;
-            color: var(--vscode-descriptionForeground);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .specializations {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-            margin-bottom: 12px;
-        }
-
-        .specialization-tag {
-            background: rgba(59, 130, 246, 0.1);
-            color: var(--vscode-textLink-foreground);
-            font-size: 10px;
-            padding: 3px 8px;
-            border-radius: 4px;
-            white-space: nowrap;
-        }
-
-        .expert-files {
-            margin: 12px 0;
-            background: rgba(255, 255, 255, 0.02);
-            border-radius: 6px;
-            overflow: hidden;
-            cursor: pointer;
-        }
-
-        .expert-files-header {
-            padding: 8px 12px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            color: var(--vscode-foreground);
-            font-size: 13px;
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 6px;
-        }
-
-        .expert-files-header:hover {
-            background: rgba(255, 255, 255, 0.05);
-        }
-
-        .expert-files-content {
-            max-height: 500px;
-            opacity: 1;
-            transition: all 0.3s ease;
-            background: rgba(0, 0, 0, 0.2);
-        }
-
-        .expert-files-content.collapsed {
-            max-height: 0;
-            opacity: 0;
-        }
-
-        .expert-file-item {
-            padding: 8px 12px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 12px;
-            cursor: pointer;
-        }
-
-        .expert-file-item:hover {
-            background: rgba(255, 255, 255, 0.05);
-        }
-
-        .expert-file-item .file-name {
-            color: var(--vscode-textLink-foreground);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 70%;
-        }
-
-        .expert-file-item .file-changes {
-            color: var(--vscode-descriptionForeground);
-            font-size: 11px;
-        }
-
-        .expert-file-item.more-files {
-            text-align: center;
-            color: var(--vscode-descriptionForeground);
-            font-size: 11px;
-            background: rgba(255, 255, 255, 0.02);
-            cursor: default;
-        }
-
-        .expert-actions {
-            display: flex;
-            gap: 8px;
-            margin-top: auto;
-        }
-
-        .expert-button {
-            flex: 1;
-            padding: 8px 12px;
-            font-size: 12px;
-            border-radius: 6px;
-            background: transparent;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            color: var(--vscode-foreground);
-            cursor: pointer;
-            transition: all 0.2s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-        }
-
-        .expert-button:hover {
-            background: rgba(255, 255, 255, 0.15);
-            border-color: rgba(255, 255, 255, 0.3);
-            transform: translateY(-1px);
-        }
-
-        .expert-button.primary {
-            background: linear-gradient(135deg, #3b82f6, #2563eb);
-            border: none;
-            color: white;
-        }
-
-        .expert-button.primary:hover {
-            background: linear-gradient(135deg, #2563eb, #1d4ed8);
-            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.3);
-        }
-        }
-
-        .expertise-bar {
-            background-color: var(--vscode-progressBar-background);
-            height: 6px;
-            border-radius: 3px;
-            overflow: hidden;
-            margin-bottom: 10px;
-        }
-
-        .expertise-fill {
-            background-color: var(--vscode-progressBar-foreground);
-            height: 100%;
-            transition: width 0.3s ease;
-        }
-
-
-
-        .insights-section {
-            background: rgb(30, 34, 42);
-            border-radius: 16px;
-            padding: 24px;
-        }
-
-        .insight-container {
-            background: rgba(30, 34, 42, 0.9);
-            border-radius: 8px;
-            padding: 20px;
-        }
-
-        .insight-badges {
-            margin-bottom: 15px;
-        }
-
-        .badge {
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: 500;
-            margin-right: 8px;
-            display: inline-block;
-        }
-
-        .badge.opportunity {
-            background-color: #0066cc;
-            color: white;
-        }
-
-        .badge.medium {
-            background-color: #996600;
-            color: white;
-        }
-
-        .insight-title {
-            margin: 0 0 15px 0;
-            font-size: 18px;
-            font-weight: 600;
-            color: var(--vscode-foreground);
-        }
-
-        .insight-text {
-            margin: 0 0 20px 0;
-            color: #e1e1e1;
-            font-size: 14px;
-            line-height: 1.6;
-        }
-
-        .recommendations {
-            border-top: 1px solid #333;
-            padding-top: 15px;
-            margin-top: 15px;
-        }
-
-        .recommendations h4 {
-            margin: 0 0 10px 0;
-            font-size: 16px;
-            font-weight: 500;
-            color: var(--vscode-foreground);
-        }
-
-        .recommendations p {
-            margin: 8px 0;
-            color: #e1e1e1;
-            font-size: 14px;
-            line-height: 1.6;
-        }
-
-        .insights-list {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
-
-        .insights-list li {
-            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.1));
-            border: 1px solid rgba(59, 130, 246, 0.2);
-            border-radius: 12px;
-            padding: 16px 20px;
-            margin-bottom: 12px;
-            position: relative;
-            transition: all 0.3s ease;
-        }
-
-        .insights-list li::before {
-            content: '💡';
-            margin-right: 12px;
-            font-size: 16px;
-        }
-
-        .insights-list li:hover {
-            background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(139, 92, 246, 0.15));
-            border-color: rgba(59, 130, 246, 0.3);
-            transform: translateY(-2px);
-        }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 24px;
-            margin-bottom: 32px;
-        }
-
-        .stat-card {
-            background: rgba(255, 255, 255, 0.03);
-            backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 16px;
-            padding: 24px;
-            text-align: center;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .stat-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-            border-color: rgba(255, 255, 255, 0.2);
-        }
-
-        .stat-number {
-            font-size: 32px;
-            font-weight: 700;
-            background: linear-gradient(135deg, var(--vscode-textLink-foreground), #3b82f6);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            display: block;
-            margin-bottom: 8px;
-        }
-
-        .stat-label {
-            color: var(--vscode-descriptionForeground);
-            font-size: 14px;
-            font-weight: 500;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .action-buttons {
-            display: flex;
-            gap: 16px;
-            justify-content: center;
-            margin-top: 32px;
-            flex-wrap: wrap;
-        }
-
-        .refresh-button, .export-button {
-            border: none;
-            padding: 16px 32px;
-            border-radius: 12px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            min-width: 200px;
-        }
-
-        .refresh-button {
-            background: linear-gradient(135deg, #3b82f6, #2563eb);
-            color: white;
-        }
-
-        .refresh-button:hover {
-            background: linear-gradient(135deg, #2563eb, #1d4ed8);
-            transform: translateY(-2px);
-            box-shadow: 0 12px 24px rgba(59, 130, 246, 0.3);
-        }
-
-        .export-button {
-            background: linear-gradient(135deg, #059669, #047857);
-            color: white;
-        }
-
-        .export-button:hover {
-            background: linear-gradient(135deg, #047857, #065f46);
-            transform: translateY(-2px);
-            box-shadow: 0 12px 24px rgba(5, 150, 105, 0.3);
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 48px 24px;
-            color: var(--vscode-descriptionForeground);
-        }
-
-        .empty-state-icon {
-            font-size: 48px;
-            margin-bottom: 16px;
-            opacity: 0.5;
-        }
-
-        @keyframes slideInUp {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .expert-card {
-            animation: slideInUp 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-        }
-
-        .expert-card:nth-child(1) { animation-delay: 0.1s; }
-        .expert-card:nth-child(2) { animation-delay: 0.2s; }
-        .expert-card:nth-child(3) { animation-delay: 0.3s; }
-        .expert-card:nth-child(4) { animation-delay: 0.4s; }
-
-        @media (max-width: 768px) {
-            .container {
-                padding: 16px;
-            }
-            
-            .experts-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .expert-stats {
-                grid-template-columns: repeat(2, 1fr);
-            }
-            
-            .stats-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-        }
-
-        @media (max-width: 480px) {
-            .header h1 {
-                font-size: 28px;
-            }
-            
-            .expert-actions {
-                flex-direction: column;
-            }
-            
-            .stats-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-            padding: 10px 20px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            margin-top: 20px;
-        }
-
-        .refresh-button:hover {
-            background-color: var(--vscode-button-hoverBackground);
-        }
-
-        /* Management Insights Styles */
-        .management-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-            gap: 16px;
-            margin-bottom: 24px;
-        }
-
-        .management-card {
-            background: rgba(255, 255, 255, 0.03);
-            border-radius: 12px;
-            padding: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            transition: all 0.3s ease;
-        }
-
-        .management-card:hover {
-            transform: translateY(-2px);
-            border-color: rgba(255, 255, 255, 0.2);
-        }
-
-        .management-card.risk {
-            border-left: 4px solid #ef4444;
-        }
-
-        .management-card.opportunity {
-            border-left: 4px solid #22c55e;
-        }
-
-        .management-card.efficiency {
-            border-left: 4px solid #3b82f6;
-        }
-
-        .management-card.growth {
-            border-left: 4px solid #a855f7;
-        }
-
-        .management-header {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 12px;
-        }
-
-        .management-category {
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-
-        .management-category.risk {
-            background: rgba(239, 68, 68, 0.2);
-            color: #ef4444;
-        }
-
-        .management-category.opportunity {
-            background: rgba(34, 197, 94, 0.2);
-            color: #22c55e;
-        }
-
-        .management-category.efficiency {
-            background: rgba(59, 130, 246, 0.2);
-            color: #3b82f6;
-        }
-
-        .management-category.growth {
-            background: rgba(168, 85, 247, 0.2);
-            color: #a855f7;
-        }
-
-        .management-priority {
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: 600;
-        }
-
-        .management-priority.high {
-            background: rgba(239, 68, 68, 0.2);
-            color: #ef4444;
-        }
-
-        .management-priority.medium {
-            background: rgba(245, 158, 11, 0.2);
-            color: #f59e0b;
-        }
-
-        .management-priority.low {
-            background: rgba(34, 197, 94, 0.2);
-            color: #22c55e;
-        }
-
-        .management-actions {
-            margin: 16px 0;
-        }
-
-        .management-actions h5 {
-            margin: 0 0 8px 0;
-            color: var(--vscode-textLink-foreground);
-        }
-
-        .management-actions ul {
-            margin: 0;
-            padding-left: 16px;
-        }
-
-        .management-impact {
-            background: rgba(255, 255, 255, 0.05);
-            padding: 12px;
-            border-radius: 8px;
-            font-size: 14px;
-        }
-
-        /* Team Health Metrics Styles */
-        .health-metrics-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
-            margin-bottom: 24px;
-        }
-
-        .health-metric-card {
-            background: rgba(255, 255, 255, 0.03);
-            border-radius: 12px;
-            padding: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .health-metric-card h4 {
-            margin: 0 0 16px 0;
-            color: var(--vscode-foreground);
-            font-size: 18px;
-        }
-
-        .risk-score {
-            padding: 8px 16px;
-            border-radius: 8px;
-            font-weight: 600;
-            margin-bottom: 16px;
-            text-align: center;
-        }
-
-        .risk-score.high-risk {
-            background: rgba(239, 68, 68, 0.2);
-            color: #ef4444;
-            border: 1px solid #ef4444;
-        }
-
-        .risk-score.medium-risk {
-            background: rgba(245, 158, 11, 0.2);
-            color: #f59e0b;
-            border: 1px solid #f59e0b;
-        }
-
-        .risk-score.low-risk {
-            background: rgba(34, 197, 94, 0.2);
-            color: #22c55e;
-            border: 1px solid #22c55e;
-        }
-
-        .metric-item {
-            margin-bottom: 16px;
-            padding: 12px;
-            border-radius: 8px;
-        }
-
-        .metric-item.critical {
-            background: rgba(239, 68, 68, 0.1);
-            border-left: 3px solid #ef4444;
-        }
-
-        .metric-item.warning {
-            background: rgba(245, 158, 11, 0.1);
-            border-left: 3px solid #f59e0b;
-        }
-
-        .metric-item.positive {
-            background: rgba(34, 197, 94, 0.1);
-            border-left: 3px solid #22c55e;
-        }
-
-        .metric-item strong {
-            display: block;
-            margin-bottom: 8px;
-        }
-
-        .metric-item ul {
-            margin: 0;
-            padding-left: 16px;
-        }
-
-        .collaboration-stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 12px;
-            margin-bottom: 16px;
-        }
-
-        .collab-stat {
-            background: rgba(255, 255, 255, 0.05);
-            padding: 12px;
-            border-radius: 8px;
-            text-align: center;
-        }
-
-        .collab-stat .stat-value {
-            display: block;
-            font-size: 24px;
-            font-weight: 700;
-            color: var(--vscode-textLink-foreground);
-            margin-bottom: 4px;
-        }
-
-        .collab-stat .stat-label {
-            font-size: 12px;
-            color: var(--vscode-descriptionForeground);
-        }
-
-        .performance-stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 12px;
-            margin-bottom: 16px;
-        }
-
-        .perf-stat {
-            background: rgba(255, 255, 255, 0.05);
-            padding: 12px;
-            border-radius: 8px;
-        }
-
-        .perf-stat .stat-label {
-            display: block;
-            font-size: 12px;
-            color: var(--vscode-descriptionForeground);
-            margin-bottom: 4px;
-        }
-
-        .perf-stat .stat-value {
-            font-size: 18px;
-            font-weight: 600;
-            color: var(--vscode-textLink-foreground);
-        }
-
-        /* Enhanced Insight Styles */
-        .insight-header {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 8px;
-        }
-
-        .insight-type, .insight-impact {
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 10px;
-            font-weight: 600;
-        }
-
-        .insight-type.strength {
-            background: rgba(34, 197, 94, 0.2);
-            color: #22c55e;
-        }
-
-        .insight-type.gap {
-            background: rgba(239, 68, 68, 0.2);
-            color: #ef4444;
-        }
-
-        .insight-type.opportunity {
-            background: rgba(59, 130, 246, 0.2);
-            color: #3b82f6;
-        }
-
-        .insight-type.risk {
-            background: rgba(245, 158, 11, 0.2);
-            color: #f59e0b;
-        }
-
-        .insight-impact.high {
-            background: rgba(239, 68, 68, 0.2);
-            color: #ef4444;
-        }
-
-        .insight-impact.medium {
-            background: rgba(245, 158, 11, 0.2);
-            color: #f59e0b;
-        }
-
-        .insight-impact.low {
-            background: rgba(34, 197, 94, 0.2);
-            color: #22c55e;
-        }
-
-        .insight-recommendations {
-            margin-top: 12px;
-            padding: 12px;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 8px;
-        }
-
-        .insight-recommendations ul {
-            margin: 8px 0 0 0;
-            padding-left: 16px;
-        }
-
-        /* Collapsible Section Styles */
-        .collapsible-header {
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            transition: all 0.3s ease;
-            user-select: none;
-        }
-
-        .collapsible-header:hover {
-            opacity: 0.8;
-            transform: translateX(4px);
-        }
-
-        .toggle-icon {
-            font-size: 16px;
-            transition: transform 0.3s ease;
-            margin-left: 12px;
-        }
-
-        .toggle-icon.collapsed {
-            transform: rotate(-90deg);
-        }
-
-        .collapsible-content {
-            overflow: hidden;
-            transition: all 0.4s ease;
-            max-height: 2000px;
-            opacity: 1;
-            padding: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 8px;
-            margin-top: 10px;
-            background: rgba(255, 255, 255, 0.02);
-        }
-
-        .collapsible-content.collapsed {
-            max-height: 0;
-            opacity: 0;
-            margin: 0;
-            padding: 0;
-            border: none;
-        }
-
-        /* Override file-section margin when collapsed */
-        .file-section.collapsed {
-            margin-bottom: 0;
-            padding: 0;
-        }
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Roboto',sans-serif;font-size:14px;line-height:1.6;color:#e2e8f0;background:#0a0a0f;padding:0;margin:0;min-height:100vh}
+        .container{max-width:1200px;margin:0 auto;padding:32px 24px}
+
+        /* Header with scan-line pattern */
+        .header{background:#0a0a0f;background-image:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(6,182,212,0.03) 2px,rgba(6,182,212,0.03) 4px);padding:48px 40px;border:1px solid #1e293b;border-radius:12px;text-align:center;margin-bottom:30px}
+        .header h1{font-size:2.5em;font-weight:800;letter-spacing:0.08em;color:#e2e8f0;text-shadow:0 0 20px rgba(6,182,212,0.4),0 0 40px rgba(6,182,212,0.15);margin-bottom:8px}
+        .header .repo{font-family:'SF Mono',SFMono-Regular,Consolas,'Liberation Mono',Menlo,monospace;color:#06b6d4;font-size:1.1em;margin-bottom:16px}
+        .header .stats{display:flex;justify-content:center;gap:12px;flex-wrap:wrap}
+        .pill{display:inline-block;padding:4px 14px;border:1px solid #1e293b;border-radius:999px;font-size:0.85em;color:#64748b}
+        .pill strong{color:#e2e8f0}
+
+        /* Sections */
+        .section{background:#12121a;border:1px solid #1e293b;border-radius:12px;padding:30px;margin-bottom:30px}
+        .section h2{color:#e2e8f0;font-size:1.4em;border-bottom:2px solid #1e293b;padding-bottom:10px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;cursor:default}
+        .section h2 .accent{color:#06b6d4}
+
+        /* Expert grid & cards */
+        .experts-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px}
+        .expert-card{background:#12121a;border:1px solid #1e293b;border-radius:8px;padding:20px;transition:box-shadow 0.2s,border-color 0.2s;display:flex;flex-direction:column;position:relative;overflow:hidden}
+        .expert-card.high{border-left:3px solid #06b6d4;box-shadow:inset 4px 0 12px -4px rgba(6,182,212,0.15)}
+        .expert-card.low{opacity:0.6}
+        .expert-card:hover{border-color:#1e293b}
+
+        .expert-header{display:flex;align-items:center;margin-bottom:12px}
+        .expert-avatar{width:40px;height:40px;border-radius:8px;margin-right:12px;overflow:hidden;position:relative;flex-shrink:0}
+        .expert-avatar img{width:100%;height:100%;object-fit:cover;position:relative;z-index:2}
+        .expert-avatar-fallback{width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#06b6d4,#8b5cf6);color:white;font-size:14px;font-weight:600;position:absolute;top:0;left:0;z-index:1}
+        .expert-info{flex:1;min-width:0}
+        .expert-info h3{margin:0 0 2px 0;font-size:1.15em;font-weight:700;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .role-badge{display:inline-block;font-size:0.7em;text-transform:uppercase;letter-spacing:0.08em;color:#8b5cf6;border:1px solid rgba(139,92,246,0.3);border-radius:4px;padding:2px 8px;margin-left:8px;vertical-align:middle}
+        .expert-email{font-size:0.85em;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+        /* SVG bar chart */
+        .bar-chart{width:100%;margin:10px 0}
+        .bar-chart svg{width:100%;height:24px;border-radius:4px;overflow:hidden}
+
+        /* Stats row */
+        .expert-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}
+        .stat{text-align:center;padding:8px;background:#0a0a0f;border-radius:6px;border:1px solid #1e293b}
+        .stat-value{font-weight:700;font-size:1.05em;color:#06b6d4;display:block}
+        .stat-label{font-size:0.78em;color:#64748b;text-transform:uppercase;letter-spacing:0.5px}
+
+        /* Specialization chips */
+        .chips,.specializations{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+        .chip,.specialization-tag{font-size:0.75em;padding:3px 10px;background:#0a0a0f;border:1px solid #1e293b;border-radius:999px;color:#64748b}
+
+        /* Expert file list */
+        .expert-files{margin:12px 0;border-radius:6px;overflow:hidden}
+        .expert-files-header{padding:8px 12px;display:flex;justify-content:space-between;align-items:center;color:#e2e8f0;font-size:13px;background:#0a0a0f;border:1px solid #1e293b;border-radius:6px;cursor:pointer}
+        .expert-files-header:hover{background:#12121a}
+        .expert-files-content{max-height:500px;opacity:1;transition:all 0.3s ease;background:#0a0a0f}
+        .expert-files-content.collapsed{max-height:0;opacity:0;overflow:hidden}
+        .expert-file-item{padding:8px 12px;border-bottom:1px solid #1e293b;display:flex;justify-content:space-between;align-items:center;font-size:12px;cursor:pointer}
+        .expert-file-item:hover{background:rgba(6,182,212,0.05)}
+        .expert-file-item .file-name{color:#06b6d4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70%}
+        .expert-file-item .file-changes{color:#64748b;font-size:11px}
+        .expert-file-item.more-files{text-align:center;color:#64748b;font-size:11px;cursor:default}
+
+        /* Expert action buttons */
+        .expert-actions{display:flex;gap:8px;margin-top:auto}
+        .expert-button{flex:1;padding:8px 12px;font-size:12px;border-radius:6px;background:transparent;border:1px solid #1e293b;color:#e2e8f0;cursor:pointer;transition:all 0.2s ease;display:flex;align-items:center;justify-content:center;gap:6px}
+        .expert-button:hover{background:rgba(6,182,212,0.1);border-color:#06b6d4}
+        .expert-button.primary{background:rgba(6,182,212,0.15);border:1px solid #06b6d4;color:#06b6d4}
+        .expert-button.primary:hover{background:rgba(6,182,212,0.25)}
+
+        /* Management Insights - used by renderManagementInsights() */
+        .management-empty,.health-empty{text-align:center;padding:48px 24px;color:#64748b}
+        .management-empty .empty-state-icon,.health-empty .empty-state-icon{font-size:48px;margin-bottom:16px;opacity:0.5}
+        .management-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(350px,1fr));gap:20px;margin-bottom:24px}
+        .management-card{background:#12121a;border:1px solid #1e293b;border-radius:8px;padding:20px;border-top:6px solid #1e293b;transition:border-color 0.2s}
+        .management-card.risk{border-top-color:#ef4444}
+        .management-card.opportunity{border-top-color:#10b981}
+        .management-card.efficiency{border-top-color:#3b82f6}
+        .management-card.growth{border-top-color:#f59e0b}
+        .management-card:hover{border-color:#2d3748}
+        .management-card h4{color:#e2e8f0;margin:0 0 6px 0;font-size:1.1em}
+        .management-card p{color:#94a3b8;font-size:0.95em;margin-bottom:12px}
+        .management-header{display:flex;justify-content:space-between;margin-bottom:12px}
+        .management-category{padding:4px 8px;border-radius:4px;font-size:12px;font-weight:600;text-transform:uppercase}
+        .management-category.risk{background:rgba(239,68,68,0.15);color:#ef4444}
+        .management-category.opportunity{background:rgba(16,185,129,0.15);color:#10b981}
+        .management-category.efficiency{background:rgba(59,130,246,0.15);color:#3b82f6}
+        .management-category.growth{background:rgba(245,158,11,0.15);color:#f59e0b}
+        .management-priority{padding:4px 8px;border-radius:4px;font-size:12px;font-weight:600}
+        .management-priority.high{color:#ef4444}
+        .management-priority.medium{color:#f59e0b}
+        .management-priority.low{color:#10b981}
+        .management-actions{background:#0a0a0f;border:1px solid #1e293b;border-radius:6px;padding:14px;margin:12px 0}
+        .management-actions h5{margin:0 0 8px 0;font-size:0.8em;text-transform:uppercase;letter-spacing:0.06em;color:#64748b}
+        .management-actions ul{margin:0;padding:0;list-style:none}
+        .management-actions li{padding:4px 0;color:#94a3b8;font-size:0.9em}
+        .management-actions li::before{content:'›';color:#06b6d4;margin-right:8px;font-weight:bold}
+        .management-impact{font-size:0.85em;color:#64748b;margin-top:10px}
+        .management-impact strong{color:#e2e8f0}
+
+        /* Team Health Metrics - used by renderTeamHealthMetrics() */
+        .health-metrics-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;margin-bottom:24px}
+        .health-metric-card{background:#12121a;border:1px solid #1e293b;border-radius:8px;padding:20px}
+        .health-metric-card h4{margin:0 0 16px 0;color:#e2e8f0;font-size:1.1em}
+        .risk-score{padding:8px 16px;border-radius:8px;font-weight:600;margin-bottom:16px;text-align:center}
+        .risk-score.high-risk{background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3)}
+        .risk-score.medium-risk{background:rgba(245,158,11,0.15);color:#f59e0b;border:1px solid rgba(245,158,11,0.3)}
+        .risk-score.low-risk{background:rgba(16,185,129,0.15);color:#10b981;border:1px solid rgba(16,185,129,0.3)}
+        .metric-details{margin-top:12px}
+        .metric-item{margin-bottom:12px;padding:12px;border-radius:6px}
+        .metric-item.critical{background:rgba(239,68,68,0.08);border-left:3px solid #ef4444}
+        .metric-item.warning{background:rgba(245,158,11,0.08);border-left:3px solid #f59e0b}
+        .metric-item.positive{background:rgba(16,185,129,0.08);border-left:3px solid #10b981}
+        .metric-item strong{display:block;margin-bottom:8px;color:#e2e8f0}
+        .metric-item ul{margin:0;padding-left:16px;color:#94a3b8}
+        .collaboration-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:16px}
+        .collab-stat{background:#0a0a0f;border:1px solid #1e293b;padding:12px;border-radius:6px;text-align:center}
+        .collab-stat .stat-value{display:block;font-size:1.4em;font-weight:700;color:#06b6d4;margin-bottom:4px}
+        .collab-stat .stat-label{font-size:0.78em;color:#64748b}
+        .performance-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+        .perf-stat{background:#0a0a0f;border:1px solid #1e293b;padding:12px;border-radius:6px}
+        .perf-stat .stat-label{display:block;font-size:0.78em;color:#64748b;margin-bottom:4px}
+        .perf-stat .stat-value{font-size:1.1em;font-weight:600;color:#06b6d4}
+
+        /* Key insights */
+        .insight-item{display:flex;align-items:baseline;gap:14px;padding:14px 0;border-bottom:1px solid #1e293b}
+        .insight-item:last-child{border-bottom:none}
+        .insight-num{font-size:1.3em;font-weight:800;color:#06b6d4;min-width:28px;text-align:right}
+        .insight-text{color:#94a3b8;font-size:0.95em}
+
+        /* Action buttons */
+        .action-buttons{display:flex;gap:16px;justify-content:center;margin-top:32px;flex-wrap:wrap}
+        .refresh-button,.export-button{border:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:all 0.2s ease;display:flex;align-items:center;justify-content:center;gap:8px;min-width:180px}
+        .refresh-button{background:rgba(6,182,212,0.15);border:1px solid #06b6d4;color:#06b6d4}
+        .refresh-button:hover{background:rgba(6,182,212,0.25)}
+        .export-button{background:rgba(139,92,246,0.15);border:1px solid #8b5cf6;color:#8b5cf6}
+        .export-button:hover{background:rgba(139,92,246,0.25)}
+
+        /* Collapsible */
+        .collapsible-header{cursor:pointer;user-select:none}
+        .collapsible-header:hover{opacity:0.8}
+        .toggle-icon{font-size:14px;transition:transform 0.3s ease;margin-left:12px;color:#64748b}
+        .toggle-icon.collapsed{transform:rotate(-90deg)}
+        .collapsible-content{overflow:hidden;transition:all 0.4s ease;max-height:5000px;opacity:1;margin-top:16px}
+        .collapsible-content.collapsed{max-height:0;opacity:0;margin:0}
+
+        /* Footer */
+        .footer{text-align:center;padding:24px 0;margin-top:20px;font-family:'SF Mono',SFMono-Regular,Consolas,monospace;font-size:0.8em;color:#64748b;border-top:1px solid #1e293b}
+
+        /* Animations */
+        @keyframes slideInUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+        .expert-card{animation:slideInUp 0.4s ease forwards}
+        .expert-card:nth-child(1){animation-delay:0.05s}
+        .expert-card:nth-child(2){animation-delay:0.1s}
+        .expert-card:nth-child(3){animation-delay:0.15s}
+        .expert-card:nth-child(4){animation-delay:0.2s}
+
+        @media(max-width:768px){.container{padding:16px}.experts-grid,.management-grid{grid-template-columns:1fr}.header{padding:24px 20px}.header h1{font-size:1.8em}}
     </style>
 </head>
 <body>
 <div class="container">
     <div class="header">
-        <h1>✨ Team Expertise Analysis</h1>
-        <div class="metadata">
-            📊 ${analysis.repository} • Generated ${this.safeFormatDate(analysis.generatedAt)} • ${analysis.totalFiles} files • ${analysis.totalExperts} experts
-        </div>
-    </div>
-
-    <div class="stats-grid">
-        <div class="stat-card">
-            <span class="stat-number">${analysis.totalFiles}</span>
-            <div class="stat-label">Files Analyzed</div>
-        </div>
-        <div class="stat-card">
-            <span class="stat-number">${analysis.totalExperts}</span>
-            <div class="stat-label">Team Experts</div>
-        </div>
-        <div class="stat-card">
-            <span class="stat-number">${analysis.fileExpertise.length}</span>
-            <div class="stat-label">Code Files</div>
-        </div>
-        <div class="stat-card">
-            <span class="stat-number">${analysis.insights.length}</span>
-            <div class="stat-label">AI Insights</div>
+        <h1>TEAM X-RAY</h1>
+        <div class="repo">${analysis.repository}</div>
+        <div class="stats">
+            <span class="pill">Generated <strong>${this.safeFormatDate(analysis.generatedAt)}</strong></span>
+            <span class="pill"><strong>${analysis.totalFiles}</strong> files scanned</span>
+            <span class="pill"><strong>${analysis.totalExperts}</strong> experts identified</span>
+            <span class="pill"><strong>${analysis.insights.length}</strong> insights</span>
         </div>
     </div>
 
     <div class="section">
-        <h2>👥 Expert Profiles</h2>
+        <h2><span class="accent">▸</span> Expert Profiles</h2>
         <div class="experts-grid">
-            ${analysis.expertProfiles.map(expert => `
-                <div class="expert-card">
+            ${analysis.expertProfiles.map(expert => {
+                const barColor = expert.expertise >= 20 ? '#06b6d4' : '#374151';
+                const cardClass = expert.expertise >= 60 ? 'high' : expert.expertise < 20 ? 'low' : '';
+                return `
+                <div class="expert-card ${cardClass}">
                     <div class="expert-header">
                         <div class="expert-avatar">
                             <img src="https://github.com/${this.getGitHubUsername(expert.email, expert.name)}.png?size=96" 
@@ -1740,46 +880,20 @@ export class ExpertiseWebviewProvider {
                             </div>
                         </div>
                         <div class="expert-info">
-                            <h3>${expert.name}</h3>
+                            <h3>${expert.name}${expert.teamRole ? `<span class="role-badge">${expert.teamRole}</span>` : ''}</h3>
                             <div class="expert-email">${expert.email}</div>
                         </div>
                     </div>
-                    
-                    <div class="expert-content">
-                        <div class="expert-stats">
-                            <div class="stat">
-                                <span class="stat-value">${expert.expertise}%</span>
-                                <span class="stat-label">Expertise</span>
-                            </div>
-                            <div class="stat">
-                                <span class="stat-value">${expert.contributions}</span>
-                                <span class="stat-label">Commits</span>
-                            </div>
-                            <div class="stat">
-                                <span class="stat-value">${
-                                    this.calculateDaysAgo(expert.lastCommit)
-                                }</span>
-                                <span class="stat-label">Days Ago</span>
-                            </div>
-                        </div>
 
-                        <div class="expertise-indicator">
-                            <div class="expertise-ring">
-                                <div class="expertise-circle">
-                                    <div class="expertise-inner">
-                                        <div class="expertise-score">${expert.expertise}%</div>
-                                        <div class="expertise-text">Expertise</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                    <div class="bar-chart"><svg viewBox="0 0 400 24"><rect width="400" height="24" fill="#1e293b"/><rect width="${expert.expertise * 4}" height="24" fill="${barColor}"/><text x="${Math.max(expert.expertise * 4 - 8, 30)}" y="17" text-anchor="end" fill="#fff" font-size="12" font-weight="bold" font-family="sans-serif">${expert.expertise}%</text></svg></div>
+
+                    <div class="expert-stats">
+                        <div class="stat"><div class="stat-value">${expert.expertise}%</div><div class="stat-label">Expertise</div></div>
+                        <div class="stat"><div class="stat-value">${expert.contributions}</div><div class="stat-label">Commits</div></div>
+                        <div class="stat"><div class="stat-value">${this.calculateDaysAgo(expert.lastCommit)}</div><div class="stat-label">Days Ago</div></div>
                     </div>
 
-                    <div class="specializations">
-                        ${(expert.specializations || []).map(spec => 
-                            `<span class="specialization-tag">${spec}</span>`
-                        ).join('')}
-                    </div>
+                    ${(expert.specializations || []).length ? `<div class="chips">${(expert.specializations || []).map(spec => `<span class="chip">${spec}</span>`).join('')}</div>` : ''}
 
                     <div class="expert-files">
                         <div class="expert-files-header" onclick="toggleExpertFiles('${expert.name.replace(/\s+/g, '-')}')">
@@ -1817,42 +931,43 @@ export class ExpertiseWebviewProvider {
                             🔍 Recent Activity
                         </button>
                     </div>
-                </div>
-            `).join('')}
+                </div>`;
+            }).join('')}
         </div>
     </div>
 
     <div class="section">
-        <h2>📊 Management Dashboard</h2>
-        ${this.renderManagementInsights(analysis)}
+        <h2 onclick="toggleSection('management')" class="collapsible-header">
+            <span><span class="accent">▸</span> Management Insights</span>
+            <span class="toggle-icon" id="management-icon">▼</span>
+        </h2>
+        <div class="collapsible-content" id="management-content">
+            ${this.renderManagementInsights(analysis)}
+        </div>
     </div>
 
-
     <div class="section">
-        <h2>🏥 Team Health Metrics</h2>
-        ${this.renderTeamHealthMetrics(analysis)}
+        <h2 onclick="toggleSection('health')" class="collapsible-header">
+            <span><span class="accent">▸</span> Team Health Metrics</span>
+            <span class="toggle-icon" id="health-icon">▼</span>
+        </h2>
+        <div class="collapsible-content" id="health-content">
+            ${this.renderTeamHealthMetrics(analysis)}
+        </div>
     </div>
 
     <div class="section">
         <h2 onclick="toggleSection('ai-insights')" class="collapsible-header">
-            💡 AI Insights & Recommendations
+            <span><span class="accent">▸</span> Key Insights</span>
             <span class="toggle-icon" id="ai-insights-icon">▼</span>
         </h2>
-        <div class="insights-section collapsible-content" id="ai-insights-content">
-            <div class="insight-container">
-                <div class="insight-badges">
-                    <span class="badge opportunity">OPPORTUNITY</span>
-                    <span class="badge medium">MEDIUM</span>
+        <div class="collapsible-content" id="ai-insights-content">
+            ${analysis.insights.map((insight, i) => `
+                <div class="insight-item">
+                    <div class="insight-num">${i + 1}</div>
+                    <div class="insight-text">${typeof insight === 'string' ? insight : insight.description}</div>
                 </div>
-                <h3 class="insight-title">Analysis Insight</h3>
-                <p class="insight-text">${analysis.insights[0]?.description || 'No insights available.'}</p>
-                <div class="recommendations">
-                    <h4>Recommendations:</h4>
-                    ${(analysis.insights.slice(1) || []).map(insight => `
-                        <p>${typeof insight === 'string' ? insight : insight.description}</p>
-                    `).join('')}
-                </div>
-            </div>
+            `).join('')}
         </div>
     </div>
 
@@ -1864,6 +979,8 @@ export class ExpertiseWebviewProvider {
             📊 Export Analysis
         </button>
     </div>
+
+    <div class="footer">Generated by Team X-Ray · ${this.safeFormatDate(analysis.generatedAt)}</div>
 </div>
 
     <script>
@@ -1916,12 +1033,29 @@ export class ExpertiseWebviewProvider {
                 const isCollapsed = content.classList.contains('collapsed');
                 
                 if (isCollapsed) {
-                    // Expand
                     content.classList.remove('collapsed');
                     icon.classList.remove('collapsed');
                     icon.textContent = '▼';
                 } else {
-                    // Collapse
+                    content.classList.add('collapsed');
+                    icon.classList.add('collapsed');
+                    icon.textContent = '▶';
+                }
+            }
+        }
+
+        function toggleSection(sectionId) {
+            const content = document.getElementById(sectionId + '-content');
+            const icon = document.getElementById(sectionId + '-icon');
+            
+            if (content && icon) {
+                const isCollapsed = content.classList.contains('collapsed');
+                
+                if (isCollapsed) {
+                    content.classList.remove('collapsed');
+                    icon.classList.remove('collapsed');
+                    icon.textContent = '▼';
+                } else {
                     content.classList.add('collapsed');
                     icon.classList.add('collapsed');
                     icon.textContent = '▶';
