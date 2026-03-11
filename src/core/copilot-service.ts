@@ -143,30 +143,19 @@ export class CopilotService {
         data: RepositoryData,
         repoStats: RepositoryStats
     ): Promise<ExpertiseAnalysis> {
-        this.outputChannel.appendLine(`[CopilotService] analyzeTeam() called`);
         if (!this.client) {
             throw new Error('CopilotService is not initialized');
         }
 
-        this.outputChannel.appendLine(`[CopilotService] Building tools...`);
         const tools = await this.buildTools(data, repoStats);
-        this.outputChannel.appendLine(`[CopilotService] Built ${tools.length} tools, creating session...`);
         const session = await this.createAnalysisSession(tools);
-        this.outputChannel.appendLine(`[CopilotService] Session created: ${session.sessionId}`);
 
         try {
-            // Log all session events for debugging
-            session.on((event: any) => {
-                this.outputChannel.appendLine(`[CopilotSDK] Event: ${event.type}${event.type === 'assistant.message' ? ' (content: ' + (event.data?.content?.substring(0, 100) ?? '') + '...)' : ''}`);
-            });
-
             const prompt = this.buildAnalysisPrompt(data.repository, repoStats);
-            this.outputChannel.appendLine(`[CopilotService] Sending prompt (${prompt.length} chars)...`);
             const response = await session.sendAndWait(
                 { prompt },
                 180_000 // 3 minute timeout for large repos
             );
-            this.outputChannel.appendLine(`[CopilotService] Got response: ${response ? 'yes' : 'none'}`);
 
             if (!response) {
                 throw new Error('No response from Copilot agent');
@@ -194,10 +183,6 @@ export class CopilotService {
 
         try {
             // Log all session events for debugging
-            session.on((event: any) => {
-                this.outputChannel.appendLine(`[CopilotSDK] Event: ${event.type}${event.type === 'assistant.message' ? ' (content: ' + (event.data?.content?.substring(0, 100) ?? '') + '...)' : ''}`);
-            });
-
             const prompt = [
                 `Identify the top experts for the file "${filePath}".`,
                 'Use the get_file_experts tool to retrieve contributor data for this file.',
@@ -230,8 +215,6 @@ export class CopilotService {
 
         const providerConfig = await this.getProviderConfig();
 
-        this.outputChannel.appendLine(`[CopilotService] Creating session with ${tools.length} custom tools`);
-
         const sessionConfig: SessionConfig = {
             tools,
             onPermissionRequest: (await loadSdk()).approveAll,
@@ -253,10 +236,7 @@ export class CopilotService {
             sessionConfig.model = model;
         }
 
-        this.outputChannel.appendLine(`[CopilotService] Calling client.createSession()...`);
-        const session = await this.client.createSession(sessionConfig);
-        this.outputChannel.appendLine(`[CopilotService] Session created: ${session.sessionId}`);
-        return session;
+        return this.client.createSession(sessionConfig);
     }
 
     // ── BYOK provider config ──────────────────────────────────────────
