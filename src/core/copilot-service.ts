@@ -151,10 +151,15 @@ export class CopilotService {
         const session = await this.createAnalysisSession(tools);
 
         try {
+            // Log all session events for debugging
+            session.on((event: any) => {
+                this.outputChannel.appendLine(`[CopilotSDK] Event: ${event.type}${event.type === 'assistant.message' ? ' (content: ' + (event.data?.content?.substring(0, 100) ?? '') + '...)' : ''}`);
+            });
+
             const prompt = this.buildAnalysisPrompt(data.repository, repoStats);
             const response = await session.sendAndWait(
                 { prompt },
-                120_000 // 2 minute timeout for large repos
+                180_000 // 3 minute timeout for large repos
             );
 
             if (!response) {
@@ -182,6 +187,11 @@ export class CopilotService {
         const session = await this.createAnalysisSession(tools);
 
         try {
+            // Log all session events for debugging
+            session.on((event: any) => {
+                this.outputChannel.appendLine(`[CopilotSDK] Event: ${event.type}${event.type === 'assistant.message' ? ' (content: ' + (event.data?.content?.substring(0, 100) ?? '') + '...)' : ''}`);
+            });
+
             const prompt = [
                 `Identify the top experts for the file "${filePath}".`,
                 'Use the get_file_experts tool to retrieve contributor data for this file.',
@@ -218,11 +228,10 @@ export class CopilotService {
             tools,
             onPermissionRequest: (await loadSdk()).approveAll,
             systemMessage: {
-                mode: 'append' as const,
+                mode: 'replace' as const,
                 content: SYSTEM_MESSAGE,
             },
-            // Disable built-in tools — we only want our custom ones
-            availableTools: tools.map(t => t.name),
+            // Let the agent use both custom and built-in tools — no restrictions
             // Disable infinite sessions — single-shot analysis
             infiniteSessions: { enabled: false },
         };
