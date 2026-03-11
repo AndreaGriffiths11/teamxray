@@ -47,6 +47,7 @@
   ],
   "main": "./dist/extension.js",
   "scripts": {
+    "postinstall": "node -e \"const fs=require('fs');const f='node_modules/@github/copilot-sdk/dist/session.js';if(fs.existsSync(f)){let c=fs.readFileSync(f,'utf8');c=c.replace(/from \\\"vscode-jsonrpc\\/node\\\"/g,'from \\\"vscode-jsonrpc/node.js\\\"');fs.writeFileSync(f,c)}\"",
     "vscode:prepublish": "npm run package",
     "compile": "webpack",
     "watch": "webpack --watch",
@@ -130,6 +131,10 @@
           "type": "string",
           "description": "GitHub token for API calls (not required when using Copilot)"
         },
+        "teamxray.cliPath": {
+          "type": "string",
+          "description": "Path to the Copilot CLI executable. If not set, the extension looks on your system PATH."
+        },
         "teamxray.aiProvider": {
           "type": "string",
           "enum": [
@@ -184,6 +189,7 @@
     "webpack-cli": "^6.0.1"
   },
   "dependencies": {
+    "@github/copilot-sdk": "^0.1.32",
     "axios": "^1.13.5",
     "dotenv": "^16.5.0"
   }

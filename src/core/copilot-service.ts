@@ -1,10 +1,13 @@
 import * as vscode from 'vscode';
-import {
-    CopilotClient,
-    CopilotSession,
-    defineTool,
-    approveAll,
-} from '@github/copilot-sdk';
+// @github/copilot-sdk is ESM-only — use webpackIgnore so webpack leaves the
+// import() call intact and Node.js performs a real ESM import at runtime.
+let _sdk: typeof import('@github/copilot-sdk') | null = null;
+async function loadSdk(): Promise<typeof import('@github/copilot-sdk')> {
+    if (!_sdk) {
+        _sdk = await import(/* webpackIgnore: true */ '@github/copilot-sdk');
+    }
+    return _sdk;
+}
 import type {
     AssistantMessageEvent,
     SessionConfig,
@@ -34,7 +37,7 @@ interface ProviderConfig {
  * exposing custom tools that let the agent pull repository data on demand.
  */
 export class CopilotService {
-    private client: CopilotClient | null = null;
+    private client: InstanceType<(typeof import('@github/copilot-sdk'))['CopilotClient']> | null = null;
     private outputChannel: vscode.OutputChannel;
     private secretStorage: vscode.SecretStorage;
     private _available = false;
@@ -67,7 +70,19 @@ export class CopilotService {
                 opts.githubToken = githubToken;
             }
 
-            this.client = new CopilotClient(opts);
+            // Resolve CLI path: user setting > PATH lookup > default SDK resolution
+            const configuredCliPath = config.get<string>('cliPath');
+            if (configuredCliPath) {
+                opts.cliPath = configuredCliPath;
+            } else {
+                const resolvedPath = await this.findCliOnPath();
+                if (resolvedPath) {
+                    opts.cliPath = resolvedPath;
+                }
+            }
+
+            const sdk = await loadSdk();
+            this.client = new sdk.CopilotClient(opts);
             await this.client.start();
 
             // Quick health check
@@ -82,6 +97,27 @@ export class CopilotService {
                 `[CopilotService] Copilot CLI not available: ${msg}`
             );
         }
+    }
+
+    /**
+     * Attempt to locate the `copilot` binary on the system PATH.
+     * Returns the absolute path if found, otherwise undefined.
+     */
+    private async findCliOnPath(): Promise<string | undefined> {
+        try {
+            const { execFile } = await import('child_process');
+            const { promisify } = await import('util');
+            const execFileAsync = promisify(execFile);
+            const { stdout } = await execFileAsync('which', ['copilot']);
+            const resolved = stdout.trim();
+            if (resolved) {
+                this.outputChannel.appendLine(`[CopilotService] Found CLI at: ${resolved}`);
+                return resolved;
+            }
+        } catch {
+            // CLI not on PATH
+        }
+        return undefined;
     }
 
     /** Gracefully shut down the client. Call during extension deactivation. */
@@ -111,7 +147,7 @@ export class CopilotService {
             throw new Error('CopilotService is not initialized');
         }
 
-        const tools = this.buildTools(data, repoStats);
+        const tools = await this.buildTools(data, repoStats);
         const session = await this.createAnalysisSession(tools);
 
         try {
@@ -142,7 +178,7 @@ export class CopilotService {
             throw new Error('CopilotService is not initialized');
         }
 
-        const tools = this.buildTools(data, data.stats);
+        const tools = await this.buildTools(data, data.stats);
         const session = await this.createAnalysisSession(tools);
 
         try {
@@ -171,7 +207,7 @@ export class CopilotService {
 
     // ── Session creation ───────────────────────────────────────────────
 
-    private async createAnalysisSession(tools: Tool<any>[]): Promise<CopilotSession> {
+    private async createAnalysisSession(tools: Tool<any>[]): Promise<InstanceType<(typeof import('@github/copilot-sdk'))['CopilotSession']>> {
         if (!this.client) {
             throw new Error('CopilotService is not initialized');
         }
@@ -180,7 +216,7 @@ export class CopilotService {
 
         const sessionConfig: SessionConfig = {
             tools,
-            onPermissionRequest: approveAll,
+            onPermissionRequest: (await loadSdk()).approveAll,
             systemMessage: {
                 mode: 'append' as const,
                 content: SYSTEM_MESSAGE,
@@ -247,7 +283,8 @@ export class CopilotService {
      * to the Copilot agent. The data is captured in closures so the agent
      * can pull exactly what it needs during the conversation.
      */
-    private buildTools(data: RepositoryData, stats: RepositoryStats): Tool<any>[] {
+    private async buildTools(data: RepositoryData, stats: RepositoryStats): Promise<Tool<any>[]> {
+        const { defineTool } = await loadSdk();
         return [
             defineTool('get_contributors', {
                 description: 'Get all git contributors with their commit counts, additions, deletions, and activity dates.',
