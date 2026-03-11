@@ -45,8 +45,23 @@ export function activate(context: vscode.ExtensionContext) {
         })
     );
 
+    context.subscriptions.push(
+        vscode.commands.registerCommand('teamxray.setByokApiKey', async () => {
+            const apiKey = await vscode.window.showInputBox({
+                prompt: 'Enter your BYOK API key',
+                password: true,
+                placeHolder: 'sk-...',
+                ignoreFocusOut: true,
+            });
+            if (apiKey) {
+                await context.secrets.store('teamxray.byokApiKey', apiKey);
+                vscode.window.showInformationMessage('BYOK API key saved securely.');
+            }
+        })
+    );
+
     // Initialize Copilot SDK (non-blocking — falls back gracefully)
-    copilotService = new CopilotService(outputChannel);
+    copilotService = new CopilotService(outputChannel, context.secrets);
     copilotService.initialize().then(() => {
         if (copilotService?.isAvailable()) {
             outputChannel.appendLine('Copilot SDK connected — AI analysis will use Copilot');

@@ -745,14 +745,26 @@ Respond with JSON only (NO markdown, NO explanations):
             // Try Copilot SDK first
             if (this.copilotService?.isAvailable()) {
                 try {
-                    const repoStats = await this.assessRepositorySize();
-                    const repositoryData = await this.gatherRepositoryData(
-                        vscode.workspace.workspaceFolders?.[0]?.name ?? 'current',
-                        repoStats
-                    );
-                    if (repositoryData) {
-                        const repoData = this.toRepositoryData(repositoryData, repoStats);
-                        const experts = await this.copilotService.analyzeFileExpert(filePath, repoData);
+                    // Gather only file-scoped git data instead of full repo scan
+                    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+                    if (workspaceFolder) {
+                        if (!this.gitService) {
+                            this.gitService = new GitService(workspaceFolder.uri.fsPath, this.outputChannel);
+                        }
+                        const commits = await this.gitService.getCommits(200);
+                        const fileCommits = commits.filter((c: any) =>
+                            c.files?.some((f: string) => f.includes(filePath) || filePath.includes(f))
+                        );
+                        const repoStats = await this.assessRepositorySize();
+                        const minimalData: RepositoryData = {
+                            repository: workspaceFolder.name,
+                            files: [],
+                            contributors: this.extractContributorsFromCommits(fileCommits),
+                            commits: fileCommits,
+                            collaborationData: { teamSize: 0, communicationPatterns: [], knowledgeSharing: [], expertiseDistribution: [] },
+                            stats: repoStats,
+                        };
+                        const experts = await this.copilotService.analyzeFileExpert(filePath, minimalData);
                         if (experts.length > 0) {
                             this.outputChannel.appendLine(`✅ Found ${experts.length} experts via Copilot SDK`);
                             return experts;
@@ -824,6 +836,26 @@ Respond with JSON only (NO markdown, NO explanations):
             this.outputChannel.appendLine(`❌ Failed to gather file data: ${error}`);
             return null;
         }
+    }
+
+        private extractContributorsFromCommits(commits: any[]): any[] {
+        const authorMap = new Map<string, { name: string; email: string; commits: number; lastCommit: string }>();
+        for (const c of commits) {
+            const key = c.author?.email ?? 'unknown';
+            const existing = authorMap.get(key);
+            if (existing) {
+                existing.commits++;
+                if (c.date > existing.lastCommit) { existing.lastCommit = c.date; }
+            } else {
+                authorMap.set(key, {
+                    name: c.author?.name ?? 'Unknown',
+                    email: key,
+                    commits: 1,
+                    lastCommit: c.date ?? new Date().toISOString(),
+                });
+            }
+        }
+        return Array.from(authorMap.values()).sort((a, b) => b.commits - a.commits);
     }
 
     private async analyzeFileExperts(fileData: any): Promise<Expert[]> {

@@ -122,7 +122,13 @@ describe('CopilotService', () => {
     let service: CopilotService;
 
     beforeEach(() => {
-        service = new CopilotService(makeOutputChannel());
+        const mockSecretStorage = {
+            get: async () => undefined,
+            store: async () => {},
+            delete: async () => {},
+            onDidChange: () => ({ dispose: () => {} }),
+        } as any;
+        service = new CopilotService(makeOutputChannel(), mockSecretStorage);
     });
 
     describe('isAvailable', () => {

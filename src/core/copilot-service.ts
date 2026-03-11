@@ -36,10 +36,12 @@ interface ProviderConfig {
 export class CopilotService {
     private client: CopilotClient | null = null;
     private outputChannel: vscode.OutputChannel;
+    private secretStorage: vscode.SecretStorage;
     private _available = false;
 
-    constructor(outputChannel: vscode.OutputChannel) {
+    constructor(outputChannel: vscode.OutputChannel, secretStorage: vscode.SecretStorage) {
         this.outputChannel = outputChannel;
+        this.secretStorage = secretStorage;
     }
 
     /** Whether the Copilot CLI was successfully initialized. */
@@ -147,7 +149,7 @@ export class CopilotService {
             const prompt = [
                 `Identify the top experts for the file "${filePath}".`,
                 'Use the get_file_experts tool to retrieve contributor data for this file.',
-                'Return a JSON array of Expert objects with name, email, expertise score (0-1),',
+                'Return a JSON array of Expert objects with name, email, expertise score (0-100),',
                 'contributions count, specializations, communicationStyle, teamRole,',
                 'hiddenStrengths, and idealChallenges.',
             ].join('\n');
@@ -174,7 +176,7 @@ export class CopilotService {
             throw new Error('CopilotService is not initialized');
         }
 
-        const providerConfig = this.getProviderConfig();
+        const providerConfig = await this.getProviderConfig();
 
         const sessionConfig: SessionConfig = {
             tools,
@@ -204,7 +206,7 @@ export class CopilotService {
 
     // ── BYOK provider config ──────────────────────────────────────────
 
-    private getProviderConfig(): ProviderConfig | undefined {
+    private async getProviderConfig(): Promise<ProviderConfig | undefined> {
         const config = vscode.workspace.getConfiguration('teamxray');
         const provider = config.get<string>('aiProvider');
 
@@ -213,7 +215,8 @@ export class CopilotService {
         }
 
         const baseUrl = config.get<string>('byokBaseUrl');
-        const apiKey = config.get<string>('byokApiKey');
+        const apiKey = await this.secretStorage.get('teamxray.byokApiKey')
+            ?? config.get<string>('byokApiKey'); // Fall back to settings for migration
 
         if (!baseUrl) {
             const warningMessage = `[CopilotService] BYOK provider "${provider}" is selected but teamxray.byokBaseUrl is not configured. Falling back to default Copilot auth.`;
@@ -335,12 +338,13 @@ export class CopilotService {
             '',
             '```json',
             '{',
-            '  "experts": [{ "name", "email", "expertise" (0-1), "contributions", "lastCommit" (ISO date),',
+            '  "experts": [{ "name", "email", "expertise" (0-100), "contributions", "lastCommit" (ISO date),',
             '    "specializations" (string[]), "communicationStyle", "teamRole",',
             '    "hiddenStrengths" (string[]), "idealChallenges" (string[]),',
             '    "workloadIndicator": "balanced"|"overloaded"|"underutilized",',
             '    "collaborationStyle": "independent"|"collaborative"|"mentoring",',
-            '    "riskFactors": string[] }],',
+            '    "riskFactors": string[],',
+            '    NOTE: expertise is 0-100, NOT 0-1 }],',
             '  "fileExpertise": [{ "fileName", "filePath", "experts" (top 3 Expert objects),',
             '    "lastModified" (ISO date), "changeFrequency" }],',
             '  "insights": [{ "type": "strength"|"gap"|"opportunity"|"risk",',
@@ -480,7 +484,7 @@ export class CopilotService {
         return {
             name: e.name ?? 'Unknown',
             email: e.email ?? '',
-            expertise: typeof e.expertise === 'number' ? e.expertise : 0.5,
+            expertise: typeof e.expertise === 'number' ? e.expertise : 50,
             contributions: e.contributions ?? 0,
             lastCommit: new Date(e.lastCommit ?? Date.now()),
             specializations: e.specializations ?? [],
@@ -502,7 +506,7 @@ export class CopilotService {
         const experts: Expert[] = data.contributors.slice(0, 20).map(c => ({
             name: c.name,
             email: c.email,
-            expertise: Math.min(c.commits / (stats.totalCommits || 1), 1),
+            expertise: Math.min(100, (c.commits / (stats.totalCommits || 1)) * 100),
             contributions: c.commits,
             lastCommit: new Date(c.lastCommit),
             specializations: [],

@@ -72,6 +72,10 @@
         "title": "Team X-Ray: Set GitHub Token"
       },
       {
+        "command": "teamxray.setByokApiKey",
+        "title": "Team X-Ray: Set BYOK API Key (Secure)"
+      },
+      {
         "command": "teamxray.findExpertForFile",
         "title": "Team X-Ray: Find Expert for This File"
       },
@@ -151,7 +155,8 @@
         },
         "teamxray.byokApiKey": {
           "type": "string",
-          "description": "API key for BYOK provider"
+          "description": "DEPRECATED: Use the 'Team X-Ray: Set BYOK API Key (Secure)' command instead. This setting is kept for migration only.",
+          "deprecationMessage": "For security, use the command 'Team X-Ray: Set BYOK API Key (Secure)' to store your API key in VS Code's encrypted secret storage."
         },
         "teamxray.byokModel": {
           "type": "string",
