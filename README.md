@@ -19,14 +19,7 @@ Transform your repository into a team expertise map. Discover who knows what, re
 
 Team X-Ray reads your git history — commits, contributors, file ownership — and feeds it to an AI agent through custom tools. The agent calls back into your repo data to build expertise profiles, identify risks, and generate management-ready insights.
 
-```
-Git History → Data Gathering → AI Agent (Copilot SDK) → Expert Profiles + Insights
-                                    ↕
-                              5 Custom Tools
-                         (contributors, commits,
-                          file experts, stats,
-                          collaboration patterns)
-```
+![Team X-Ray Architecture](docs/architecture.png)
 
 ### AI Provider Fallback
 
