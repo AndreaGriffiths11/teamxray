@@ -1,5 +1,8 @@
 name: Marketplace Preparation
 
+permissions:
+  contents: read
+
 on:
   workflow_dispatch:
     inputs:
@@ -21,6 +24,8 @@ on:
 jobs:
   prepare-release:
     name: Prepare Marketplace Release
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     outputs:
       new_version: ${{ steps.version.outputs.version }}
