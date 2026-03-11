@@ -74,31 +74,33 @@ jobs:
         fi
         echo "✅ Extension size OK: $(($VSIX_SIZE / 1024 / 1024))MB"
         
-    - name: Comment PR with results
+        - name: Comment PR with results
       uses: actions/github-script@v7
       if: always()
+      env:
+        JOB_STATUS: ${{ job.status }}
       with:
         script: |
           const fs = require('fs');
           const vsixFiles = fs.readdirSync('.').filter(f => f.endsWith('.vsix'));
           const vsixFile = vsixFiles[0] || 'Not generated';
+          const passed = process.env.JOB_STATUS === 'success';
+          const status = passed ? '✅ Passed' : '❌ Failed';
           
           const body = `## 🔍 Extension Quality Check Results
           
-          ### ✅ Validation Status
-          - **TypeScript Compilation**: ${{ job.status == 'success' && '✅ Passed' || '❌ Failed' }}
-          - **ESLint Quality Check**: ${{ job.status == 'success' && '✅ Passed' || '❌ Failed' }}
-          - **Extension Packaging**: ${{ job.status == 'success' && '✅ Passed' || '❌ Failed' }}
-          - **Configuration Check**: ${{ job.status == 'success' && '✅ Passed' || '❌ Failed' }}
+          ### Validation Status
+          - **TypeScript Compilation**: ${status}
+          - **ESLint Quality Check**: ${status}
+          - **Extension Packaging**: ${status}
+          - **Configuration Check**: ${status}
           
           ### 📦 Extension Details
           - **Generated VSIX**: \`${vsixFile}\`
-          - **Publisher**: Ready for marketplace submission
-          - **MCP Integration**: Configured for GitHub MCP Server
           
           ### 🎯 Next Steps
-          ${job.status == 'success' 
-            ? '✨ This PR is ready to merge! The extension builds successfully and passes all quality checks.' 
+          ${passed
+            ? '✨ This PR is ready to merge! The extension builds successfully and passes all quality checks.'
             : '🔧 Please fix the issues above before merging.'}
           `;
           
