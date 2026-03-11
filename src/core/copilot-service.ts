@@ -216,6 +216,11 @@ export class CopilotService {
         const apiKey = config.get<string>('byokApiKey');
 
         if (!baseUrl) {
+            const warningMessage = `[CopilotService] BYOK provider "${provider}" is selected but teamxray.byokBaseUrl is not configured. Falling back to default Copilot auth.`;
+            this.outputChannel.appendLine(warningMessage);
+            vscode.window.showWarningMessage(
+                `Team X-Ray: BYOK provider "${provider}" selected but Base URL is not configured. Set teamxray.byokBaseUrl in settings.`
+            );
             return undefined;
         }
 
