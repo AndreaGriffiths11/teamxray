@@ -441,6 +441,8 @@ export class ExpertiseWebviewProvider {
      */
     private generateStandaloneHTML(): string {
         const analysis = this.currentAnalysis;
+        const categoryColors: Record<string, string> = { RISK: '#ef4444', OPPORTUNITY: '#10b981', EFFICIENCY: '#3b82f6', GROWTH: '#f59e0b' };
+        const priorityDots: Record<string, string> = { HIGH: '●●●', MEDIUM: '●●○', LOW: '●○○' };
         return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -448,175 +450,99 @@ export class ExpertiseWebviewProvider {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Team X-Ray Analysis Report - ${analysis.repository}</title>
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-            background: #f5f5f5;
-        }
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 40px;
-            border-radius: 12px;
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .header h1 {
-            margin: 0 0 10px 0;
-            font-size: 2.5em;
-        }
-        .metadata {
-            opacity: 0.9;
-            font-size: 1.1em;
-        }
-        .section {
-            background: white;
-            border-radius: 12px;
-            padding: 30px;
-            margin-bottom: 30px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
-        .section h2 {
-            color: #2d3748;
-            border-bottom: 3px solid #667eea;
-            padding-bottom: 10px;
-            margin-top: 0;
-        }
-        .expert-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
-            margin: 20px 0;
-        }
-        .expert-card {
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            padding: 20px;
-            background: #f8fafc;
-        }
-        .expert-name {
-            font-weight: bold;
-            font-size: 1.2em;
-            color: #2d3748;
-            margin-bottom: 10px;
-        }
-        .expert-stats {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
-            margin: 15px 0;
-        }
-        .stat {
-            text-align: center;
-            padding: 10px;
-            background: white;
-            border-radius: 6px;
-            border: 1px solid #e2e8f0;
-        }
-        .stat-value {
-            font-weight: bold;
-            font-size: 1.1em;
-            color: #667eea;
-        }
-        .stat-label {
-            font-size: 0.9em;
-            color: #64748b;
-        }
-        .insights-list {
-            list-style: none;
-            padding: 0;
-        }
-        .insights-list li {
-            background: #f0f4f8;
-            margin: 10px 0;
-            padding: 15px;
-            border-radius: 8px;
-            border-left: 4px solid #667eea;
-        }
-        .management-insights {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-            gap: 20px;
-            margin: 20px 0;
-        }
-        .management-card {
-            border-radius: 8px;
-            padding: 20px;
-            border-left: 4px solid;
-        }
-        .management-card.risk { border-left-color: #ef4444; background: #fef2f2; }
-        .management-card.opportunity { border-left-color: #22c55e; background: #f0fdf4; }
-        .management-card.efficiency { border-left-color: #3b82f6; background: #eff6ff; }
-        .management-card.growth { border-left-color: #a855f7; background: #faf5ff; }
-        .generated-info {
-            text-align: center;
-            color: #64748b;
-            font-style: italic;
-            margin-top: 40px;
-            padding-top: 20px;
-            border-top: 1px solid #e2e8f0;
-        }
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Roboto',sans-serif;line-height:1.6;color:#e2e8f0;max-width:1200px;margin:0 auto;padding:20px;background:#0a0a0f}
+        .header{background:#0a0a0f;background-image:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(6,182,212,0.03) 2px,rgba(6,182,212,0.03) 4px);padding:48px 40px;border:1px solid #1e293b;border-radius:12px;text-align:center;margin-bottom:30px}
+        .header h1{font-size:2.5em;font-weight:800;letter-spacing:0.08em;color:#e2e8f0;text-shadow:0 0 20px rgba(6,182,212,0.4),0 0 40px rgba(6,182,212,0.15);margin-bottom:8px}
+        .header .repo{font-family:'SF Mono',SFMono-Regular,Consolas,'Liberation Mono',Menlo,monospace;color:#06b6d4;font-size:1.1em;margin-bottom:16px}
+        .header .stats{display:flex;justify-content:center;gap:12px;flex-wrap:wrap}
+        .pill{display:inline-block;padding:4px 14px;border:1px solid #1e293b;border-radius:999px;font-size:0.85em;color:#64748b}
+        .pill strong{color:#e2e8f0}
+        .section{background:#12121a;border:1px solid #1e293b;border-radius:12px;padding:30px;margin-bottom:30px}
+        .section h2{color:#e2e8f0;font-size:1.4em;border-bottom:2px solid #1e293b;padding-bottom:10px;margin-bottom:20px}
+        .section h2 .accent{color:#06b6d4}
+        .expert-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px}
+        .expert-card{background:#12121a;border:1px solid #1e293b;border-radius:8px;padding:20px;transition:box-shadow 0.2s}
+        .expert-card.high{border-left:3px solid #06b6d4;box-shadow:inset 4px 0 12px -4px rgba(6,182,212,0.15)}
+        .expert-card.low{opacity:0.6}
+        .expert-name{font-weight:700;font-size:1.15em;color:#e2e8f0;margin-bottom:2px}
+        .expert-email{font-size:0.85em;color:#64748b;margin-bottom:12px}
+        .role-badge{display:inline-block;font-size:0.7em;text-transform:uppercase;letter-spacing:0.08em;color:#8b5cf6;border:1px solid rgba(139,92,246,0.3);border-radius:4px;padding:2px 8px;margin-left:8px;vertical-align:middle}
+        .bar-chart{width:100%;margin:10px 0}
+        .bar-chart svg{width:100%;height:24px;border-radius:4px;overflow:hidden}
+        .expert-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}
+        .stat{text-align:center;padding:8px;background:#0a0a0f;border-radius:6px;border:1px solid #1e293b}
+        .stat-value{font-weight:700;font-size:1.05em;color:#06b6d4}
+        .stat-label{font-size:0.78em;color:#64748b}
+        .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+        .chip{font-size:0.75em;padding:3px 10px;background:#0a0a0f;border:1px solid #1e293b;border-radius:999px;color:#64748b}
+        .mgmt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(350px,1fr));gap:20px}
+        .mgmt-card{background:#12121a;border:1px solid #1e293b;border-radius:8px;padding:20px;border-top:6px solid}
+        .mgmt-card h3{color:#e2e8f0;margin-bottom:6px;font-size:1.1em}
+        .mgmt-meta{font-size:0.85em;color:#64748b;margin-bottom:10px}
+        .mgmt-meta .dots{margin-left:6px}
+        .mgmt-card p{color:#94a3b8;font-size:0.95em;margin-bottom:12px}
+        .action-box{background:#0a0a0f;border:1px solid #1e293b;border-radius:6px;padding:14px;margin-top:10px}
+        .action-box .label{font-size:0.8em;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;margin-bottom:8px}
+        .action-box ul{list-style:none;padding:0}
+        .action-box li{padding:4px 0;color:#94a3b8;font-size:0.9em}
+        .action-box li::before{content:'›';color:#06b6d4;margin-right:8px;font-weight:bold}
+        .impact{font-size:0.85em;color:#64748b;margin-top:10px}
+        .impact strong{color:#e2e8f0}
+        .insight-item{display:flex;align-items:baseline;gap:14px;padding:14px 0;border-bottom:1px solid #1e293b}
+        .insight-item:last-child{border-bottom:none}
+        .insight-num{font-size:1.3em;font-weight:800;color:#06b6d4;min-width:28px;text-align:right}
+        .insight-text{color:#94a3b8;font-size:0.95em}
+        .footer{text-align:center;padding:24px 0;margin-top:20px;font-family:'SF Mono',SFMono-Regular,Consolas,monospace;font-size:0.8em;color:#64748b;border-top:1px solid #1e293b}
+        @media print{body{background:#fff;color:#1a1a1a}.header{background:#fff;border-color:#ddd}.header h1{color:#1a1a1a;text-shadow:none}.header .repo{color:#0891b2}.section{background:#fff;border-color:#ddd;box-shadow:none}.expert-card{background:#fff;border-color:#ddd;opacity:1!important;box-shadow:none!important}.stat{background:#f5f5f5;border-color:#ddd}.stat-value{color:#0891b2}.chip{background:#f5f5f5;border-color:#ddd;color:#555}.mgmt-card{background:#fff;border-color:#ddd}.action-box{background:#f5f5f5;border-color:#ddd}.footer{color:#999;border-color:#ddd}.insight-text{color:#444}.pill{border-color:#ddd;color:#666}}
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>🔍 Team X-Ray Analysis Report</h1>
-        <div class="metadata">
-            📊 ${analysis.repository} • Generated ${this.safeFormatDate(analysis.generatedAt)}<br>
-            ${analysis.totalFiles} files analyzed • ${analysis.totalExperts} team experts identified
+        <h1>TEAM X-RAY</h1>
+        <div class="repo">${analysis.repository}</div>
+        <div class="stats">
+            <span class="pill">Generated <strong>${this.safeFormatDate(analysis.generatedAt)}</strong></span>
+            <span class="pill"><strong>${analysis.totalFiles}</strong> files scanned</span>
+            <span class="pill"><strong>${analysis.totalExperts}</strong> experts identified</span>
         </div>
     </div>
 
     <div class="section">
-        <h2>👥 Team Expert Profiles</h2>
+        <h2><span class="accent">▸</span> Expert Profiles</h2>
         <div class="expert-grid">
-            ${analysis.expertProfiles.map((expert: any) => `
-                <div class="expert-card">
-                    <div class="expert-name">${expert.name}</div>
-                    <div>📧 ${expert.email}</div>
+            ${analysis.expertProfiles.map((expert: any) => {
+                const barColor = expert.expertise >= 20 ? '#06b6d4' : '#374151';
+                const cardClass = expert.expertise >= 60 ? 'high' : expert.expertise < 20 ? 'low' : '';
+                return `<div class="expert-card ${cardClass}">
+                    <div class="expert-name">${expert.name}${expert.teamRole ? `<span class="role-badge">${expert.teamRole}</span>` : ''}</div>
+                    <div class="expert-email">${expert.email}</div>
+                    <div class="bar-chart"><svg viewBox="0 0 400 24"><rect width="400" height="24" fill="#1e293b"/><rect width="${expert.expertise * 4}" height="24" fill="${barColor}"/><text x="${Math.max(expert.expertise * 4 - 8, 30)}" y="17" text-anchor="end" fill="#fff" font-size="12" font-weight="bold" font-family="sans-serif">${expert.expertise}%</text></svg></div>
                     <div class="expert-stats">
-                        <div class="stat">
-                            <div class="stat-value">${expert.expertise}%</div>
-                            <div class="stat-label">Expertise</div>
-                        </div>
-                        <div class="stat">
-                            <div class="stat-value">${expert.contributions}</div>
-                            <div class="stat-label">Commits</div>
-                        </div>
-                        <div class="stat">
-                            <div class="stat-value">${this.calculateDaysAgo(expert.lastCommit)}</div>
-                            <div class="stat-label">Days Ago</div>
-                        </div>
+                        <div class="stat"><div class="stat-value">${expert.expertise}%</div><div class="stat-label">Expertise</div></div>
+                        <div class="stat"><div class="stat-value">${expert.contributions}</div><div class="stat-label">Commits</div></div>
+                        <div class="stat"><div class="stat-value">${this.calculateDaysAgo(expert.lastCommit)}</div><div class="stat-label">Days Ago</div></div>
                     </div>
-                    ${expert.specializations?.length ? `
-                        <div><strong>Specializations:</strong> ${expert.specializations.join(', ')}</div>
-                    ` : ''}
-                    ${expert.teamRole ? `<div><strong>Role:</strong> ${expert.teamRole}</div>` : ''}
-                </div>
-            `).join('')}
+                    ${expert.specializations?.length ? `<div class="chips">${expert.specializations.map((s: string) => `<span class="chip">${s}</span>`).join('')}</div>` : ''}
+                </div>`;
+            }).join('')}
         </div>
     </div>
 
     ${analysis.managementInsights?.length ? `
         <div class="section">
-            <h2>📊 Management Insights</h2>
-            <div class="management-insights">
+            <h2><span class="accent">▸</span> Management Insights</h2>
+            <div class="mgmt-grid">
                 ${analysis.managementInsights.map((insight: any) => `
-                    <div class="management-card ${insight.category.toLowerCase()}">
+                    <div class="mgmt-card" style="border-top-color:${categoryColors[insight.category] || '#06b6d4'}">
                         <h3>${insight.title}</h3>
-                        <p><strong>Category:</strong> ${insight.category} | <strong>Priority:</strong> ${insight.priority}</p>
+                        <div class="mgmt-meta">${insight.category}<span class="dots" style="color:${categoryColors[insight.category] || '#64748b'}"> ${priorityDots[insight.priority] || '●○○'}</span></div>
                         <p>${insight.description}</p>
-                        <div>
-                            <strong>Action Items (${insight.timeline}):</strong>
-                            <ul>
-                                ${insight.actionItems.map((action: string) => `<li>${action}</li>`).join('')}
-                            </ul>
+                        <div class="action-box">
+                            <div class="label">Action Items · ${insight.timeline}</div>
+                            <ul>${insight.actionItems.map((action: string) => `<li>${action}</li>`).join('')}</ul>
                         </div>
-                        <p><strong>Expected Impact:</strong> ${insight.impact}</p>
+                        <div class="impact"><strong>Impact:</strong> ${insight.impact}</div>
                     </div>
                 `).join('')}
             </div>
@@ -624,18 +550,16 @@ export class ExpertiseWebviewProvider {
     ` : ''}
 
     <div class="section">
-        <h2>💡 Key Insights</h2>
-        <ul class="insights-list">
-            ${analysis.insights.map((insight: any) => `
-                <li>${typeof insight === 'string' ? insight : insight.description}</li>
-            `).join('')}
-        </ul>
+        <h2><span class="accent">▸</span> Key Insights</h2>
+        ${analysis.insights.map((insight: any, i: number) => `
+            <div class="insight-item">
+                <div class="insight-num">${i + 1}</div>
+                <div class="insight-text">${typeof insight === 'string' ? insight : insight.description}</div>
+            </div>
+        `).join('')}
     </div>
 
-    <div class="generated-info">
-        Generated by Team X-Ray VS Code Extension<br>
-        ${new Date().toLocaleString()}
-    </div>
+    <div class="footer">Generated by Team X-Ray · ${this.safeFormatDate(analysis.generatedAt)}</div>
 </body>
 </html>`;
     }
