@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-03-12
+
+### 🚀 Major: Copilot SDK Integration
+- **New AI engine**: Replaced MCP server architecture with GitHub Copilot SDK (`@github/copilot-sdk`). No more Docker containers or separate processes — the SDK runs directly inside the extension.
+- **Smart fallback chain**: Copilot SDK → BYOK (bring your own key) → GitHub Models API → local-only analysis. If one tier is unavailable, the next kicks in automatically.
+- **Custom tools via `defineTool` + Zod**: Five purpose-built tools the SDK agent uses to analyze repositories (file analysis, contributor stats, commit patterns, etc.)
+- **Webpack ESM bundling**: Solved `@github/copilot-sdk` being ESM-only with `/* webpackIgnore: true */` on dynamic imports.
+
+### 🤖 Agent & Bot Detection
+- **`detectBot(name, email)` helper**: Identifies bot and agent contributors (Dependabot, Copilot, Renovate, etc.) from commit metadata.
+- **Visual distinction**: Bot contributors get gray expertise bars and a 🤖 badge instead of the standard color scheme.
+- **Why it matters**: As AI agents commit more code, you need to know which expertise is human and which is automated.
+
+### 🎨 Dark X-Ray Redesign
+- **Exported reports**: Complete visual overhaul — `#0a0a0f` background, cyan (`#06b6d4`) accent, CSS scan-line patterns, SVG bar charts. Looks like something out of a cybersecurity dashboard.
+- **VS Code webview**: Matching dark theme for the in-editor view, consistent with exported reports.
+
+### 📖 Documentation
+- **README rewritten**: Added Copilot SDK architecture section, ASCII flow diagram, fallback chain table.
+- **Architecture diagram**: Hand-drawn image replacing the old ASCII version.
+- **SECURITY.md**: Added vulnerability reporting process.
+- **FUNDING.yml**: Added GitHub Sponsors.
+
+### 🔧 Infrastructure
+- **Dropped Node 18**: CI now runs on Node 20+ only (`@vscode/vsce` requires it).
+- **Security audit**: Changed from `--audit-level high` to `--omit=dev --audit-level critical` — dev-only vulns with no upstream fix were blocking CI for no reason.
+- **CI PR comment fix**: `job.status` → `JOB_STATUS` env var.
+
+### 📦 Dependencies
+- Bumped rollup 4.53.3 → 4.59.0
+- Bumped minimatch 3.1.2 → 3.1.5
+- Bumped axios 1.12.0 → 1.13.5
+- Bumped webpack 5.99.9 → 5.105.0
+- Bumped fastify 5.6.2 → 5.7.4
+
 ## [1.0.5] - 2025-11-24
 
 ### ✨ UI Improvements
