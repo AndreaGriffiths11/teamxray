@@ -12,6 +12,7 @@ Transform your repository into a team expertise map. Discover who knows what, re
 - **🧠 Team Expertise Analysis** — AI-powered profiles with communication styles, specializations, and collaboration patterns
 - **📊 Management Insights** — Actionable recommendations: bus factor risks, growth opportunities, efficiency gaps
 - **🤖 GitHub Copilot SDK Integration** — Uses the Copilot SDK with custom tools for deep, context-aware analysis
+- **🤖 Agent & Bot Detection** — Automatically identifies bot/agent contributors (Dependabot, Copilot, Renovate) with visual distinction
 - **📄 Dark-themed Reports** — Exportable HTML reports with SVG charts and an X-Ray visual identity
 - **⚡ Smart Fallback Chain** — Copilot SDK → BYOK (OpenAI/Anthropic/Azure) → GitHub Models API → Local-only analysis
 
@@ -64,7 +65,7 @@ For the best experience, install and authenticate the [Copilot CLI](https://docs
 
 ```bash
 # Install
-npm install -g @githubnext/github-copilot-cli
+curl -fsSL https://gh.io/copilot-install | bash
 
 # Authenticate
 copilot auth login
@@ -84,8 +85,7 @@ src/
 ├── core/
 │   ├── copilot-service.ts       # Copilot SDK integration (5 custom tools)
 │   ├── expertise-analyzer.ts    # Analysis orchestrator + fallback chain
-│   ├── expertise-webview.ts     # VS Code webview UI
-│   ├── report-generator.ts      # Standalone HTML report export
+│   ├── expertise-webview.ts     # VS Code webview UI + standalone HTML export
 │   └── git-data-service.ts      # Git history data gathering
 ├── types/
 │   └── expert.ts                # TypeScript interfaces
