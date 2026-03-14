@@ -220,7 +220,8 @@ export class ExpertiseAnalyzer {
             };
 
         } catch (error) {
-            this.outputChannel.appendLine(`⚠️ Error assessing repository size: ${error}`);
+            const detail = error instanceof Error ? error.message : String(error);
+            this.outputChannel.appendLine(`⚠️ Error assessing repository size: ${detail}. Falling back to defaults — git log or file glob may have failed.`);
             return {
                 totalFiles: 0,
                 totalCommits: 0,
@@ -299,7 +300,8 @@ export class ExpertiseAnalyzer {
             };
 
         } catch (error) {
-            this.outputChannel.appendLine(`❌ Error gathering repository data: ${error}`);
+            const detail = error instanceof Error ? error.message : String(error);
+            this.outputChannel.appendLine(`❌ Error gathering repository data: ${detail}. Check workspace access and git history availability.`);
             throw error;
         }
     }
@@ -905,8 +907,8 @@ Respond with JSON only (NO markdown, NO explanations):
 
             return fileExperts;
         } catch (error) {
-            this.outputChannel.appendLine(`❌ Error analyzing file experts: ${error}`);
-            throw new Error(`Cannot analyze file experts: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            this.outputChannel.appendLine(`❌ Error analyzing file experts: ${error instanceof Error ? error.message : error}`);
+            throw new Error(`Cannot analyze file experts: ${error instanceof Error ? error.message : 'Unknown error — file may not exist or git history is empty'}`);
         }
     }
 
@@ -1043,7 +1045,7 @@ Respond with JSON only (NO markdown, NO explanations):
                 }
             };
         } catch (error) {
-            this.outputChannel.appendLine(`❌ Failed to parse AI response: ${error}`);
+            this.outputChannel.appendLine(`❌ Failed to parse AI response: ${error instanceof Error ? error.message : error}. The model may have returned malformed JSON.`);
             return this.createFallbackAnalysis(repositoryData);
         }
     }
@@ -1226,7 +1228,7 @@ Respond with JSON only (NO markdown, NO explanations):
             return commits;
 
         } catch (error) {
-            this.outputChannel.appendLine(`⚠️ Failed to get local git commits: ${error}`);
+            this.outputChannel.appendLine(`⚠️ Failed to get local git commits: ${error instanceof Error ? error.message : error}. Ensure workspace is a valid git repository.`);
             return [];
         }
     }
@@ -1249,7 +1251,7 @@ Respond with JSON only (NO markdown, NO explanations):
             return contributors;
 
         } catch (error) {
-            this.outputChannel.appendLine(`⚠️ Failed to get local git contributors: ${error}`);
+            this.outputChannel.appendLine(`⚠️ Failed to get local git contributors: ${error instanceof Error ? error.message : error}. Git shortlog may not be available.`);
             return [];
         }
     }
