@@ -480,7 +480,7 @@ export class ExpertiseAnalyzer {
             const response = await axios.post(
                 'https://models.github.ai/inference/chat/completions',
                 {
-                    model: 'openai/gpt-4o',
+                    model: 'openai/gpt-4.1',
                     messages: [
                         {
                             role: 'system',
