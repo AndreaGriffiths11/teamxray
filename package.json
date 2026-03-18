@@ -11,12 +11,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/AndreaGriffiths11/team-xray"
+    "url": "https://github.com/AndreaGriffiths11/teamxray"
   },
   "bugs": {
-    "url": "https://github.com/AndreaGriffiths11/team-xray/issues"
+    "url": "https://github.com/AndreaGriffiths11/teamxray/issues"
   },
-  "homepage": "https://github.com/AndreaGriffiths11/team-xray#readme",
+  "homepage": "https://github.com/AndreaGriffiths11/teamxray#readme",
   "engines": {
     "vscode": "^1.100.0"
   },
