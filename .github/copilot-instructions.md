@@ -1,233 +1,105 @@
 # GitHub Copilot Instructions for MCP Team X-Ray Extension
 
-## 🎯 Core Engineering Philosophy
-**ALWAYS prioritize elegant engineering over redundant, bloated solutions.** Write code that is clean, efficient, maintainable, and serves our human-centric mission.
+**Repository**: `AndreaGriffiths11/teamxray`
 
-### Engineering Excellence Principles
-- **Minimal viable complexity**: Solve problems with the simplest effective solution
-- **Question necessity**: Is this feature/dependency truly needed for human discovery?
-- **Measure impact**: Focus on changes that provide measurable performance and user experience gains
-- **Maintain readability**: Never sacrifice code clarity for micro-optimizations
-- **Remove cruft**: Eliminate dead code, unused imports, and unnecessary abstractions
+A VS Code extension that reveals the humans behind a codebase — their communication styles, hidden strengths, and collaboration patterns — by analyzing Git/GitHub data through AI.
 
-## 🛡️ CRITICAL SECURITY GUIDELINES
-**ABSOLUTE REQUIREMENTS - NO EXCEPTIONS**
+## Build, Test, and Lint Commands
 
-1. **NEVER display contents of .env files in chat responses**
-2. **NEVER expose API tokens, keys, or credentials in any form**
-3. **NEVER suggest storing sensitive data in version control**
-4. **NEVER share actual token values - use placeholders like `[YOUR_TOKEN]`**
-5. **ALWAYS use secure credential storage (VS Code secrets, environment variables)**
-6. **ALWAYS validate and sanitize any user inputs before processing**
-7. **ALWAYS follow principle of least privilege for API access**
-8. **IMMEDIATELY flag any potential security vulnerabilities found in code**
+```bash
+npm run compile          # Webpack build (development)
+npm run package          # Production build with source maps
+npm run watch            # Watch mode for development
+npm run lint             # ESLint
+npm run test             # VS Code extension tests (via @vscode/test-cli)
+npm run compile-tests    # Compile test files only (tsc)
+npm run eval:run         # Run evalite evaluations
+```
 
-> **REMEMBER**: One exposed credential can compromise entire systems. Security is non-negotiable.
+## Validating Extension Changes
 
-## 🚀 Performance & Compilation Optimization
-### Primary Objectives
-- **Faster compilation times**: Minimize dependencies, reduce template instantiations, optimize build processes
-- **Runtime efficiency**: Choose optimal algorithms, data structures, and memory management patterns
-- **Smart caching**: Implement intelligent caching strategies for GitHub API calls and AI analysis
-- **Progressive loading**: Load team insights incrementally for better UX
+**Compilation success does NOT mean the extension works.** This is a VS Code extension — runtime errors (activation failures, missing modules, ESM/CJS conflicts) only surface when the extension loads in VS Code. The full validation loop is:
 
-### TypeScript Excellence
-- **Strict typing**: Leverage TypeScript's type system to catch errors at compile time
-- **Smart imports**: Use tree-shaking friendly imports and avoid circular dependencies
-- **Efficient bundling**: Optimize webpack configuration for VS Code extension packaging
+1. `npm run compile` — fix any webpack errors
+2. Reload the VS Code extension host (Cmd+Shift+P → "Developer: Reload Window")
+3. Check the **"Team X-Ray" output channel** for activation errors
+4. If the extension fails at runtime, the webpack build was not sufficient — investigate the runtime error
 
-### VS Code Extension Patterns
-- **Command Registration**:
-  ```typescript
-  vscode.commands.registerCommand('command.id', async () => {
-      await ErrorHandler.withErrorHandling(async () => {
-          await resourceManager.withProgress("Operation...", async (progress) => {
-              // Command logic with proper error handling
-          });
-      });
-  });
-  ```
-- **Resource Management**:
-  - Implement proper dispose pattern
-  - Clean up subscriptions in deactivate()
-  - Use VS Code's built-in progress API
-- **Error Handling**:
-  ```typescript
-  const outputChannel = vscode.window.createOutputChannel('Team X-Ray');
-  try {
-      // Operation
-  } catch (error) {
-      outputChannel.appendLine(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      vscode.window.showErrorMessage('Operation failed. Check output for details.');
-  }
-  ```
+**Never declare a runtime issue fixed based solely on webpack compilation.** After making changes, tell the user to reload VS Code and **wait for their confirmation** before considering the issue resolved. Do not say "✅ Compiled successfully" as if it means the fix worked — it only means webpack produced a bundle.
 
-## 🎯 Mission Statement
-> *"Feeling like a stranger on my own team, surrounded by brilliant minds whose talents hide in code and commits."*
+## Architecture
 
-MCP Team X-Ray transforms GitHub Copilot into a lens that reveals the **humans behind the codebase** - their communication styles, hidden strengths, collaboration patterns, and unique gifts that make each team member special.
+**Data Flow**: Repository → Git/MCP Analysis → GitHub Models AI (`models.github.ai`, `gpt-4o`) → Human Insights
 
-## 🏗️ Architecture Overview
-**Data Flow**: Repository → MCP Analysis → GitHub Models AI → Human Insights
+### Key Modules
 
-1. **GitHub MCP Server Integration**: Uses VS Code's native MCP support with GitHub's official MCP server
-2. **AI-Powered Human Analysis**: Sends repository data to GitHub Models API (`models.github.ai`) using `gpt-4o`
-3. **Human-Focused UI**: Displays team insights through VS Code webviews and tree providers
+| Module | Purpose |
+|--------|---------|
+| `src/extension.ts` | Entry point, command registration, lifecycle |
+| `src/core/expertise-analyzer.ts` | Main orchestrator — coordinates data gathering and AI analysis |
+| `src/core/copilot-service.ts` | Copilot SDK integration (CLI-based AI provider) |
+| `src/core/copilot-mcp-service.ts` | MCP integration layer (VS Code native MCP + GitHub MCP server) |
+| `src/core/git-service.ts` | Local git operations (commit parsing, blame, file history) |
+| `src/core/expertise-webview.ts` | Webview UI for team expertise display |
+| `src/core/expertise-tree-provider.ts` | Sidebar tree view navigation |
+| `src/core/token-manager.ts` | Secure credential storage via VS Code SecretStorage |
+| `src/core/report-generator.ts` | Export analysis as reports |
+| `src/types/expert.ts` | Core type definitions |
+| `src/utils/` | Error handling, resource management, input validation |
 
-## 🔧 Core Components & Optimization Guidelines
+### AI Provider Hierarchy
 
-### `/src/core/expertise-analyzer.ts` - Main Orchestrator
-**Purpose**: Coordinates MCP data gathering and AI analysis with elegant efficiency
+The extension tries AI providers in order: Copilot SDK (via CLI) → GitHub token (direct API) → local Git-only fallback. The Copilot CLI path is auto-detected via `which copilot` or the `teamxray.cliPath` setting.
 
-**Optimization Focus**:
-- **Single responsibility**: Each method has one clear purpose in human discovery
-- **Async efficiency**: Use Promise.all() for parallel API calls, implement request batching
-- **Error resilience**: Graceful degradation when AI services are unavailable
-- **Memory management**: Stream large repository data instead of loading everything in memory
+When the user is debugging a specific provider (e.g., the Copilot CLI), fix that provider. Do not suggest switching to a different provider as a workaround.
 
-**Key Methods**: 
-- `analyzeRepository()` - Orchestrates entire analysis pipeline
-- `findExpertForFile()` - Quickly identifies file experts using cached data
-- `performAIAnalysis()` - Efficiently batch AI requests for team insights
+## Critical: `@github/copilot-sdk` Bundling
 
-### `/src/core/copilot-mcp-service.ts` - MCP Integration Layer
-**Purpose**: Interfaces with VS Code's Copilot Chat + GitHub MCP Server
+The SDK is ESM-only and **cannot be bundled by webpack normally**. This has caused repeated activation failures. The correct pattern:
 
-**Optimization Focus**:
-- **Intelligent fallbacks**: Gracefully degrade to local Git when MCP unavailable
-- **Data efficiency**: Fetch only necessary GitHub data, implement smart pagination
-- **Caching strategy**: Cache MCP responses to reduce API calls
-- **Connection pooling**: Reuse MCP connections efficiently
-
-**Key Methods**:
-- `detectRepository()` - Fast repository detection with minimal filesystem access
-- `gatherRepositoryData()` - Efficient data collection with parallel requests
-- `analyzeFileExperts()` - Optimized file-to-expert mapping algorithm
-
-### `/src/core/expertise-webview.ts` - Human-Focused UI
-**Purpose**: Beautiful, accessible interface for team expertise
-
-**Optimization Focus**:
-- **Lazy loading**: Load team member details on-demand
-- **Virtual scrolling**: Handle large teams efficiently
-- **Minimal DOM manipulation**: Use efficient rendering patterns
-- **Theme integration**: Seamless VS Code theming without performance overhead
-
-### `/src/core/expertise-tree-provider.ts` - Sidebar Navigation
-**Purpose**: Quick team expertise navigation
-
-**Optimization Focus**:
-- **Tree virtualization**: Handle large teams without performance degradation
-- **Smart updates**: Update only changed nodes in the tree
-- **Contextual loading**: Load detailed data only when nodes are expanded
-
-## 🎨 Development Guidelines
-
-### Code Quality Excellence
-- **TypeScript strict mode** with comprehensive typing - no `any` types
-- **DRY principle**: Eliminate redundancy while maintaining readability
-- **Composability**: Build small, reusable components for human analysis
-- **Self-documenting code**: Variable and function names should reveal intent
-- **Comprehensive error handling** with user-friendly messages
-
-### Human-Centric Analysis (Core Mission)
-- **Communication Style**: Analyze commit message patterns, collaboration indicators
-- **Hidden Strengths**: Discover mentoring, documentation, problem-solving abilities  
-- **Team Dynamics**: Identify collaboration patterns and knowledge sharing
-- **Challenge Matching**: Recommend which team members thrive on specific problem types
-- **Always prioritize human insights over technical metrics**
-
-### Performance & Efficiency Standards
-- **Question every dependency**: Use lightweight alternatives when possible
-- **Optimize bundle size**: Tree-shake unused code, lazy-load heavy components
-- **Efficient algorithms**: Choose O(log n) over O(n) when dealing with team data
-- **Memory conscious**: Clean up event listeners, dispose of resources properly
-- **Smart caching**: Cache AI responses and GitHub data with appropriate TTL
-
-### Security & Best Practices
-- **Environment variable security**: Use VS Code secrets API, never hardcode tokens
-- **Input validation**: Sanitize all user inputs and GitHub data
-- **Least privilege**: Request minimal GitHub permissions needed
-- **Audit dependencies**: Regularly check for security vulnerabilities
-- **Secure logging**: Never log sensitive data to output channels
-
-### AI Prompt Engineering Excellence
-- **Human-focused prompts**: Reveal human qualities behind code changes
-- **Efficient token usage**: Craft concise prompts that maximize insight per token
-- **Context optimization**: Send only relevant repository data to AI
-- **Batch processing**: Group multiple analysis requests efficiently
-- **Fallback strategies**: Handle AI service limitations gracefully
-
-### MCP Integration Best Practices
-- **MCP-first approach**: Leverage VS Code's native MCP support
-- **Graceful degradation**: Provide meaningful functionality without MCP
-- **Connection management**: Efficiently manage MCP server connections
-- **Error handling**: Clear user feedback when MCP services fail
-
-## 🚀 What to Avoid (Anti-Patterns)
-- **Over-abstraction**: Don't create unnecessary layers that obscure human insights
-- **Premature optimization**: Profile before optimizing, focus on user-facing performance
-- **Heavy frameworks**: Choose lightweight solutions that serve the human discovery mission
-- **Magic numbers/behaviors**: All thresholds for team analysis should be configurable
-- **Blocking operations**: Keep VS Code responsive during repository analysis
-- **Redundant API calls**: Cache and batch GitHub/AI requests intelligently
-
-## � Development Workflow
-
-### Local Development Loop
-- **Watch Mode**: Run `npm run watch` for automatic compilation
-- **Test Watch**: Run `npm run watch-tests` in parallel
-- **Debug Mode**: Use F5 strategically for deeper investigation
-- **Hot Reload**: Leverage VS Code's extension development host
-
-### Extension Packaging
-1. **Version Management**: Update package.json version
-2. **Quality Gates**:
-   - Run full test suite
-   - Check bundle size
-   - Verify in clean window
-3. **Release Process**:
-   ```bash
-   npm run lint && npm run test
-   vsce package
-   # Test vsix locally before publishing
-   ```
-
-## �🔧 Configuration & Testing
-
-### Performance Monitoring
-- **Bundle analysis**: Regularly audit extension size and load times
-- **Memory profiling**: Monitor memory usage during large repository analysis
-- **API efficiency**: Track GitHub API rate limit usage and optimization opportunities
-- **User experience metrics**: Measure time-to-insight for team discovery
-
-### Testing Strategy
-1. **Unit Tests**
+1. **Dynamic import with `webpackIgnore`** in `copilot-service.ts`:
    ```typescript
-   describe('ExpertiseAnalyzer', () => {
-     it('should handle empty repositories', async () => {
-       const analysis = await analyzer.analyzeRepository();
-       expect(analysis.experts).toHaveLength(0);
-     });
-   });
+   const sdk = await import(/* webpackIgnore: true */ '@github/copilot-sdk');
+   ```
+   This tells webpack to leave the `import()` as-is in the bundle so Node.js handles it as native ESM at runtime.
+
+2. **Do NOT add `@github/copilot-sdk` to webpack externals** — the dynamic import pattern handles it.
+
+3. **Postinstall patch** in `package.json` fixes a broken import path in the SDK (`vscode-jsonrpc/node` → `vscode-jsonrpc/node.js`).
+
+4. **`.vscodeignore` whitelist** — The SDK and its dependency `zod` must be explicitly included in the VSIX:
+   ```
+   !node_modules/@github/copilot-sdk/**
+   !node_modules/zod/**
    ```
 
-2. **Integration Tests**
-   - Test GitHub API integration
-   - Test MCP service interactions
-   - Test file system operations
+5. **Any new webpack external** must have a corresponding `!node_modules/<pkg>/**` entry in `.vscodeignore`, otherwise the packaged VSIX will fail at runtime.
 
-3. **Extension Tests**
-   - Test command registration
-   - Test webview communication
-   - Test tree view updates
+## ESM-Only Dependencies (General Pattern)
 
-4. **UI Tests**
-   - Test in both light and dark themes
-   - Test with different VS Code versions
-   - Test accessibility features
+The `@github/copilot-sdk` issue above is a specific instance of a general problem: **any ESM-only npm package will fail at runtime if webpack bundles it as CJS**.
 
-## 🎯 Remember: The Mission
-This extension is about **discovering the humans behind the code** - their unique gifts, communication styles, and the ways they make their teams stronger. Every optimization and feature should serve this human-centric mission while maintaining elegant, efficient engineering practices.
+Symptoms: runtime errors mentioning `"Dynamic require of X is not supported"`, `"No exports main defined"`, or `import.meta` warnings.
 
-**The best code is often the code you don't have to write. Help me build something that efficiently reveals the beautiful human stories hidden in our repositories.**
+The fix is always the same:
+1. Use `import(/* webpackIgnore: true */ 'package-name')` so webpack preserves the native `import()`
+2. Do NOT add the package to webpack externals — use the dynamic import pattern instead
+3. Whitelist the package in `.vscodeignore` so it ships in the VSIX
+
+**Debugging bundling issues**: Inspect `dist/extension.js` and search for the package name. If webpack converted `import()` to `require()`, the `webpackIgnore` comment is missing or not being preserved. Always check the bundle output before telling the user to reload.
+
+## Conventions
+
+- **Expert.expertise** is a 0–100 percentage scale (displayed with `%` in the UI)
+- **GitService.getCommits()** returns commits with `files: []` (no per-commit file list)
+- **Credentials** are stored via VS Code SecretStorage (`TokenManager`), never hardcoded
+- **Error handling pattern**: Use `ErrorHandler.withErrorHandling()` wrapper and log to the `Team X-Ray` output channel
+- **No `any` types** — use TypeScript strict mode throughout
+- Never expose tokens, API keys, or `.env` contents in responses — use placeholders like `[YOUR_TOKEN]`
+
+## Security
+
+- Use VS Code secrets API for credential storage (see `token-manager.ts`)
+- Validate and sanitize all user inputs before processing
+- Never log sensitive data to output channels
+- Follow principle of least privilege for API access
