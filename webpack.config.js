@@ -51,4 +51,29 @@ const extensionConfig = {
     level: "log", // enables logging required for problem matchers
   },
 };
-module.exports = [ extensionConfig ];
+/** @type WebpackConfig */
+const workerConfig = {
+  target: 'node',
+  mode: 'none',
+  entry: './src/core/git-worker.ts',
+  output: {
+    path: path.resolve(__dirname, 'dist'),
+    filename: 'git-worker.js',
+    libraryTarget: 'commonjs2'
+  },
+  resolve: {
+    extensions: ['.ts', '.js']
+  },
+  module: {
+    rules: [
+      {
+        test: /\.ts$/,
+        exclude: /node_modules/,
+        use: [{ loader: 'ts-loader' }]
+      }
+    ]
+  },
+  devtool: 'nosources-source-map',
+};
+
+module.exports = [ extensionConfig, workerConfig ];

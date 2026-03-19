@@ -15,6 +15,7 @@ import {
 } from '../types/expert';
 import { ErrorHandler } from '../utils/error-handler';
 import { ResourceManager } from '../utils/resource-manager';
+import { GitWorkerClient } from './git-worker-client';
 
 function detectBot(name: string, email: string): boolean {
     const lowerName = name.toLowerCase();
@@ -75,6 +76,7 @@ export class ExpertiseAnalyzer {
     private tokenManager: TokenManager;
     private resourceManager: ResourceManager;
     private gitService: GitService | null = null;
+    private gitWorkerClient: GitWorkerClient | null = null;
 
     // Limits for different repository sizes
     private readonly SIZE_LIMITS = {
@@ -1208,6 +1210,13 @@ Respond with JSON only (NO markdown, NO explanations):
         }));
     }
 
+    private getOrCreateWorkerClient(): GitWorkerClient {
+        if (!this.gitWorkerClient) {
+            this.gitWorkerClient = new GitWorkerClient();
+        }
+        return this.gitWorkerClient;
+    }
+
     private async getLocalGitCommits(): Promise<any[]> {
         try {
             const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -1215,14 +1224,8 @@ Respond with JSON only (NO markdown, NO explanations):
                 return [];
             }
 
-            // Initialize GitService if not already done
-            if (!this.gitService) {
-                this.gitService = new GitService(workspaceFolder.uri.fsPath, this.outputChannel);
-            }
-
-            // Use secure GitService instead of direct git commands
-            const commits = await this.gitService.getCommits(500);
-
+            const client = this.getOrCreateWorkerClient();
+            const commits = await client.getCommits(workspaceFolder.uri.fsPath, 500);
             return commits;
 
         } catch (error) {
@@ -1238,19 +1241,20 @@ Respond with JSON only (NO markdown, NO explanations):
                 return [];
             }
 
-            // Initialize GitService if not already done
-            if (!this.gitService) {
-                this.gitService = new GitService(workspaceFolder.uri.fsPath, this.outputChannel);
-            }
-
-            // Use secure GitService instead of direct git commands
-            const contributors = await this.gitService.getContributors();
-
+            const client = this.getOrCreateWorkerClient();
+            const contributors = await client.getContributors(workspaceFolder.uri.fsPath);
             return contributors;
 
         } catch (error) {
             this.outputChannel.appendLine(`⚠️ Failed to get local git contributors: ${error}`);
             return [];
+        }
+    }
+
+    public dispose(): void {
+        if (this.gitWorkerClient) {
+            this.gitWorkerClient.dispose();
+            this.gitWorkerClient = null;
         }
     }
 
