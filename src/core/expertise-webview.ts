@@ -840,6 +840,22 @@ export class ExpertiseWebviewProvider {
 
         /* Animations */
         @keyframes slideInUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+        /* Contributor table */
+        .table-controls{margin-bottom:16px}
+        .filter-input{width:100%;padding:10px 14px;background:#0a0a0f;border:1px solid #1e293b;border-radius:8px;color:#e2e8f0;font-size:14px;outline:none;transition:border-color 0.2s}
+        .filter-input:focus{border-color:#06b6d4}
+        .filter-input::placeholder{color:#475569}
+        .contributor-table{width:100%;border-collapse:collapse;margin-bottom:24px}
+        .contributor-table th,.contributor-table td{padding:10px 14px;text-align:left;border-bottom:1px solid #1e293b;font-size:0.9em}
+        .contributor-table th{color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;font-size:0.78em;position:sticky;top:0;background:#12121a;z-index:1}
+        .contributor-table th.sortable{cursor:pointer;user-select:none}
+        .contributor-table th.sortable:hover{color:#06b6d4}
+        .contributor-table tbody tr:hover{background:rgba(6,182,212,0.05)}
+        .contributor-table .email-cell{color:#64748b;font-size:0.85em}
+        .sort-arrow{font-size:0.8em;margin-left:4px;color:#06b6d4}
+        .mini-bar{display:inline-block;width:60px;height:8px;background:#1e293b;border-radius:4px;vertical-align:middle;margin-right:6px;overflow:hidden}
+        .mini-bar-fill{height:100%;background:#06b6d4;border-radius:4px;transition:width 0.3s}
         .expert-card{animation:slideInUp 0.4s ease forwards}
         .expert-card:nth-child(1){animation-delay:0.05s}
         .expert-card:nth-child(2){animation-delay:0.1s}
@@ -864,6 +880,34 @@ export class ExpertiseWebviewProvider {
 
     <div class="section">
         <h2><span class="accent">▸</span> Expert Profiles</h2>
+        <div class="table-controls">
+            <input type="text" id="contributor-filter" placeholder="Filter by name, email, or specialization..." class="filter-input" oninput="filterTable()">
+        </div>
+        <table class="contributor-table" id="contributor-table">
+            <thead>
+                <tr>
+                    <th class="sortable" onclick="sortTable('name')">Name <span class="sort-arrow" id="sort-name"></span></th>
+                    <th class="sortable" onclick="sortTable('email')">Email <span class="sort-arrow" id="sort-email"></span></th>
+                    <th class="sortable" onclick="sortTable('expertise')">Expertise <span class="sort-arrow" id="sort-expertise"></span></th>
+                    <th class="sortable" onclick="sortTable('contributions')">Commits <span class="sort-arrow" id="sort-contributions"></span></th>
+                    <th class="sortable" onclick="sortTable('lastCommit')">Last Commit <span class="sort-arrow" id="sort-lastCommit"></span></th>
+                    <th>Specializations</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${analysis.expertProfiles.map(expert => `
+                <tr data-name="${(expert.name || '').replace(/"/g, '&quot;')}" data-email="${(expert.email || '').replace(/"/g, '&quot;')}" data-expertise="${expert.expertise}" data-contributions="${expert.contributions}" data-lastcommit="${expert.lastCommit instanceof Date ? expert.lastCommit.toISOString() : expert.lastCommit || ''}" data-specs="${(expert.specializations || []).join(', ')}">
+                    <td>${expert.isBot ? '🤖 ' : ''}${expert.name}${expert.teamRole ? ` <span class="role-badge">${expert.teamRole}</span>` : ''}</td>
+                    <td class="email-cell">${expert.email}</td>
+                    <td><div class="mini-bar"><div class="mini-bar-fill" style="width:${expert.expertise}%"></div></div> ${expert.expertise}%</td>
+                    <td>${expert.contributions}</td>
+                    <td>${this.safeFormatDate(expert.lastCommit)}</td>
+                    <td><div class="chips">${(expert.specializations || []).map(s => `<span class="chip">${s}</span>`).join('')}</div></td>
+                </tr>
+                `).join('')}
+            </tbody>
+        </table>
+        <h2 style="margin-top:30px"><span class="accent">▸</span> Expert Cards</h2>
         <div class="experts-grid">
             ${analysis.expertProfiles.map(expert => {
                 const barColor = expert.isBot ? '#374151' : (expert.expertise >= 20 ? '#06b6d4' : '#374151');
@@ -1063,6 +1107,65 @@ export class ExpertiseWebviewProvider {
                     icon.textContent = '▶';
                 }
             }
+        }
+
+        // --- Sortable/Filterable Contributor Table ---
+        let currentSortCol = null;
+        let currentSortAsc = true;
+
+        function sortTable(col) {
+            const table = document.getElementById('contributor-table');
+            const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+
+            if (currentSortCol === col) {
+                currentSortAsc = !currentSortAsc;
+            } else {
+                currentSortCol = col;
+                currentSortAsc = true;
+            }
+
+            // Update arrows
+            document.querySelectorAll('.sort-arrow').forEach(el => el.textContent = '');
+            const arrow = document.getElementById('sort-' + col);
+            if (arrow) arrow.textContent = currentSortAsc ? '▲' : '▼';
+
+            rows.sort((a, b) => {
+                let va = a.getAttribute('data-' + col) || '';
+                let vb = b.getAttribute('data-' + col) || '';
+
+                if (col === 'expertise' || col === 'contributions') {
+                    return currentSortAsc ? Number(va) - Number(vb) : Number(vb) - Number(va);
+                }
+                if (col === 'lastcommit' || col === 'lastCommit') {
+                    va = a.getAttribute('data-lastcommit') || '';
+                    vb = b.getAttribute('data-lastcommit') || '';
+                    const da = new Date(va).getTime() || 0;
+                    const db = new Date(vb).getTime() || 0;
+                    return currentSortAsc ? da - db : db - da;
+                }
+                va = va.toLowerCase();
+                vb = vb.toLowerCase();
+                if (va < vb) return currentSortAsc ? -1 : 1;
+                if (va > vb) return currentSortAsc ? 1 : -1;
+                return 0;
+            });
+
+            rows.forEach(row => tbody.appendChild(row));
+        }
+
+        function filterTable() {
+            const query = document.getElementById('contributor-filter').value.toLowerCase();
+            const table = document.getElementById('contributor-table');
+            const rows = table.querySelectorAll('tbody tr');
+
+            rows.forEach(row => {
+                const name = (row.getAttribute('data-name') || '').toLowerCase();
+                const email = (row.getAttribute('data-email') || '').toLowerCase();
+                const specs = (row.getAttribute('data-specs') || '').toLowerCase();
+                const match = !query || name.includes(query) || email.includes(query) || specs.includes(query);
+                row.style.display = match ? '' : 'none';
+            });
         }
     </script>
 </body>

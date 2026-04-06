@@ -33,13 +33,13 @@ Team X-Ray reads your git history — commits, contributors, file ownership — 
 
 ## Installation
 
-**From Marketplace:**
-
 ```
 ext install AndreaGriffiths.teamxray
 ```
 
-Or [install from the VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=AndreaGriffiths.teamxray)
+Or [install from the VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=AndreaGriffiths.teamxray).
+
+**Requirements:** VS Code 1.100.0+, Node.js 20+
 
 ## Usage
 
@@ -51,73 +51,15 @@ Or [install from the VS Code Marketplace](https://marketplace.visualstudio.com/i
 | **Set API Key** | Command Palette → `Team X-Ray: Set GitHub Token` |
 | **Export Report** | Click export button in the analysis webview |
 
-## Configuration
+## Documentation
 
-| Setting | Description | Default |
-|---------|-------------|---------|
-| `teamxray.aiProvider` | AI provider: `copilot`, `openai`, `anthropic`, `azure`, `github-models` | `copilot` |
-| `teamxray.byokModel` | Model override for BYOK providers | — |
-| `teamxray.byokBaseUrl` | Custom API endpoint for BYOK | — |
-
-### Copilot SDK Setup
-
-For the best experience, install and authenticate the [Copilot CLI](https://docs.github.com/en/copilot/using-github-copilot/using-github-copilot-in-the-command-line):
-
-```bash
-# Install
-curl -fsSL https://gh.io/copilot-install | bash
-
-# Authenticate
-copilot auth login
-```
-
-Team X-Ray will automatically detect and use the Copilot SDK when available.
-
-### BYOK (Bring Your Own Key)
-
-Run `Team X-Ray: Set API Key` from the Command Palette. Keys are stored securely in VS Code's SecretStorage.
-
-## Architecture
-
-```
-src/
-├── extension.ts                 # Entry point, command registration
-├── core/
-│   ├── copilot-service.ts       # Copilot SDK integration (5 custom tools)
-│   ├── expertise-analyzer.ts    # Analysis orchestrator + fallback chain
-│   ├── expertise-webview.ts     # VS Code webview UI + standalone HTML export
-│   └── git-data-service.ts      # Git history data gathering
-├── types/
-│   └── expert.ts                # TypeScript interfaces
-└── utils/
-    ├── error-handler.ts         # Error handling + telemetry
-    ├── resource-manager.ts      # Disposable resource management
-    └── validation.ts            # Input validation
-```
-
-### Custom Tools (Copilot SDK)
-
-The extension registers 5 tools that the Copilot agent calls during analysis:
-
-| Tool | Description |
-|------|-------------|
-| `get_contributors` | Contributor profiles with commit counts and activity dates |
-| `get_recent_commits` | Recent commit history with authors and messages |
-| `get_file_experts` | Per-file ownership and expertise breakdown |
-| `get_repo_stats` | Repository-level statistics (size, languages, age) |
-| `get_collaboration_patterns` | Cross-contributor collaboration and review patterns |
-
-## Development
-
-```bash
-git clone https://github.com/AndreaGriffiths11/teamxray.git
-cd teamxray
-npm install
-npm run compile
-# Press F5 in VS Code to launch Extension Development Host
-```
-
-**Requirements:** Node.js 20+, VS Code 1.100.0+
+| Doc | Description |
+|-----|-------------|
+| [Setup](docs/setup.md) | Installation & AI provider configuration |
+| [Architecture](docs/architecture.md) | Components, tools, worker threads, bot detection |
+| [AI Providers](docs/ai-providers.md) | Copilot SDK, BYOK, GitHub Models, local-only |
+| [Reports](docs/reports.md) | Webview, HTML export, dark X-Ray theme |
+| [Troubleshooting](docs/troubleshooting.md) | Common issues & fixes |
 
 ## Links
 
