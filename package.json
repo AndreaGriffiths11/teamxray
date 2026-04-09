@@ -190,7 +190,7 @@
   },
   "dependencies": {
     "@github/copilot-sdk": "^0.1.32",
-    "axios": "1.13.5",
+    "axios": "1.15.0",
     "dotenv": "^16.5.0"
   }
 }
