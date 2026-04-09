@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import axios from 'axios';
-import { CopilotMCPService } from './copilot-mcp-service';
+import { RepositoryActivityService } from './repository-activity-service';
 import { CopilotService } from './copilot-service';
 import { TokenManager } from './token-manager';
 import { GitService } from './git-service';
@@ -71,7 +71,7 @@ export interface GitHubSearchResponse {
 export class ExpertiseAnalyzer {
     private context: vscode.ExtensionContext;
     private outputChannel: vscode.OutputChannel;
-    private copilotMCPService: CopilotMCPService;
+    private repositoryActivityService: RepositoryActivityService;
     private copilotService: CopilotService | null;
     private tokenManager: TokenManager;
     private resourceManager: ResourceManager;
@@ -91,7 +91,7 @@ export class ExpertiseAnalyzer {
         this.tokenManager = tokenManager;
         this.copilotService = copilotService ?? null;
         this.outputChannel = vscode.window.createOutputChannel('Team Expertise Analysis');
-        this.copilotMCPService = new CopilotMCPService(this.outputChannel);
+        this.repositoryActivityService = new RepositoryActivityService(this.outputChannel);
         this.resourceManager = ResourceManager.getInstance();
 
         // Initialize utilities
@@ -795,17 +795,17 @@ Respond with JSON only (NO markdown, NO explanations):
                 }
             }
 
-            // Try MCP service
-            const repository = await this.copilotMCPService.detectRepository();
+            // Try repository activity service
+            const repository = await this.repositoryActivityService.detectRepository();
             if (repository) {
-                const fileExperts = await this.copilotMCPService.analyzeFileExperts(filePath, repository);
+                const fileExperts = await this.repositoryActivityService.analyzeFileExperts(filePath, repository);
                 if (fileExperts && fileExperts.length > 0) {
-                    this.outputChannel.appendLine(`✅ Found ${fileExperts.length} experts via MCP for file`);
+                    this.outputChannel.appendLine(`✅ Found ${fileExperts.length} experts from git history for file`);
                     return fileExperts;
                 }
             }
 
-            this.outputChannel.appendLine('⚡ MCP analysis unavailable, using local file analysis...');
+            this.outputChannel.appendLine('⚡ File-specific git history unavailable, using repository-wide fallback...');
             const fileData = await this.gatherFileData(filePath);
             if (!fileData) {
                 return null;

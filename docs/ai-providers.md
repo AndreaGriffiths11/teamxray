@@ -1,72 +1,57 @@
 # AI Providers
 
-Team X-Ray supports four AI provider tiers. Each one activates automatically based on what's available.
+Team X-Ray analyzes local git data and then chooses the AI path that the current implementation supports. The main flow is Copilot SDK first, GitHub Models fallback second, with a reduced local fallback only if AI output cannot be produced.
+
+| Mode | Setting value | What it does | Requirements |
+|------|---------------|--------------|--------------|
+| Copilot SDK | `copilot` | Default analysis path with custom tools over local repo data | Copilot CLI installed + authenticated; set `teamxray.cliPath` if needed |
+| BYOK via Copilot SDK | `byok-openai`, `byok-anthropic`, `byok-azure` | Applies a provider override to the Copilot SDK session | Copilot CLI, `Team X-Ray: Set BYOK API Key (Secure)`, `teamxray.byokBaseUrl`, optional `teamxray.byokModel` |
+| GitHub Models fallback | `github-models` | Uses your GitHub token when Copilot is unavailable or analysis falls back | `Team X-Ray: Set GitHub Token` |
+| Reduced local fallback | — | Builds a basic git-derived analysis if AI output fails | No extra setup |
 
 ## Copilot SDK
 
-The primary provider. Uses GitHub Copilot's SDK with 5 custom tools that give the agent structured access to your repo data.
+This is the primary path. Team X-Ray dynamically loads `@github/copilot-sdk`, creates a `CopilotClient`, registers custom tools with `defineTool`, and sends repository data into a single analysis session.
 
-How it works:
-1. Team X-Ray imports `@anthropic-ai/sdk` dynamically via the Copilot SDK
-2. Registers tools with `defineTool` — each tool has a Zod schema defining its inputs/outputs
-3. The agent calls tools as needed during analysis, pulling contributor data, file experts, collaboration patterns
-4. Results come back as structured analysis with management insights
-
-**ESM bundling note:** The Copilot SDK uses ESM imports. To prevent webpack from bundling them (which breaks dynamic resolution), the import uses `/* webpackIgnore: true */`:
+**ESM bundling note:** the SDK is ESM-only, so the dynamic import must target `@github/copilot-sdk` directly:
 
 ```typescript
-const module = await import(/* webpackIgnore: true */ '@anthropic-ai/sdk');
+const sdk = await import(/* webpackIgnore: true */ '@github/copilot-sdk');
 ```
 
-## BYOK (Bring Your Own Key)
+If the CLI is installed outside your PATH, point the extension at it with `teamxray.cliPath`.
 
-Use your own API key with OpenAI, Anthropic, or Azure OpenAI.
+## BYOK provider overrides
 
-| Provider | Setting value | Models |
-|----------|--------------|--------|
-| OpenAI | `openai` | GPT-4o, GPT-4, GPT-3.5 Turbo |
-| Anthropic | `anthropic` | Claude 3.5 Sonnet, Claude 3 Opus/Haiku |
-| Azure OpenAI | `azure` | Your deployed models |
+BYOK settings are available, but in the current implementation they are applied through the Copilot SDK session rather than as a standalone non-Copilot path.
 
-Keys are stored in VS Code's [SecretStorage](https://code.visualstudio.com/api/references/vscode-api#SecretStorage) — encrypted per-machine, never written to settings files.
+Supported values:
+- `byok-openai`
+- `byok-anthropic`
+- `byok-azure`
 
-To set a key:
+Store the secret with:
 
 ```
-Command Palette → Team X-Ray: Set API Key
+Command Palette → Team X-Ray: Set BYOK API Key (Secure)
 ```
 
-Override the model with `teamxray.byokModel`. Set a custom endpoint (proxy, Azure deployment) with `teamxray.byokBaseUrl`.
+Also set:
+- `teamxray.byokBaseUrl` (required)
+- `teamxray.byokModel` (optional)
 
-## GitHub Models API
+## GitHub Models fallback
 
-Uses GitHub's hosted models API at `https://models.inference.ai.azure.com`.
+If the Copilot SDK is unavailable, Team X-Ray falls back to GitHub Models using your GitHub token.
 
-Requirements:
-- A GitHub token with `models: read` permission
-- Set `teamxray.aiProvider` to `github-models`
+Store the token with:
 
-## Local-Only Mode
+```
+Command Palette → Team X-Ray: Set GitHub Token
+```
 
-No AI provider needed. You get:
-- Commit counts per contributor
-- File ownership percentages
-- First and last activity dates
-- Contributor list with bot detection
+The current implementation calls `https://models.github.ai/inference/chat/completions`.
 
-You don't get:
-- Prose expertise profiles
-- Communication style analysis
-- Management insights (bus factor, growth opportunities, efficiency gaps)
-- Collaboration pattern narratives
+## Reduced local fallback
 
-## Fallback Behavior
-
-The fallback chain runs top-to-bottom. Each tier wraps its initialization in a try/catch:
-
-1. **Copilot SDK** — Checks if the CLI is installed and authenticated. If the import fails or auth is missing, moves on.
-2. **BYOK** — Checks SecretStorage for a key. If none found or the API returns an error, moves on.
-3. **GitHub Models** — Checks for a valid token. If the endpoint rejects the request, moves on.
-4. **Local-only** — Always succeeds. Returns raw git data without AI analysis.
-
-The user sees a notification indicating which provider was used.
+Team X-Ray does not currently expose a normal selectable "local-only" tier for the main analysis flow. Instead, it can assemble a reduced result from local git history when AI analysis cannot complete or the AI response cannot be parsed cleanly.

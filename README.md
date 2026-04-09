@@ -12,24 +12,25 @@ Transform your repository into a team expertise map. Discover who knows what, re
 - **🧠 Team Expertise Analysis** — AI-powered profiles with communication styles, specializations, and collaboration patterns
 - **📊 Management Insights** — Actionable recommendations: bus factor risks, growth opportunities, efficiency gaps
 - **🤖 GitHub Copilot SDK Integration** — Uses the Copilot SDK with custom tools for deep, context-aware analysis
+- **⚙️ Flexible AI Provider Settings** — Default `copilot`, optional `byok-openai`, `byok-anthropic`, `byok-azure`, or `github-models`
 - **🤖 Agent & Bot Detection** — Automatically identifies bot/agent contributors (Dependabot, Copilot, Renovate) with visual distinction
 - **📄 Dark-themed Reports** — Exportable HTML reports with SVG charts and an X-Ray visual identity
-- **⚡ Smart Fallback Chain** — Copilot SDK → BYOK (OpenAI/Anthropic/Azure) → GitHub Models API → Local-only analysis
+- **🛟 Git-Backed Fallback Analysis** — If AI analysis is unavailable, Team X-Ray can still assemble a reduced view from local git history
 
 ## How It Works
 
-Team X-Ray reads your git history — commits, contributors, file ownership — and feeds it to an AI agent through custom tools. The agent calls back into your repo data to build expertise profiles, identify risks, and generate management-ready insights.
+Team X-Ray reads your local git history — commits, contributors, file ownership — and feeds that data into the GitHub Copilot SDK when available. If Copilot is unavailable, it falls back to GitHub Models with your GitHub token; if AI output still fails, it produces a reduced git-based analysis.
 
 ![Team X-Ray Architecture](docs/architecture.png)
 
-### AI Provider Fallback
+### AI Provider Flow
 
-| Priority | Provider | Requirements |
-|----------|----------|-------------|
-| 1 | **GitHub Copilot SDK** | Copilot CLI installed + authenticated |
-| 2 | **BYOK** | Your own API key (OpenAI, Anthropic, or Azure) |
-| 3 | **GitHub Models API** | GitHub token with models access |
-| 4 | **Local-only** | No AI — git stats only |
+| Flow | Mode | Requirements |
+|------|------|--------------|
+| 1 | **Copilot SDK (`copilot`)** | Copilot CLI installed + authenticated; set `teamxray.cliPath` if the CLI is not on your PATH |
+| 2 | **BYOK via Copilot SDK** | `teamxray.aiProvider` = `byok-openai`, `byok-anthropic`, or `byok-azure`; run `Team X-Ray: Set BYOK API Key (Secure)`; set `teamxray.byokBaseUrl` |
+| 3 | **GitHub Models fallback** | Run `Team X-Ray: Set GitHub Token` |
+| 4 | **Reduced local fallback** | No extra setup; basic git-derived analysis only if AI output cannot be produced |
 
 ## Installation
 
@@ -43,13 +44,15 @@ Or [install from the VS Code Marketplace](https://marketplace.visualstudio.com/i
 
 ## Usage
 
-| Command | How |
-|---------|-----|
-| **Analyze Repository** | Command Palette → `Team X-Ray: Analyze Repository Expertise` |
-| **Find File Expert** | Right-click a file → `Team X-Ray: Find Expert for This File` |
-| **Team Overview** | Command Palette → `Team X-Ray: Show Team Expertise Overview` |
-| **Set API Key** | Command Palette → `Team X-Ray: Set GitHub Token` |
-| **Export Report** | Click export button in the analysis webview |
+| Command / Action | How |
+|------------------|-----|
+| `Team X-Ray: Analyze Repository Expertise` | Command Palette |
+| `Team X-Ray: Show Team Expertise Overview` | Command Palette |
+| `Team X-Ray: Analyze This File` | Command Palette |
+| `Team X-Ray: Find Expert for This File` | Right-click a file or open editor context menu |
+| `Team X-Ray: Set GitHub Token` | Command Palette |
+| `Team X-Ray: Set BYOK API Key (Secure)` | Command Palette |
+| Export report | Click the export button in the analysis webview |
 
 ## Documentation
 
@@ -57,7 +60,7 @@ Or [install from the VS Code Marketplace](https://marketplace.visualstudio.com/i
 |-----|-------------|
 | [Setup](docs/setup.md) | Installation & AI provider configuration |
 | [Architecture](docs/architecture.md) | Components, tools, worker threads, bot detection |
-| [AI Providers](docs/ai-providers.md) | Copilot SDK, BYOK, GitHub Models, local-only |
+| [AI Providers](docs/ai-providers.md) | Copilot SDK, BYOK provider overrides, GitHub Models, and reduced local fallback |
 | [Reports](docs/reports.md) | Webview, HTML export, dark X-Ray theme |
 | [Troubleshooting](docs/troubleshooting.md) | Common issues & fixes |
 
