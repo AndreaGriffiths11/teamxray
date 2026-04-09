@@ -4,7 +4,7 @@ import { CopilotService } from './core/copilot-service';
 import { Expert } from './types/expert';
 import { ExpertiseWebviewProvider } from './core/expertise-webview';
 import { ExpertiseTreeProvider } from './core/expertise-tree-provider';
-import { CopilotMCPService } from './core/copilot-mcp-service';
+import { RepositoryActivityService } from './core/repository-activity-service';
 import { TokenManager } from './core/token-manager';
 import { ErrorHandler } from './utils/error-handler';
 import { ResourceManager } from './utils/resource-manager';
@@ -230,32 +230,27 @@ Specializations: ${(expert.specializations || []).join(', ')}`;
         }
     });
 
-    // Helper function to get expert recent activity via MCP
+    // Helper function to get expert recent activity from local git history
     async function getExpertRecentActivity(expert: any) {
-        const token = await tokenManager.getToken();
-        if (!token) {
-            vscode.window.showWarningMessage('GitHub token is required to get expert activity. Run "Team XRay: Set Github Token" to provide one.');
-            return;
-        }
         const outputChannel = vscode.window.createOutputChannel('Team X-Ray Expert Activity');
 
         try {
-            const mcpService = new CopilotMCPService(outputChannel);
+            const repositoryActivityService = new RepositoryActivityService(outputChannel);
             
             vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
                 title: `Getting recent activity for ${expert.name}...`,
                 cancellable: false
             }, async (progress) => {
-                progress.report({ increment: 0, message: "Connecting to GitHub MCP..." });
+                progress.report({ increment: 0, message: "Reading local git history..." });
 
-                const result = await mcpService.getExpertRecentActivity(expert.email, expert.name);
+                const result = await repositoryActivityService.getExpertRecentActivity(expert.email, expert.name);
                 
                 if (result.success && result.activity) {
                     progress.report({ increment: 100, message: "Activity retrieved!" });
                     
-                    // Display the activity using the MCP service
-                    await mcpService.showExpertActivity(result.activity);
+                    // Display the activity using the repository activity service
+                    await repositoryActivityService.showExpertActivity(result.activity);
                     
                     vscode.window.showInformationMessage(`✅ Recent activity loaded for ${expert.name}`);
                 } else {
@@ -265,7 +260,7 @@ Specializations: ${(expert.specializations || []).join(', ')}`;
                     outputChannel.appendLine(`❌ Failed to get activity for ${expert.name}: ${result.error}`);
                     
                     vscode.window.showWarningMessage(
-                        `Could not get recent activity for ${expert.name}. ${result.error || 'Please check MCP configuration.'}`,
+                        `Could not get recent activity for ${expert.name}. ${result.error || 'Please check that the current workspace is a git repository.'}`,
                         'View Logs'
                     ).then(choice => {
                         if (choice === 'View Logs') {
@@ -299,11 +294,6 @@ Specializations: ${(expert.specializations || []).join(', ')}`;
     });
 
     const showExpertDetailsCommand = vscode.commands.registerCommand('teamxray.showExpertDetails', async (expert: any) => {
-        const token = await tokenManager.getToken();
-        if (!token) {
-            vscode.window.showWarningMessage('GitHub token is required to view expert details. Run "Team XRay: Set Github Token" to provide one.');
-            return;
-        }
         if (expert) {
             const message = `${expert.name}
 Email: ${expert.email}
@@ -359,7 +349,7 @@ Specializations: ${(expert.specializations || []).join(', ')}`;
     // const hasShownWelcome = context.globalState.get('teamxray.hasShownWelcome', false);
     // if (!hasShownWelcome) {
     //     vscode.window.showInformationMessage(
-    //         'Welcome to MCP Team X-Ray! Analyze your team\'s expertise to find the right experts for any code.',
+    //         'Welcome to Team X-Ray! Analyze your team\'s expertise to find the right experts for any code.',
     //         'Analyze Repository',
     //         'Learn More'
     //     ).then(choice => {

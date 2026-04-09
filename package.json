@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/package.json",
   "name": "teamxray",
   "displayName": "Team X-Ray",
-  "description": "Human discovery through code analysis - reveal team expertise, communication styles, and hidden strengths using GitHub MCP integration",
+  "description": "Human discovery through code analysis - reveal team expertise, communication styles, and hidden strengths using the Copilot SDK and git history",
   "version": "2.0.2",
   "publisher": "AndreaGriffiths",
   "author": {
@@ -29,7 +29,7 @@
     "team",
     "expertise",
     "github",
-    "mcp",
+    "git",
     "ai",
     "analysis",
     "collaboration",

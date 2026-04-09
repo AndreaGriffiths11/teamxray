@@ -2,15 +2,15 @@
 
 ## "No AI provider available"
 
-The fallback chain couldn't find any configured provider. Your options:
+Team X-Ray could not start the Copilot SDK and did not have a GitHub token available for the GitHub Models fallback. Your options:
 
 1. Install and authenticate the Copilot CLI:
    ```bash
    curl -fsSL https://gh.io/copilot-install | bash
    copilot auth login
    ```
-2. Set an API key: Command Palette → `Team X-Ray: Set API Key`
-3. Use local-only mode — you'll get git stats without AI analysis
+2. If the CLI is installed outside your PATH, set `teamxray.cliPath` in VS Code settings.
+3. Run `Team X-Ray: Set GitHub Token` from the Command Palette.
 
 ## Copilot SDK Not Detected
 
@@ -27,7 +27,16 @@ copilot auth login
 copilot --version
 ```
 
-Restart VS Code after installing.
+If `copilot --version` works in a different shell but not from VS Code, set `teamxray.cliPath` to the full executable path and reload VS Code.
+
+## BYOK provider selected but not working
+
+In the current implementation, BYOK settings are applied through the Copilot SDK session. That means you still need a working Copilot CLI even when `teamxray.aiProvider` is set to `byok-openai`, `byok-anthropic`, or `byok-azure`.
+
+Also verify:
+- You ran `Team X-Ray: Set BYOK API Key (Secure)`
+- `teamxray.byokBaseUrl` is set
+- `teamxray.byokModel` is valid if you configured one
 
 ## Analysis Takes Too Long
 
@@ -43,7 +52,7 @@ What to expect:
 If you're contributing and see module resolution errors with the Copilot SDK, check that dynamic imports use the webpack ignore directive:
 
 ```typescript
-const module = await import(/* webpackIgnore: true */ '@anthropic-ai/sdk');
+const sdk = await import(/* webpackIgnore: true */ '@github/copilot-sdk');
 ```
 
 Without this, webpack tries to bundle the ESM module at build time and fails.

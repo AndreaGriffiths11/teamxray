@@ -209,7 +209,7 @@ export interface TokenValidationResult extends ValidationResult {
     rateLimitRemaining: number;
 }
 
-// MCP related types
+// Legacy response types
 export interface MCPResponse<T> {
     success: boolean;
     data?: T;

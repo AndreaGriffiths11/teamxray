@@ -20,7 +20,7 @@ export interface GitHubContributor {
 /**
  * GitHub repository detection and expert activity service.
  *
- * Previously handled Docker MCP server management and Copilot Chat queries.
+ * Previously handled broader repository integration and Copilot Chat queries.
  * Those responsibilities have moved to CopilotService (Copilot SDK integration).
  * This service now focuses on:
  *   - GitHub repository detection from git remotes
@@ -28,7 +28,7 @@ export interface GitHubContributor {
  *   - Expert activity display
  *   - Issue-to-expert matching
  */
-export class CopilotMCPService {
+export class RepositoryActivityService {
     private outputChannel: vscode.OutputChannel;
 
     constructor(outputChannel: vscode.OutputChannel) {
@@ -205,13 +205,7 @@ export class CopilotMCPService {
             if (!workspaceFolder) { return null; }
 
             const gitService = new GitService(workspaceFolder.uri.fsPath, this.outputChannel);
-            const relativePath = vscode.workspace.asRelativePath(filePath);
-            const commits = await gitService.getCommits(100);
-
-            // Filter commits that touch this file
-            const fileCommits = commits.filter(c =>
-                c.files.some((f: string) => f.includes(relativePath) || relativePath.includes(f))
-            );
+            const fileCommits = await gitService.getCommitsForFile(filePath, 100);
 
             if (fileCommits.length === 0) { return null; }
 
