@@ -277,6 +277,27 @@ export class GitService {
     }
 
     /**
+     * Get commits that touched a specific file
+     * @param filePath - Relative path to the file
+     * @param limit - Maximum number of commits
+     * @returns Array of commits that modified the file
+     */
+    async getCommitsForFile(filePath: string, limit: number = 100): Promise<GitCommit[]> {
+        const args = [
+            'log',
+            '--pretty=format:%H|%an|%ae|%ad|%s',
+            '--date=iso',
+            '-n',
+            String(Math.max(1, Math.min(limit, 1000))),
+            '--',
+            filePath
+        ];
+
+        const output = await this.executeGitCommand(args);
+        return this.parseCommitOutput(output);
+    }
+
+    /**
      * Get files modified by a specific author
      * @param email - Author email (will be escaped)
      * @param limit - Maximum number of files to return
