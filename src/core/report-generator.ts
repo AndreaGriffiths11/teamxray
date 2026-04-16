@@ -305,40 +305,101 @@ export class ReportGenerator {
      * Generates an executive summary based on the analysis
      */
     private static generateAnalysisSummary(analysis: ExpertiseAnalysis): string {
-        const { expertProfiles } = analysis;
-        
-        // Find key insights
-        const topContributor = expertProfiles.sort((a, b) => b.contributions - a.contributions)[0];
-        
+        const { expertProfiles, managementInsights, teamHealthMetrics, insights } = analysis;
+        const humans = expertProfiles.filter(e => !e.isBot);
+        const sorted = [...humans].sort((a, b) => b.contributions - a.contributions);
+        const topContributor = sorted[0];
+
         if (!topContributor) {
             return 'No team analysis available.';
         }
-        
-        // Generate concise insight
-        return `${topContributor.name} is the primary contributor and a potential bottleneck for CI/CD expertise.`;
+
+        const parts: string[] = [];
+
+        // Team composition
+        const bots = expertProfiles.filter(e => e.isBot).length;
+        parts.push(`This repository has <strong>${humans.length} human contributor${humans.length !== 1 ? 's' : ''}</strong>${bots > 0 ? ` and ${bots} automated agent${bots !== 1 ? 's' : ''}` : ''}.`);
+
+        // Top contributor context
+        const totalContributions = humans.reduce((sum, e) => sum + e.contributions, 0);
+        const topShare = totalContributions > 0 ? Math.round((topContributor.contributions / totalContributions) * 100) : 0;
+        if (topShare >= 40) {
+            parts.push(`<strong>${topContributor.name}</strong> accounts for ${topShare}% of commits, creating a significant concentration risk.`);
+        } else if (topShare >= 25) {
+            parts.push(`<strong>${topContributor.name}</strong> leads contributions at ${topShare}% of commits.`);
+        }
+
+        // Knowledge distribution risk
+        const riskScore = teamHealthMetrics?.knowledgeDistribution?.riskScore ?? 0;
+        if (riskScore >= 70) {
+            parts.push(`Knowledge distribution risk is <strong>high (${riskScore}/100)</strong> — critical areas depend on too few people.`);
+        } else if (riskScore >= 45) {
+            parts.push(`Knowledge distribution risk is <strong>moderate (${riskScore}/100)</strong>.`);
+        } else if (riskScore > 0) {
+            parts.push(`Knowledge distribution risk is <strong>low (${riskScore}/100)</strong> — expertise is reasonably spread across the team.`);
+        }
+
+        // Single points of failure
+        const spof = teamHealthMetrics?.knowledgeDistribution?.singlePointsOfFailure ?? [];
+        if (spof.length > 0) {
+            parts.push(`Single points of failure: ${spof.join(', ')}.`);
+        }
+
+        // Surface high-priority management insights
+        const highPriority = (managementInsights ?? []).filter(i => i.priority === 'HIGH');
+        if (highPriority.length > 0) {
+            parts.push(`There ${highPriority.length === 1 ? 'is' : 'are'} <strong>${highPriority.length} high-priority insight${highPriority.length !== 1 ? 's' : ''}</strong> requiring attention.`);
+        }
+
+        // Surface key insights summary
+        const riskInsights = (insights ?? []).filter((i: any) => i.type === 'risk' || i.type === 'gap');
+        if (riskInsights.length > 0) {
+            parts.push(`${riskInsights.length} risk/gap area${riskInsights.length !== 1 ? 's' : ''} identified in the analysis.`);
+        }
+
+        return parts.join(' ');
     }
 
     /**
      * Generates specific recommendations based on the analysis
      */
     private static generateRecommendations(analysis: ExpertiseAnalysis): string {
-        const { teamHealthMetrics } = analysis;
-        
-        const recommendations = [];
+        const { teamHealthMetrics, managementInsights, insights } = analysis;
+        const recommendations: string[] = [];
 
-        // Knowledge distribution recommendation
+        // Pull action items from management insights (highest priority first)
+        const sorted = [...(managementInsights ?? [])].sort((a, b) => {
+            const order: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };
+            return (order[a.priority] ?? 2) - (order[b.priority] ?? 2);
+        });
+        for (const insight of sorted) {
+            const label = `<strong>[${insight.category}]</strong> ${insight.title}: ${insight.actionItems[0] || insight.description}`;
+            if (recommendations.length < 5) {
+                recommendations.push(label);
+            }
+        }
+
+        // Add metrics-driven recommendations if not already covered
         const riskScore = teamHealthMetrics?.knowledgeDistribution?.riskScore ?? 0;
-        if (riskScore > 70) {
-            recommendations.push('Implement regular knowledge sharing sessions and documentation sprints');
+        if (riskScore > 70 && recommendations.length < 6) {
+            recommendations.push('Implement regular knowledge sharing sessions and documentation sprints to reduce knowledge concentration risk.');
         }
 
-        // Collaboration recommendation
         const sharingScore = teamHealthMetrics?.collaborationMetrics?.knowledgeSharing ?? 0;
-        if (sharingScore < 50) {
-            recommendations.push('Establish regular code review rotations and pair programming sessions');
+        if (sharingScore < 50 && recommendations.length < 6) {
+            recommendations.push('Establish regular code review rotations and pair programming sessions to improve knowledge sharing.');
         }
 
-        // If no specific metrics, provide general recommendations
+        // Surface risk/gap insights as recommendations
+        const riskInsights = (insights ?? []).filter((i: any) => i.type === 'risk' || i.type === 'gap');
+        for (const ri of riskInsights) {
+            if (recommendations.length < 6) {
+                const rec = (ri as any).recommendations?.[0];
+                recommendations.push(rec ? `${(ri as any).title}: ${rec}` : `Address: ${(ri as any).title} — ${(ri as any).description}`);
+            }
+        }
+
+        // Fallback only if nothing was generated
         if (recommendations.length === 0) {
             recommendations.push(
                 'Consider implementing pair programming sessions to distribute knowledge',

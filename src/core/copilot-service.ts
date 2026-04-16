@@ -489,13 +489,52 @@ export class CopilotService {
             lastModified: new Date(f.lastModified ?? Date.now()),
             changeFrequency: f.changeFrequency ?? 0,
         }));
-        const insights: TeamInsight[] = (raw.insights ?? []).map((i: any) => ({
-            type: i.type ?? 'opportunity',
-            title: i.title ?? '',
-            description: i.description ?? '',
-            impact: i.impact ?? 'medium',
-            recommendations: i.recommendations ?? [],
-        }));
+        let insights: TeamInsight[] = (raw.insights ?? []).map((i: any) => {
+            // Handle string insights (e.g. from older model responses)
+            if (typeof i === 'string') {
+                return {
+                    type: 'opportunity' as const,
+                    title: 'Analysis Insight',
+                    description: i,
+                    impact: 'medium' as const,
+                    recommendations: [],
+                };
+            }
+            return {
+                type: i.type ?? 'opportunity',
+                title: i.title ?? '',
+                description: i.description ?? '',
+                impact: i.impact ?? 'medium',
+                recommendations: i.recommendations ?? [],
+            };
+        });
+
+        // Fallback: generate insights from expert data when the AI returns none
+        if (insights.length === 0 && experts.length > 0) {
+            const humans = experts.filter(e => !e.isBot);
+            const sorted = [...humans].sort((a, b) => b.contributions - a.contributions);
+            const totalContributions = sorted.reduce((sum, e) => sum + e.contributions, 0);
+
+            insights.push({
+                type: 'opportunity',
+                title: 'Team Composition',
+                description: `${humans.length} human contributor${humans.length !== 1 ? 's' : ''} identified across the repository.`,
+                impact: 'medium',
+                recommendations: [],
+            });
+
+            if (sorted[0] && totalContributions > 0) {
+                const topShare = Math.round((sorted[0].contributions / totalContributions) * 100);
+                insights.push({
+                    type: topShare >= 50 ? 'risk' : 'strength',
+                    title: 'Top Contributor',
+                    description: `${sorted[0].name} accounts for ${topShare}% of commits${topShare >= 50 ? ', creating concentration risk' : ''}.`,
+                    impact: topShare >= 50 ? 'high' : 'medium',
+                    recommendations: topShare >= 50 ? ['Schedule knowledge transfer sessions for critical areas'] : [],
+                });
+            }
+        }
+
         const teamHealthMetrics = normalizeTeamHealthMetrics(
             raw.teamHealthMetrics ?? raw.teamHealth,
             experts,
