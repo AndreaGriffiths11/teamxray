@@ -4,6 +4,13 @@
 
 A VS Code extension that reveals the humans behind a codebase — their communication styles, hidden strengths, and collaboration patterns — by analyzing Git/GitHub data through AI.
 
+## Response Style
+
+- **Code only, no explanation unless asked.**
+- **Bullets over paragraphs. No preamble.**
+- **One file per response when possible** — avoid showing entire modules unless specifically requested.
+- **Link to docs instead of quoting them** — assume the user can read.
+
 ## Build, Test, and Lint Commands
 
 ```bash
