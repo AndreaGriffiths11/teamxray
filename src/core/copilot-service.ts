@@ -206,7 +206,7 @@ export class CopilotService {
             const unsubscribe = session.on('assistant.message', (event) => {
                 latestAssistantMessage = event;
                 if (event.data?.content) {
-                    onDelta(this.sanitizeStreamingDelta(event.data.content));
+                    onDelta(this.normalizeStreamingDelta(event.data.content));
                 }
             });
 
@@ -263,21 +263,15 @@ export class CopilotService {
         }
     }
 
-    private sanitizeStreamingDelta(content: unknown): string {
+    private normalizeStreamingDelta(content: unknown): string {
         if (typeof content !== 'string') {
             return '';
         }
 
-        return content.slice(0, 20_000).replace(/[&<>"'`=/]/g, (char) => ({
-            '&': '&amp;',
-            '<': '&lt;',
-            '>': '&gt;',
-            '"': '&quot;',
-            "'": '&#39;',
-            '`': '&#96;',
-            '=': '&#61;',
-            '/': '&#47;'
-        })[char] ?? '');
+        // The webview renders each delta via document.createTextNode, which never
+        // parses HTML. Raw text is therefore XSS-safe and shown literally; escaping
+        // here would double-encode the stream (e.g. "<" would display as "&lt;").
+        return content.slice(0, 20_000);
     }
 
     /**

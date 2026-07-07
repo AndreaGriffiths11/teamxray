@@ -922,24 +922,15 @@ export class ExpertiseWebviewProvider {
     <script nonce="${nonce}">
         const streamOutput = document.getElementById('streamOutput');
         const statusText = document.getElementById('statusText');
-        const escapeHtmlText = (value) => {
-            const text = typeof value === 'string' ? value.slice(0, 20000) : '';
-            return text.replace(/[&<>"'\`=/]/g, (char) => ({
-                '&': '&amp;',
-                '<': '&lt;',
-                '>': '&gt;',
-                '"': '&quot;',
-                "'": '&#39;',
-                '\`': '&#96;',
-                '=': '&#61;',
-                '/': '&#47;'
-            })[char]);
+        // createTextNode never parses HTML, so raw text is XSS-safe and shown
+        // literally. Only bound the length here; escaping would double-encode the
+        // stream because the server already normalized it (e.g. "<" -> "&amp;lt;").
+        const toDisplayText = (value) => (typeof value === 'string' ? value.slice(0, 20000) : '');
+        const appendStreamText = (element, value) => {
+            element.appendChild(document.createTextNode(toDisplayText(value)));
         };
-        const appendSanitizedText = (element, safeValue) => {
-            element.appendChild(document.createTextNode(safeValue));
-        };
-        const setSanitizedText = (element, safeValue) => {
-            element.replaceChildren(document.createTextNode(safeValue));
+        const setStreamText = (element, value) => {
+            element.replaceChildren(document.createTextNode(toDisplayText(value)));
         };
 
         window.addEventListener('message', (event) => {
@@ -949,17 +940,15 @@ export class ExpertiseWebviewProvider {
             }
             
             if (message.type === 'chunk') {
-                const safeContent = escapeHtmlText(message.content);
-                appendSanitizedText(streamOutput, safeContent);
+                appendStreamText(streamOutput, message.content);
                 streamOutput.scrollTop = streamOutput.scrollHeight;
             } else if (message.type === 'status') {
-                const safeText = escapeHtmlText(message.text);
-                setSanitizedText(statusText, safeText);
+                setStreamText(statusText, message.text);
             } else if (message.type === 'error') {
-                const errorText = escapeHtmlText(message.text);
-                setSanitizedText(statusText, '❌ Error: ' + errorText);
+                const errorText = toDisplayText(message.text);
+                setStreamText(statusText, '❌ Error: ' + errorText);
                 streamOutput.style.color = '#ef4444';
-                appendSanitizedText(streamOutput, '\\n\\nAnalysis failed: ' + errorText);
+                appendStreamText(streamOutput, '\\n\\nAnalysis failed: ' + errorText);
             }
         });
     </script>
