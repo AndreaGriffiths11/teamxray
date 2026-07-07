@@ -888,19 +888,27 @@ export class ExpertiseWebviewProvider {
     <script nonce="${nonce}">
         const streamOutput = document.getElementById('streamOutput');
         const statusText = document.getElementById('statusText');
+        const sanitizeWebviewText = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;'
+        })[char]);
 
         window.addEventListener('message', (event) => {
             const message = event.data;
             
             if (message.type === 'chunk') {
-                streamOutput.textContent += message.content;
+                streamOutput.textContent += sanitizeWebviewText(message.content);
                 streamOutput.scrollTop = streamOutput.scrollHeight;
             } else if (message.type === 'status') {
-                statusText.textContent = message.text;
+                statusText.textContent = sanitizeWebviewText(message.text);
             } else if (message.type === 'error') {
-                statusText.textContent = '❌ Error: ' + message.text;
+                const errorText = sanitizeWebviewText(message.text);
+                statusText.textContent = '❌ Error: ' + errorText;
                 streamOutput.style.color = '#ef4444';
-                streamOutput.textContent += '\\n\\nAnalysis failed: ' + message.text;
+                streamOutput.textContent += '\\n\\nAnalysis failed: ' + errorText;
             }
         });
     </script>
