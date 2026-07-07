@@ -204,6 +204,9 @@
     "webpack": "^5.105.0",
     "webpack-cli": "^6.0.1"
   },
+  "overrides": {
+    "serialize-javascript": "^7.0.5"
+  },
   "dependencies": {
     "@github/copilot-sdk": "^0.1.32",
     "axios": "1.16.0",
