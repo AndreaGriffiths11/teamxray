@@ -888,27 +888,32 @@ export class ExpertiseWebviewProvider {
     <script nonce="${nonce}">
         const streamOutput = document.getElementById('streamOutput');
         const statusText = document.getElementById('statusText');
-        const sanitizeWebviewText = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
-            '&': '&amp;',
-            '<': '&lt;',
-            '>': '&gt;',
-            '"': '&quot;',
-            "'": '&#39;'
-        })[char]);
+        const sanitizeTextPayload = (value) => typeof value === 'string' ? value.slice(0, 20000) : '';
+        const appendTextOnly = (element, safeValue) => {
+            element.appendChild(document.createTextNode(safeValue));
+        };
+        const setTextOnly = (element, safeValue) => {
+            element.replaceChildren(document.createTextNode(safeValue));
+        };
 
         window.addEventListener('message', (event) => {
             const message = event.data;
+            if (!message || typeof message !== 'object') {
+                return;
+            }
             
             if (message.type === 'chunk') {
-                streamOutput.textContent += sanitizeWebviewText(message.content);
+                const safeContent = sanitizeTextPayload(message.content);
+                appendTextOnly(streamOutput, safeContent);
                 streamOutput.scrollTop = streamOutput.scrollHeight;
             } else if (message.type === 'status') {
-                statusText.textContent = sanitizeWebviewText(message.text);
+                const safeText = sanitizeTextPayload(message.text);
+                setTextOnly(statusText, safeText);
             } else if (message.type === 'error') {
-                const errorText = sanitizeWebviewText(message.text);
-                statusText.textContent = '❌ Error: ' + errorText;
+                const errorText = sanitizeTextPayload(message.text);
+                setTextOnly(statusText, '❌ Error: ' + errorText);
                 streamOutput.style.color = '#ef4444';
-                streamOutput.textContent += '\\n\\nAnalysis failed: ' + errorText;
+                appendTextOnly(streamOutput, '\\n\\nAnalysis failed: ' + errorText);
             }
         });
     </script>

@@ -217,8 +217,11 @@ export class CopilotService {
             try {
                 session.send({ prompt });
                 
-                // Wait for session to reach idle state
-                await this.waitForSessionIdle(session, this.ANALYSIS_TIMEOUT_MS);
+                await this.waitForSessionIdle(session, this.ANALYSIS_TIMEOUT_MS).catch((error: unknown) => {
+                    const message = error instanceof Error ? error.message : String(error);
+                    this.outputChannel.appendLine(`[CopilotService] Session idle wait failed: ${message}`);
+                    throw error;
+                });
 
                 if (!latestAssistantMessage) {
                     throw new Error('No response from Copilot agent');

@@ -12,6 +12,7 @@ import { Validator } from './utils/validation';
 
 // Module-level reference for cleanup in deactivate()
 let copilotService: CopilotService | undefined;
+const ANALYSIS_COMMAND_TIMEOUT_MS = 330_000;
 
 // This method is called when the extension is activated
 // extension is activated the very first time the command is executed
@@ -162,6 +163,25 @@ export function activate(context: vscode.ExtensionContext) {
         }
         return true;
     }
+
+    function withAnalysisTimeout<T>(operation: Promise<T>): Promise<T> {
+        return new Promise<T>((resolve, reject) => {
+            const timer = setTimeout(() => {
+                reject(new Error(`Repository analysis timed out after ${Math.round(ANALYSIS_COMMAND_TIMEOUT_MS / 1000)}s`));
+            }, ANALYSIS_COMMAND_TIMEOUT_MS);
+
+            operation.then(
+                value => {
+                    clearTimeout(timer);
+                    resolve(value);
+                },
+                error => {
+                    clearTimeout(timer);
+                    reject(error);
+                }
+            );
+        });
+    }
     
     // Register main analysis command
     const analyzeRepositoryCommand = vscode.commands.registerCommand('teamxray.analyzeRepository', async () => {
@@ -192,7 +212,7 @@ export function activate(context: vscode.ExtensionContext) {
 
             try {
                 statusCallback('Analyzing repository...');
-                const analysis = await analyzer.analyzeRepository(streamCallback);
+                const analysis = await withAnalysisTimeout(analyzer.analyzeRepository(streamCallback));
 
                 if (analysis) {
                     statusCallback('Generating report...');
