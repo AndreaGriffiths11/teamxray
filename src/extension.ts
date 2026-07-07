@@ -12,6 +12,7 @@ import { Validator } from './utils/validation';
 
 // Module-level reference for cleanup in deactivate()
 let copilotService: CopilotService | undefined;
+const ANALYSIS_COMMAND_TIMEOUT_MS = 330_000;
 
 // This method is called when the extension is activated
 // extension is activated the very first time the command is executed
@@ -162,6 +163,25 @@ export function activate(context: vscode.ExtensionContext) {
         }
         return true;
     }
+
+    function withAnalysisTimeout<T>(operation: Promise<T>): Promise<T> {
+        return new Promise<T>((resolve, reject) => {
+            const timer = setTimeout(() => {
+                reject(new Error(`Repository analysis timed out after ${Math.round(ANALYSIS_COMMAND_TIMEOUT_MS / 1000)}s`));
+            }, ANALYSIS_COMMAND_TIMEOUT_MS);
+
+            operation.then(
+                value => {
+                    clearTimeout(timer);
+                    resolve(value);
+                },
+                error => {
+                    clearTimeout(timer);
+                    reject(error);
+                }
+            );
+        });
+    }
     
     // Register main analysis command
     const analyzeRepositoryCommand = vscode.commands.registerCommand('teamxray.analyzeRepository', async () => {
@@ -170,17 +190,52 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
             
-            await resourceManager.withProgress("Analyzing repository expertise...", async (progress) => {
-                progress.report({ increment: 0, message: "Starting analysis..." });
-                const analysis = await analyzer.analyzeRepository();
+            const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+            const repoName = workspaceFolder?.name ?? 'Unknown Repository';
+
+            // Create streaming panel immediately
+            const streamingPanel = webviewProvider.createStreamingPanel(repoName);
+
+            const streamCallback = (chunk: string) => {
+                streamingPanel.webview.postMessage({
+                    type: 'chunk',
+                    content: chunk
+                });
+            };
+
+            const statusCallback = (status: string) => {
+                streamingPanel.webview.postMessage({
+                    type: 'status',
+                    text: status
+                });
+            };
+
+            try {
+                statusCallback('Analyzing repository...');
+                const analysis = await withAnalysisTimeout(analyzer.analyzeRepository(streamCallback));
+
                 if (analysis) {
-                    progress.report({ increment: 50, message: "Generating report..." });
+                    statusCallback('Generating report...');
                     await analyzer.saveAnalysis(analysis);
                     treeProvider.refresh(analysis);
-                    progress.report({ increment: 100, message: "Complete!" });
-                    webviewProvider.showAnalysisResults(analysis);
+
+                    // Update the panel with final analysis HTML
+                    webviewProvider.updatePanelWithAnalysis(streamingPanel, analysis);
+                    
+                    statusCallback('Complete!');
+                } else {
+                    streamingPanel.webview.postMessage({
+                        type: 'error',
+                        text: 'Analysis returned no results'
+                    });
                 }
-            });
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                streamingPanel.webview.postMessage({
+                    type: 'error',
+                    text: message
+                });
+            }
         }, 'analyze repository');
     });
 

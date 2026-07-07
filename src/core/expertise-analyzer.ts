@@ -91,8 +91,9 @@ export class ExpertiseAnalyzer {
     /**
      * Analyzes repository expertise using local git analysis and AI analysis
      * Now with smart data chunking for large repositories
+     * @param onDelta Optional callback to stream incremental analysis chunks to the UI
      */
-    async analyzeRepository(): Promise<ExpertiseAnalysis | null> {
+    async analyzeRepository(onDelta?: (chunk: string) => void): Promise<ExpertiseAnalysis | null> {
         return await ErrorHandler.withErrorHandling(async () => {
             this.outputChannel.show();
             this.outputChannel.appendLine('🚀 Starting repository expertise analysis...');
@@ -136,7 +137,7 @@ export class ExpertiseAnalyzer {
             }
 
             // Step 5: Perform AI analysis with chunking for large repos
-            const analysis = await this.performSmartAIAnalysis(repositoryData, repoStats);
+            const analysis = await this.performSmartAIAnalysis(repositoryData, repoStats, onDelta);
             if (!analysis) {
                 throw ErrorHandler.createError(
                     'ANALYSIS_FAILED',
@@ -378,13 +379,23 @@ export class ExpertiseAnalyzer {
      * Performs AI analysis with smart chunking and error handling.
      * Tries Copilot SDK first, then falls back to GitHub Models API.
      */
-    private async performSmartAIAnalysis(repositoryData: any, repoStats: RepositoryStats): Promise<ExpertiseAnalysis | null> {
+    private async performSmartAIAnalysis(
+        repositoryData: any,
+        repoStats: RepositoryStats,
+        onDelta?: (chunk: string) => void
+    ): Promise<ExpertiseAnalysis | null> {
         // Try Copilot SDK first
         if (this.copilotService?.isAvailable()) {
             try {
                 this.outputChannel.appendLine('🤖 Analyzing with Copilot SDK...');
                 const repoData = this.toRepositoryData(repositoryData, repoStats);
-                return await this.copilotService.analyzeTeam(repoData, repoStats);
+                
+                // Use streaming if callback provided, otherwise use standard method
+                if (onDelta) {
+                    return await this.copilotService.analyzeTeamStreaming(repoData, repoStats, onDelta);
+                } else {
+                    return await this.copilotService.analyzeTeam(repoData, repoStats);
+                }
             } catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
                 this.outputChannel.appendLine(`⚠️ Copilot SDK analysis failed, falling back to GitHub Models: ${message}`);

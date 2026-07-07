@@ -182,6 +182,126 @@ export class CopilotService {
     }
 
     /**
+     * Run team expertise analysis with streaming — emits response chunks via onDelta
+     * callback and returns the final parsed analysis. Allows UI to show incremental
+     * progress while the agent is generating the response.
+     */
+    async analyzeTeamStreaming(
+        data: RepositoryData,
+        repoStats: RepositoryStats,
+        onDelta: (chunk: string) => void
+    ): Promise<ExpertiseAnalysis> {
+        if (!this.client) {
+            throw new Error('CopilotService is not initialized');
+        }
+
+        const tools = await this.buildTools(data, repoStats);
+        const session = await this.createAnalysisSession(tools);
+
+        try {
+            const prompt = this.buildAnalysisPrompt(data.repository, repoStats);
+            
+            let latestAssistantMessage: AssistantMessageEvent | undefined;
+
+            const unsubscribe = session.on('assistant.message', (event) => {
+                latestAssistantMessage = event;
+                if (event.data?.content) {
+                    onDelta(this.normalizeStreamingDelta(event.data.content));
+                }
+            });
+
+            const unsubscribeIdle = session.on('session.idle', () => {
+                // Session is idle; waitForSessionIdle will resolve
+            });
+
+            try {
+                session.send({ prompt });
+                
+                await this.waitForSessionIdle(session, this.ANALYSIS_TIMEOUT_MS).catch((error: unknown) => {
+                    const message = error instanceof Error ? error.message : String(error);
+                    this.outputChannel.appendLine(`[CopilotService] Session idle wait failed: ${message}`);
+                    throw error;
+                });
+
+                if (!latestAssistantMessage) {
+                    throw new Error('No response from Copilot agent');
+                }
+
+                return this.parseAnalysisResponse(latestAssistantMessage, data, repoStats);
+            } catch (error) {
+                if (!this.isSessionIdleTimeoutError(error)) {
+                    throw error;
+                }
+
+                this.outputChannel.appendLine(
+                    `[CopilotService] Team analysis timed out after ${Math.round(this.ANALYSIS_TIMEOUT_MS / 1000)}s. Attempting recovery...`
+                );
+
+                try {
+                    await session.abort();
+                } catch (abortError) {
+                    const abortMessage = abortError instanceof Error ? abortError.message : String(abortError);
+                    this.outputChannel.appendLine(
+                        `[CopilotService] Failed to abort timed-out session cleanly: ${abortMessage}`
+                    );
+                }
+
+                if (latestAssistantMessage) {
+                    this.outputChannel.appendLine(
+                        '[CopilotService] Recovered assistant response from timed-out session.'
+                    );
+                    return this.parseAnalysisResponse(latestAssistantMessage, data, repoStats);
+                }
+
+                throw error;
+            } finally {
+                unsubscribe();
+                unsubscribeIdle();
+            }
+        } finally {
+            await session.destroy();
+        }
+    }
+
+    private normalizeStreamingDelta(content: unknown): string {
+        if (typeof content !== 'string') {
+            return '';
+        }
+
+        // The webview renders each delta via document.createTextNode, which never
+        // parses HTML. Raw text is therefore XSS-safe and shown literally; escaping
+        // here would double-encode the stream (e.g. "<" would display as "&lt;").
+        return content.slice(0, 20_000);
+    }
+
+    /**
+     * Wait for session to reach idle state (analysis complete).
+     */
+    private async waitForSessionIdle(
+        session: CopilotSessionInstance,
+        timeoutMs: number
+    ): Promise<void> {
+        return new Promise((resolve, reject) => {
+            let settled = false;
+
+            const unsubscribeIdle = session.on('session.idle', () => {
+                if (settled) { return; }
+                settled = true;
+                clearTimeout(timer);
+                unsubscribeIdle();
+                resolve();
+            });
+
+            const timer = setTimeout(() => {
+                if (settled) { return; }
+                settled = true;
+                unsubscribeIdle();
+                reject(new Error(`waiting for session.idle (timeout after ${Math.round(timeoutMs / 1000)}s)`));
+            }, timeoutMs);
+        });
+    }
+
+    /**
      * Find experts for a specific file using the Copilot agent.
      */
     async analyzeFileExpert(
