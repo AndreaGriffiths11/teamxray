@@ -206,7 +206,7 @@ export class CopilotService {
             const unsubscribe = session.on('assistant.message', (event) => {
                 latestAssistantMessage = event;
                 if (event.data?.content) {
-                    onDelta(event.data.content);
+                    onDelta(this.sanitizeStreamingDelta(event.data.content));
                 }
             });
 
@@ -261,6 +261,23 @@ export class CopilotService {
         } finally {
             await session.destroy();
         }
+    }
+
+    private sanitizeStreamingDelta(content: unknown): string {
+        if (typeof content !== 'string') {
+            return '';
+        }
+
+        return content.slice(0, 20_000).replace(/[&<>"'`=/]/g, (char) => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;',
+            '`': '&#96;',
+            '=': '&#61;',
+            '/': '&#47;'
+        })[char] ?? '');
     }
 
     /**
