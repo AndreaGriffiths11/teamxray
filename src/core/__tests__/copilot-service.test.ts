@@ -463,4 +463,133 @@ describe('CopilotService', () => {
             expect(result).toBeUndefined();
         });
     });
+
+    describe('analyzeTeamStreaming', () => {
+        it('streams chunks via onDelta callback and returns parsed analysis', async () => {
+            const data = makeRepoData();
+            const stats = makeStats();
+            const chunks: string[] = [];
+
+            // Mock session with event listeners
+            const eventListeners: Record<string, any[]> = {
+                'assistant.message': [],
+                'session.idle': [],
+            };
+
+            const mockSession = {
+                on: vi.fn((event: string, handler: any) => {
+                    if (!eventListeners[event]) {
+                        eventListeners[event] = [];
+                    }
+                    eventListeners[event].push(handler);
+                    return vi.fn(); // unsubscribe
+                }),
+                send: vi.fn(async () => {
+                    // Simulate streaming: emit assistant.message events then session.idle
+                    setTimeout(() => {
+                        eventListeners['assistant.message'].forEach(h => {
+                            h({
+                                data: { content: 'Chunk 1 ' },
+                                type: 'assistant.message',
+                            });
+                        });
+                    }, 10);
+                    setTimeout(() => {
+                        eventListeners['assistant.message'].forEach(h => {
+                            h({
+                                data: { content: 'Chunk 1 Chunk 2 ' },
+                                type: 'assistant.message',
+                            });
+                        });
+                    }, 20);
+                    setTimeout(() => {
+                        eventListeners['session.idle'].forEach(h => h());
+                    }, 30);
+                }),
+                abort: vi.fn(async () => {}),
+                destroy: vi.fn(async () => {}),
+            };
+
+            // Mock the createAnalysisSession to return our mock session
+            const privService = getPrivate(service);
+            privService.createAnalysisSession = vi.fn(async () => mockSession);
+            privService.parseAnalysisResponse = vi.fn(() => ({
+                experts: [
+                    {
+                        name: 'Alice',
+                        email: 'alice@test.com',
+                        expertise: 85,
+                        contributions: 30,
+                        specializations: ['TypeScript'],
+                        isBot: false,
+                    },
+                ],
+                riskFactors: [],
+                opportunities: [],
+            }));
+
+            // Initialize service (mock client)
+            privService.client = { createSession: vi.fn() };
+
+            // Run streaming analysis
+            const onDelta = vi.fn((chunk: string) => {
+                chunks.push(chunk);
+            });
+
+            const result = await service.analyzeTeamStreaming(data, stats, onDelta);
+
+            // Allow async event handlers to run
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // Verify chunks were streamed
+            expect(onDelta).toHaveBeenCalled();
+            expect(chunks.length).toBeGreaterThan(0);
+            expect(chunks.join('')).toContain('Chunk');
+
+            // Verify analysis was returned
+            expect(result).toBeDefined();
+            expect(result.experts).toBeDefined();
+            expect(result.experts.length).toBe(1);
+            expect(result.experts[0].name).toBe('Alice');
+
+            // Verify session lifecycle
+            expect(mockSession.send).toHaveBeenCalled();
+            expect(mockSession.destroy).toHaveBeenCalled();
+        });
+
+        it('handles session timeout gracefully', async () => {
+            const data = makeRepoData();
+            const stats = makeStats();
+
+            // Mock session that times out
+            const mockSession = {
+                on: vi.fn(() => vi.fn()),
+                send: vi.fn(async () => {
+                    // Never emit session.idle to trigger timeout
+                }),
+                abort: vi.fn(async () => {}),
+                destroy: vi.fn(async () => {}),
+            };
+
+            const privService = getPrivate(service);
+            privService.createAnalysisSession = vi.fn(async () => mockSession);
+            privService.isSessionIdleTimeoutError = vi.fn(() => true);
+            privService.client = { createSession: vi.fn() };
+
+            // Reduce timeout for testing
+            privService.ANALYSIS_TIMEOUT_MS = 50;
+
+            const onDelta = vi.fn();
+
+            try {
+                await service.analyzeTeamStreaming(data, stats, onDelta);
+            } catch (error) {
+                // Timeout error is expected
+                expect(error).toBeDefined();
+            }
+
+            expect(mockSession.abort).toHaveBeenCalled();
+            expect(mockSession.destroy).toHaveBeenCalled();
+        });
+    });
 });

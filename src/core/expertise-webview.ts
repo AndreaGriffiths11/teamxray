@@ -730,6 +730,185 @@ export class ExpertiseWebviewProvider {
     }
 
     /**
+     * Creates and shows a streaming webview panel with skeleton HTML.
+     * Returns the panel so the caller can stream chunks to it and later update with final analysis.
+     */
+    public createStreamingPanel(repositoryName: string): vscode.WebviewPanel {
+        const panel = vscode.window.createWebviewPanel(
+            'teamxray.streaming',
+            `Team X-Ray Analysis — ${repositoryName}`,
+            vscode.ViewColumn.One,
+            {
+                enableScripts: true,
+                retainContextWhenHidden: true
+            }
+        );
+
+        panel.webview.html = this.getStreamingSkeleton(panel.webview.cspSource, repositoryName);
+
+        return panel;
+    }
+
+    /**
+     * Updates a streaming panel with the final analysis HTML.
+     * Call this when the analysis is complete to replace the skeleton with the full report.
+     */
+    public updatePanelWithAnalysis(panel: vscode.WebviewPanel, analysis: ExpertiseAnalysis): void {
+        panel.webview.html = this.getWebviewContent(analysis, panel.webview.cspSource);
+        
+        // Store analysis for export functionality
+        this.setCurrentAnalysis(analysis);
+
+        // Re-register message handler for the final panel
+        panel.webview.onDidReceiveMessage(
+            message => {
+                switch (message.command) {
+                    case 'showExpertDetails':
+                        this.showExpertDetails(message.expert);
+                        break;
+                    case 'getExpertActivity':
+                        this.getExpertActivity(message.expert);
+                        break;
+                    case 'openFile':
+                        this.openFile(message.filePath);
+                        break;
+                    case 'refreshAnalysis':
+                        vscode.commands.executeCommand('teamxray.analyzeRepository');
+                        break;
+                    case 'exportAnalysis':
+                        this.exportAnalysis();
+                        break;
+                }
+            },
+            undefined,
+            this.context.subscriptions
+        );
+    }
+
+    /**
+     * Generates lightweight skeleton HTML for streaming analysis.
+     * Shows a header and a stream output area that the extension populates via postMessage.
+     */
+    private getStreamingSkeleton(cspSource: string, repositoryName: string): string {
+        const nonce = this.generateNonce();
+        return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
+    <title>Team X-Ray Streaming Analysis</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            font-size: 14px;
+            line-height: 1.6;
+            color: #e2e8f0;
+            background: #0a0a0f;
+            padding: 0;
+            margin: 0;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 32px 24px;
+        }
+        .header {
+            background: #0a0a0f;
+            padding: 48px 40px;
+            border: 1px solid #1e293b;
+            border-radius: 12px;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            color: #06b6d4;
+        }
+        .header p {
+            font-size: 16px;
+            color: #94a3b8;
+        }
+        .stream-area {
+            background: #0f172a;
+            border: 1px solid #1e293b;
+            border-radius: 8px;
+            padding: 20px;
+            font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+            font-size: 12px;
+            color: #22c55e;
+            overflow-y: auto;
+            max-height: 600px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-break: break-word;
+            position: relative;
+            min-height: 200px;
+        }
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #1e293b;
+            border-top-color: #06b6d4;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            margin-left: 8px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .status {
+            color: #94a3b8;
+            font-size: 12px;
+            margin-top: 12px;
+            display: flex;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔬 Team X-Ray</h1>
+            <p>Analyzing repository: <strong>${this.escapeHtmlAttribute(repositoryName)}</strong></p>
+        </div>
+
+        <div class="stream-area" id="streamOutput"></div>
+        <div class="status">
+            <span id="statusText">Initializing analysis</span>
+            <span class="spinner"></span>
+        </div>
+    </div>
+
+    <script nonce="${nonce}">
+        const streamOutput = document.getElementById('streamOutput');
+        const statusText = document.getElementById('statusText');
+
+        window.addEventListener('message', (event) => {
+            const message = event.data;
+            
+            if (message.type === 'chunk') {
+                streamOutput.textContent += message.content;
+                streamOutput.scrollTop = streamOutput.scrollHeight;
+            } else if (message.type === 'status') {
+                statusText.textContent = message.text;
+            } else if (message.type === 'error') {
+                statusText.textContent = '❌ Error: ' + message.text;
+                streamOutput.style.color = '#ef4444';
+                streamOutput.textContent += '\\n\\nAnalysis failed: ' + message.text;
+            }
+        });
+    </script>
+</body>
+</html>`;
+    }
+
+    /**
      * Generates the HTML content for the webview
      */
     private getWebviewContent(analysis: ExpertiseAnalysis, cspSource: string): string {
