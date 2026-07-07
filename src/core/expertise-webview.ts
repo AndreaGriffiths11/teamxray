@@ -2,6 +2,14 @@ import * as vscode from 'vscode';
 import { Expert } from '../types/expert';
 import { ExpertiseAnalysis } from './expertise-analyzer';
 
+type WebviewCommand = 'showExpertDetails' | 'getExpertActivity' | 'openFile' | 'refreshAnalysis' | 'exportAnalysis';
+
+interface WebviewCommandMessage {
+    command: WebviewCommand;
+    expert?: Expert;
+    filePath?: string;
+}
+
 export class ExpertiseWebviewProvider {
     private context: vscode.ExtensionContext;
 
@@ -30,28 +38,72 @@ export class ExpertiseWebviewProvider {
 
         // Handle messages from the webview
         panel.webview.onDidReceiveMessage(
-            message => {
-                switch (message.command) {
-                    case 'showExpertDetails':
-                        this.showExpertDetails(message.expert);
-                        break;
-                    case 'getExpertActivity':
-                        this.getExpertActivity(message.expert);
-                        break;
-                    case 'openFile':
-                        this.openFile(message.filePath);
-                        break;
-                    case 'refreshAnalysis':
-                        vscode.commands.executeCommand('teamxray.analyzeRepository');
-                        break;
-                    case 'exportAnalysis':
-                        this.exportAnalysis();
-                        break;
-                }
-            },
+            (message: unknown) => this.handleWebviewMessage(message),
             undefined,
             this.context.subscriptions
         );
+    }
+
+    private handleWebviewMessage(message: unknown): void {
+        if (!this.isWebviewCommandMessage(message)) {
+            return;
+        }
+
+        switch (message.command) {
+            case 'showExpertDetails':
+                if (message.expert) {
+                    this.showExpertDetails(message.expert);
+                }
+                break;
+            case 'getExpertActivity':
+                if (message.expert) {
+                    this.getExpertActivity(message.expert);
+                }
+                break;
+            case 'openFile':
+                if (message.filePath) {
+                    this.openFile(message.filePath);
+                }
+                break;
+            case 'refreshAnalysis':
+                vscode.commands.executeCommand('teamxray.analyzeRepository');
+                break;
+            case 'exportAnalysis':
+                this.exportAnalysis();
+                break;
+        }
+    }
+
+    private isWebviewCommandMessage(message: unknown): message is WebviewCommandMessage {
+        if (!message || typeof message !== 'object') {
+            return false;
+        }
+
+        const candidate = message as { command?: unknown; expert?: unknown; filePath?: unknown };
+        const allowedCommands: WebviewCommand[] = [
+            'showExpertDetails',
+            'getExpertActivity',
+            'openFile',
+            'refreshAnalysis',
+            'exportAnalysis'
+        ];
+
+        if (typeof candidate.command !== 'string' || !allowedCommands.includes(candidate.command as WebviewCommand)) {
+            return false;
+        }
+
+        if (candidate.filePath !== undefined && typeof candidate.filePath !== 'string') {
+            return false;
+        }
+
+        if (
+            candidate.expert !== undefined &&
+            (!candidate.expert || typeof candidate.expert !== 'object')
+        ) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -761,25 +813,7 @@ export class ExpertiseWebviewProvider {
 
         // Re-register message handler for the final panel
         panel.webview.onDidReceiveMessage(
-            message => {
-                switch (message.command) {
-                    case 'showExpertDetails':
-                        this.showExpertDetails(message.expert);
-                        break;
-                    case 'getExpertActivity':
-                        this.getExpertActivity(message.expert);
-                        break;
-                    case 'openFile':
-                        this.openFile(message.filePath);
-                        break;
-                    case 'refreshAnalysis':
-                        vscode.commands.executeCommand('teamxray.analyzeRepository');
-                        break;
-                    case 'exportAnalysis':
-                        this.exportAnalysis();
-                        break;
-                }
-            },
+            (message: unknown) => this.handleWebviewMessage(message),
             undefined,
             this.context.subscriptions
         );
@@ -796,9 +830,9 @@ export class ExpertiseWebviewProvider {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource} 'nonce-${nonce}'; script-src 'nonce-${nonce}'; img-src ${cspSource}; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';">
     <title>Team X-Ray Streaming Analysis</title>
-    <style>
+    <style nonce="${nonce}">
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
@@ -888,11 +922,23 @@ export class ExpertiseWebviewProvider {
     <script nonce="${nonce}">
         const streamOutput = document.getElementById('streamOutput');
         const statusText = document.getElementById('statusText');
-        const sanitizeTextPayload = (value) => typeof value === 'string' ? value.slice(0, 20000) : '';
-        const appendTextOnly = (element, safeValue) => {
+        const escapeHtmlText = (value) => {
+            const text = typeof value === 'string' ? value.slice(0, 20000) : '';
+            return text.replace(/[&<>"'\`=/]/g, (char) => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;',
+                '\`': '&#96;',
+                '=': '&#61;',
+                '/': '&#47;'
+            })[char]);
+        };
+        const appendSanitizedText = (element, safeValue) => {
             element.appendChild(document.createTextNode(safeValue));
         };
-        const setTextOnly = (element, safeValue) => {
+        const setSanitizedText = (element, safeValue) => {
             element.replaceChildren(document.createTextNode(safeValue));
         };
 
@@ -903,17 +949,17 @@ export class ExpertiseWebviewProvider {
             }
             
             if (message.type === 'chunk') {
-                const safeContent = sanitizeTextPayload(message.content);
-                appendTextOnly(streamOutput, safeContent);
+                const safeContent = escapeHtmlText(message.content);
+                appendSanitizedText(streamOutput, safeContent);
                 streamOutput.scrollTop = streamOutput.scrollHeight;
             } else if (message.type === 'status') {
-                const safeText = sanitizeTextPayload(message.text);
-                setTextOnly(statusText, safeText);
+                const safeText = escapeHtmlText(message.text);
+                setSanitizedText(statusText, safeText);
             } else if (message.type === 'error') {
-                const errorText = sanitizeTextPayload(message.text);
-                setTextOnly(statusText, '❌ Error: ' + errorText);
+                const errorText = escapeHtmlText(message.text);
+                setSanitizedText(statusText, '❌ Error: ' + errorText);
                 streamOutput.style.color = '#ef4444';
-                appendTextOnly(streamOutput, '\\n\\nAnalysis failed: ' + errorText);
+                appendSanitizedText(streamOutput, '\\n\\nAnalysis failed: ' + errorText);
             }
         });
     </script>
