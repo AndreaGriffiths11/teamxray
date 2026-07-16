@@ -4,7 +4,7 @@
 
 Transform your repository into a team expertise map. Discover who knows what, reveal hidden collaboration patterns, and get AI-powered management insights — all from your git history.
 
-[![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/AndreaGriffiths.teamxray?color=blue&label=Marketplace)](https://marketplace.visualstudio.com/items?itemName=AndreaGriffiths.teamxray)
+[![VS Marketplace version](https://vsmarketplacebadges.dev/version-short/AndreaGriffiths.teamxray.svg)](https://marketplace.visualstudio.com/items?itemName=AndreaGriffiths.teamxray)
 
 ## Features
 
