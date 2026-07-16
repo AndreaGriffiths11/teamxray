@@ -5,6 +5,7 @@
 - VS Code 1.100.0+
 - Node.js 20+
 - A git repository with commit history
+- A trusted VS Code workspace
 
 ## Install
 
@@ -29,7 +30,7 @@ curl -fsSL https://gh.io/copilot-install | bash
 copilot auth login
 ```
 
-Team X-Ray auto-detects the CLI. If it is not on your PATH, set `teamxray.cliPath` in VS Code settings.
+Team X-Ray auto-detects the CLI. If it is not on your PATH, set an absolute `teamxray.cliPath` in user or remote settings.
 
 Leave `teamxray.aiProvider` set to `copilot` (the default).
 
@@ -60,7 +61,7 @@ There is no separate "local-only" provider to configure in the normal success pa
 | Setting | Description | Default |
 |---------|-------------|---------|
 | `teamxray.aiProvider` | Provider setting: `copilot`, `byok-openai`, `byok-anthropic`, `byok-azure`, `github-models` | `copilot` |
-| `teamxray.cliPath` | Path to the Copilot CLI executable when it is not available on your PATH | auto-detect |
+| `teamxray.cliPath` | Absolute path to the Copilot CLI executable when it is not available on your PATH; user or remote settings only | auto-detect |
 | `teamxray.copilotModel` | Optional Copilot model ID; leave empty to use the Copilot CLI default | — |
 | `teamxray.githubModelsModel` | GitHub Models catalog ID for direct or fallback analysis | `openai/gpt-4.1` |
 | `teamxray.byokModel` | Required model override for BYOK providers (e.g. `gpt-4o`, `claude-sonnet-4-5-20250929`) | — |

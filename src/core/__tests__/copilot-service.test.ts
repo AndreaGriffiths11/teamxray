@@ -478,6 +478,17 @@ describe('CopilotService', () => {
             const result = await getPrivate(service).getProviderConfig();
             expect(result).toBeUndefined();
         });
+
+        it('rejects a BYOK provider without an endpoint', async () => {
+            const vscode = await import('vscode');
+            vi.mocked(vscode.workspace.getConfiguration).mockReturnValue({
+                get: vi.fn((key: string) => key === 'aiProvider' ? 'byok-openai' : undefined),
+            } as any);
+
+            await expect(getPrivate(service).getProviderConfig())
+                .rejects
+                .toThrow('BYOK provider "byok-openai" requires teamxray.byokBaseUrl');
+        });
     });
 
     describe('analyzeTeamStreaming', () => {

@@ -19,7 +19,7 @@ This is the primary path. Team X-Ray dynamically loads `@github/copilot-sdk`, cr
 const sdk = await import(/* webpackIgnore: true */ '@github/copilot-sdk');
 ```
 
-If the CLI is installed outside your PATH, point the extension at it with `teamxray.cliPath`.
+If the CLI is installed outside your PATH, point the extension at it with an absolute `teamxray.cliPath` in user or remote settings.
 
 ## BYOK provider overrides
 
@@ -69,12 +69,12 @@ Azure URLs include the resource name and deployment name. Get them from the Azur
 
 ### Migrating from `teamxray.byokApiKey`
 
-The `teamxray.byokApiKey` setting is deprecated because settings JSON is plaintext. If you have a value there from an older version:
+The `teamxray.byokApiKey` setting is deprecated because settings JSON is plaintext. Team X-Ray no longer reads it. If you have a value there from an older version:
 
 1. Run `Team X-Ray: Set BYOK API Key (Secure)` and paste the same key. It will be stored in VS Code's encrypted SecretStorage.
 2. Remove `teamxray.byokApiKey` from your settings JSON.
 
-The extension reads SecretStorage first and only falls back to the plaintext setting for migration.
+The extension only reads API keys from SecretStorage.
 
 ## GitHub Models
 

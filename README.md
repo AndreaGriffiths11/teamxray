@@ -40,7 +40,7 @@ ext install AndreaGriffiths.teamxray
 
 Or [install from the VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=AndreaGriffiths.teamxray).
 
-**Requirements:** VS Code 1.100.0+, Node.js 20+
+**Requirements:** VS Code 1.100.0+, Node.js 20+, and a trusted workspace with git history.
 
 ## Usage
 

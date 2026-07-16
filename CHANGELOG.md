@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Included the Copilot SDK's `vscode-jsonrpc` runtime dependency in packaged VSIX files.
 - Validated GitHub Models catalog IDs before sending inference requests.
 - Replaced shell-based CLI discovery with a filesystem-only PATH lookup.
+- Restricted provider and CLI configuration to machine settings and stopped reading plaintext token settings.
+- Require a trusted workspace before activating local Git and Copilot CLI analysis.
 
 ### 🔧 Infrastructure
 - Replaced the broken VS Code test command with the existing Vitest suite and run it in CI.

@@ -9,7 +9,7 @@ Team X-Ray could not start the Copilot SDK and did not have a GitHub token avail
    curl -fsSL https://gh.io/copilot-install | bash
    copilot auth login
    ```
-2. If the CLI is installed outside your PATH, set `teamxray.cliPath` in VS Code settings.
+2. If the CLI is installed outside your PATH, set an absolute `teamxray.cliPath` in user or remote settings.
 3. Run `Team X-Ray: Set GitHub Token` from the Command Palette.
 
 ## Copilot SDK Not Detected
@@ -27,7 +27,7 @@ copilot auth login
 copilot --version
 ```
 
-If `copilot --version` works in a different shell but not from VS Code, set `teamxray.cliPath` to the full executable path and reload VS Code.
+If `copilot --version` works in a different shell but not from VS Code, set `teamxray.cliPath` to the absolute executable path in user or remote settings and reload VS Code.
 
 ## BYOK provider selected but not working
 
@@ -44,7 +44,7 @@ The API key isn't being sent or isn't valid for the provider you selected.
 
 - Re-run `Team X-Ray: Set BYOK API Key (Secure)` and paste the key again. The secret is stored per-machine; it won't roam with your settings.
 - Confirm the key matches the provider: an `sk-ant-...` key with `teamxray.aiProvider` set to `byok-openai` will always 401.
-- If you're migrating from the deprecated `teamxray.byokApiKey` settings entry, remove it from `settings.json` after setting the secure key. Mixed state can confuse the fallback logic.
+- If you're migrating from the deprecated `teamxray.byokApiKey` settings entry, remove it from `settings.json` after setting the secure key. Team X-Ray reads BYOK keys only from SecretStorage.
 
 ## BYOK returns 404 Not Found
 

@@ -75,17 +75,12 @@ export class CopilotService {
                 logLevel: 'warning' as const,
             };
 
-            // If the user configured a GitHub token, pass it through.
             const config = vscode.workspace.getConfiguration('teamxray');
-            const githubToken = config.get<string>('githubToken');
-            if (githubToken) {
-                opts.githubToken = githubToken;
-            }
 
             // Resolve CLI path: user setting > PATH lookup.
-            const configuredCliPath = config.get<string>('cliPath');
+            const configuredCliPath = config.get<string>('cliPath')?.trim();
             if (configuredCliPath) {
-                opts.cliPath = configuredCliPath;
+                opts.cliPath = await this.validateConfiguredCliPath(configuredCliPath);
             } else {
                 const resolvedPath = await this.findCliOnPath();
                 if (!resolvedPath) {
@@ -118,9 +113,31 @@ export class CopilotService {
      * Attempt to locate the `copilot` binary on the system PATH.
      * Returns the absolute path if found, otherwise undefined.
      */
+    private async validateConfiguredCliPath(cliPath: string): Promise<string> {
+        const { access, constants, realpath, stat } = await import('fs/promises');
+        const { isAbsolute } = await import('path');
+
+        if (!isAbsolute(cliPath)) {
+            throw new Error('teamxray.cliPath must be an absolute path.');
+        }
+
+        try {
+            const resolved = await realpath(cliPath);
+            const accessMode = process.platform === 'win32' ? constants.F_OK : constants.X_OK;
+            await access(resolved, accessMode);
+            if (!(await stat(resolved)).isFile()) {
+                throw new Error('Configured Copilot CLI path is not a file.');
+            }
+            return resolved;
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            throw new Error(`Configured Copilot CLI path is unavailable: ${message}`);
+        }
+    }
+
     private async findCliOnPath(): Promise<string | undefined> {
-        const { access, constants, stat } = await import('fs/promises');
-        const { delimiter, join } = await import('path');
+        const { access, constants, realpath, stat } = await import('fs/promises');
+        const { delimiter, isAbsolute, join } = await import('path');
         const executableNames = process.platform === 'win32'
             ? (process.env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD')
                 .split(';')
@@ -130,7 +147,7 @@ export class CopilotService {
         const pathEntries = (process.env.PATH ?? '')
             .split(delimiter)
             .map(entry => entry.trim().replace(/^"|"$/g, ''))
-            .filter(Boolean);
+            .filter(entry => entry.length > 0 && isAbsolute(entry));
         const accessMode = process.platform === 'win32' ? constants.F_OK : constants.X_OK;
 
         for (const directory of pathEntries) {
@@ -138,9 +155,10 @@ export class CopilotService {
                 const candidate = join(directory, executableName);
                 try {
                     await access(candidate, accessMode);
-                    if ((await stat(candidate)).isFile()) {
-                        this.outputChannel.appendLine(`[CopilotService] Found CLI at: ${candidate}`);
-                        return candidate;
+                    const resolved = await realpath(candidate);
+                    if ((await stat(resolved)).isFile()) {
+                        this.outputChannel.appendLine(`[CopilotService] Found CLI at: ${resolved}`);
+                        return resolved;
                     }
                 } catch (error) {
                     const code = error instanceof Error
@@ -510,16 +528,18 @@ export class CopilotService {
         }
 
         const baseUrl = config.get<string>('byokBaseUrl');
-        const apiKey = await this.secretStorage.get('teamxray.byokApiKey')
-            ?? config.get<string>('byokApiKey'); // Fall back to settings for migration
+        const apiKey = await this.secretStorage.get('teamxray.byokApiKey');
 
         if (!baseUrl) {
-            const warningMessage = `[CopilotService] BYOK provider "${provider}" is selected but teamxray.byokBaseUrl is not configured. Falling back to default Copilot auth.`;
-            this.outputChannel.appendLine(warningMessage);
-            vscode.window.showWarningMessage(
-                `Team X-Ray: BYOK provider "${provider}" selected but Base URL is not configured. Set teamxray.byokBaseUrl in settings.`
+            throw new Error(
+                `BYOK provider "${provider}" requires teamxray.byokBaseUrl. Set it in user or remote settings.`
             );
-            return undefined;
+        }
+
+        if (!apiKey) {
+            throw new Error(
+                `BYOK provider "${provider}" requires an API key. Run "Team X-Ray: Set BYOK API Key (Secure)".`
+            );
         }
 
         const providerType = provider === 'byok-anthropic'
@@ -531,7 +551,7 @@ export class CopilotService {
         return {
             type: providerType,
             baseUrl,
-            apiKey: apiKey || undefined,
+            apiKey,
         };
     }
 

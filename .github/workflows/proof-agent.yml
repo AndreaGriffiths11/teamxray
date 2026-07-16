@@ -24,6 +24,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           base-ref: origin/main
-          block-on-fail: true
+          # LLM findings are advisory; deterministic CI, CodeQL, and dependency audit remain merge gates.
+          block-on-fail: false
           post-comment: true
           comment-mode: collapse
