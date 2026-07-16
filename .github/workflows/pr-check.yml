@@ -4,6 +4,10 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   quality-check:
     name: Code Quality & Extension Validation
@@ -77,9 +81,10 @@ jobs:
         fi
         echo "✅ Extension size OK: $(($VSIX_SIZE / 1024 / 1024))MB"
         
-        - name: Comment PR with results
+    - name: Comment PR with results
       uses: actions/github-script@v7
       if: always()
+      continue-on-error: true
       env:
         JOB_STATUS: ${{ job.status }}
       with:
