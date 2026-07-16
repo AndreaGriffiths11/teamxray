@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed streamed analysis to use Copilot SDK delta events instead of final assistant messages.
 - Normalized fractional AI expertise scores to Team X-Ray's 0-100 display scale.
 - Included the Copilot SDK's `vscode-jsonrpc` runtime dependency in packaged VSIX files.
+- Validated GitHub Models catalog IDs before sending inference requests.
+- Replaced shell-based CLI discovery with a filesystem-only PATH lookup.
 
 ### 🔧 Infrastructure
 - Replaced the broken VS Code test command with the existing Vitest suite and run it in CI.

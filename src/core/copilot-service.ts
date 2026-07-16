@@ -119,22 +119,38 @@ export class CopilotService {
      * Returns the absolute path if found, otherwise undefined.
      */
     private async findCliOnPath(): Promise<string | undefined> {
-        try {
-            const { execFile } = await import('child_process');
-            const { promisify } = await import('util');
-            const execFileAsync = promisify(execFile);
-            const command = process.platform === 'win32' ? 'where.exe' : 'which';
-            const { stdout } = await execFileAsync(command, ['copilot']);
-            const resolved = stdout
-                .split(/\r?\n/)
-                .map(candidate => candidate.trim())
-                .find(Boolean);
-            if (resolved) {
-                this.outputChannel.appendLine(`[CopilotService] Found CLI at: ${resolved}`);
-                return resolved;
+        const { access, constants, stat } = await import('fs/promises');
+        const { delimiter, join } = await import('path');
+        const executableNames = process.platform === 'win32'
+            ? (process.env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD')
+                .split(';')
+                .filter(Boolean)
+                .map(extension => `copilot${extension.toLowerCase()}`)
+            : ['copilot'];
+        const pathEntries = (process.env.PATH ?? '')
+            .split(delimiter)
+            .map(entry => entry.trim().replace(/^"|"$/g, ''))
+            .filter(Boolean);
+        const accessMode = process.platform === 'win32' ? constants.F_OK : constants.X_OK;
+
+        for (const directory of pathEntries) {
+            for (const executableName of executableNames) {
+                const candidate = join(directory, executableName);
+                try {
+                    await access(candidate, accessMode);
+                    if ((await stat(candidate)).isFile()) {
+                        this.outputChannel.appendLine(`[CopilotService] Found CLI at: ${candidate}`);
+                        return candidate;
+                    }
+                } catch (error) {
+                    const code = error instanceof Error
+                        ? (error as NodeJS.ErrnoException).code
+                        : undefined;
+                    if (code !== 'ENOENT' && code !== 'ENOTDIR' && code !== 'EACCES') {
+                        throw error;
+                    }
+                }
             }
-        } catch {
-            // CLI not on PATH
         }
         return undefined;
     }

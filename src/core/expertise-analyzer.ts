@@ -15,6 +15,7 @@ import {
 } from '../types/expert';
 import { ErrorHandler } from '../utils/error-handler';
 import { ResourceManager } from '../utils/resource-manager';
+import { Validator } from '../utils/validation';
 import { detectBotContributor } from '../utils/bot-detection';
 import {
     buildFallbackManagementInsights,
@@ -482,10 +483,16 @@ export class ExpertiseAnalyzer {
         }
 
         const prompt = this.buildOptimizedAnalysisPrompt(repositoryData, repoStats);
-        const model = vscode.workspace
+        const configuredModel = vscode.workspace
             .getConfiguration('teamxray')
-            .get<string>('githubModelsModel', 'openai/gpt-4.1')
-            ?.trim() || 'openai/gpt-4.1';
+            .get<unknown>('githubModelsModel', 'openai/gpt-4.1');
+        const modelValidation = Validator.validateGitHubModelId(configuredModel);
+        if (typeof configuredModel !== 'string' || !modelValidation.isValid) {
+            throw ErrorHandler.createValidationError(
+                `Invalid GitHub Models model ID: ${modelValidation.errors.join(', ')}`
+            );
+        }
+        const model = configuredModel.trim();
         
         try {
             const response = await axios.post(

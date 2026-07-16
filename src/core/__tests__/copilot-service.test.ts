@@ -35,6 +35,7 @@ vi.mock('zod', async () => {
 
 import { CopilotService } from '../copilot-service';
 import type { RepositoryData, RepositoryStats } from '../../types/expert';
+import { Validator } from '../../utils/validation';
 
 /**
  * Helper to access private methods for testing via type assertion.
@@ -134,6 +135,19 @@ describe('CopilotService', () => {
     describe('isAvailable', () => {
         it('returns false before initialization', () => {
             expect(service.isAvailable()).toBe(false);
+        });
+    });
+
+    describe('validateGitHubModelId', () => {
+        it('accepts catalog model IDs', () => {
+            expect(Validator.validateGitHubModelId('openai/gpt-4.1').isValid).toBe(true);
+            expect(Validator.validateGitHubModelId('deepseek/deepseek-r1-0528').isValid).toBe(true);
+        });
+
+        it('rejects malformed catalog model IDs', () => {
+            expect(Validator.validateGitHubModelId('gpt-4.1').isValid).toBe(false);
+            expect(Validator.validateGitHubModelId('openai/gpt-4.1;curl example.com').isValid).toBe(false);
+            expect(Validator.validateGitHubModelId({ id: 'openai/gpt-4.1' }).isValid).toBe(false);
         });
     });
 
