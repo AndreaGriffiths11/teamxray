@@ -15,6 +15,7 @@ import {
 } from '../types/expert';
 import { ErrorHandler } from '../utils/error-handler';
 import { ResourceManager } from '../utils/resource-manager';
+import { Validator } from '../utils/validation';
 import { detectBotContributor } from '../utils/bot-detection';
 import {
     buildFallbackManagementInsights,
@@ -384,8 +385,12 @@ export class ExpertiseAnalyzer {
         repoStats: RepositoryStats,
         onDelta?: (chunk: string) => void
     ): Promise<ExpertiseAnalysis | null> {
-        // Try Copilot SDK first
-        if (this.copilotService?.isAvailable()) {
+        const aiProvider = vscode.workspace
+            .getConfiguration('teamxray')
+            .get<string>('aiProvider', 'copilot');
+
+        // Try Copilot SDK first unless GitHub Models was explicitly selected.
+        if (aiProvider !== 'github-models' && this.copilotService?.isAvailable()) {
             try {
                 this.outputChannel.appendLine('🤖 Analyzing with Copilot SDK...');
                 const repoData = this.toRepositoryData(repositoryData, repoStats);
@@ -478,12 +483,22 @@ export class ExpertiseAnalyzer {
         }
 
         const prompt = this.buildOptimizedAnalysisPrompt(repositoryData, repoStats);
+        const configuredModel = vscode.workspace
+            .getConfiguration('teamxray')
+            .get<unknown>('githubModelsModel', 'openai/gpt-4.1');
+        const modelValidation = Validator.validateGitHubModelId(configuredModel);
+        if (typeof configuredModel !== 'string' || !modelValidation.isValid) {
+            throw ErrorHandler.createValidationError(
+                `Invalid GitHub Models model ID: ${modelValidation.errors.join(', ')}`
+            );
+        }
+        const model = configuredModel.trim();
         
         try {
             const response = await axios.post(
                 'https://models.github.ai/inference/chat/completions',
                 {
-                    model: 'openai/gpt-4.1',
+                    model,
                     messages: [
                         {
                             role: 'system',
@@ -501,7 +516,7 @@ export class ExpertiseAnalyzer {
                     headers: {
                         'Accept': 'application/vnd.github+json',
                         'Authorization': `Bearer ${apiKey}`,
-                        'X-GitHub-Api-Version': '2022-11-28',
+                        'X-GitHub-Api-Version': '2026-03-10',
                         'Content-Type': 'application/json'
                     }
                 }

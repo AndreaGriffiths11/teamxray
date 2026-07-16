@@ -75,22 +75,20 @@ export class CopilotService {
                 logLevel: 'warning' as const,
             };
 
-            // If the user configured a GitHub token, pass it through.
             const config = vscode.workspace.getConfiguration('teamxray');
-            const githubToken = config.get<string>('githubToken');
-            if (githubToken) {
-                opts.githubToken = githubToken;
-            }
 
-            // Resolve CLI path: user setting > PATH lookup > default SDK resolution
-            const configuredCliPath = config.get<string>('cliPath');
+            // Resolve CLI path: user setting > PATH lookup.
+            const configuredCliPath = config.get<string>('cliPath')?.trim();
             if (configuredCliPath) {
-                opts.cliPath = configuredCliPath;
+                opts.cliPath = await this.validateConfiguredCliPath(configuredCliPath);
             } else {
                 const resolvedPath = await this.findCliOnPath();
-                if (resolvedPath) {
-                    opts.cliPath = resolvedPath;
+                if (!resolvedPath) {
+                    throw new Error(
+                        'Copilot CLI not found. Install it or set teamxray.cliPath in VS Code settings.'
+                    );
                 }
+                opts.cliPath = resolvedPath;
             }
 
             const sdk = await loadSdk();
@@ -115,19 +113,62 @@ export class CopilotService {
      * Attempt to locate the `copilot` binary on the system PATH.
      * Returns the absolute path if found, otherwise undefined.
      */
-    private async findCliOnPath(): Promise<string | undefined> {
+    private async validateConfiguredCliPath(cliPath: string): Promise<string> {
+        const { access, constants, realpath, stat } = await import('fs/promises');
+        const { isAbsolute } = await import('path');
+
+        if (!isAbsolute(cliPath)) {
+            throw new Error('teamxray.cliPath must be an absolute path.');
+        }
+
         try {
-            const { execFile } = await import('child_process');
-            const { promisify } = await import('util');
-            const execFileAsync = promisify(execFile);
-            const { stdout } = await execFileAsync('which', ['copilot']);
-            const resolved = stdout.trim();
-            if (resolved) {
-                this.outputChannel.appendLine(`[CopilotService] Found CLI at: ${resolved}`);
-                return resolved;
+            const resolved = await realpath(cliPath);
+            const accessMode = process.platform === 'win32' ? constants.F_OK : constants.X_OK;
+            await access(resolved, accessMode);
+            if (!(await stat(resolved)).isFile()) {
+                throw new Error('Configured Copilot CLI path is not a file.');
             }
-        } catch {
-            // CLI not on PATH
+            return resolved;
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            throw new Error(`Configured Copilot CLI path is unavailable: ${message}`);
+        }
+    }
+
+    private async findCliOnPath(): Promise<string | undefined> {
+        const { access, constants, realpath, stat } = await import('fs/promises');
+        const { delimiter, isAbsolute, join } = await import('path');
+        const executableNames = process.platform === 'win32'
+            ? (process.env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD')
+                .split(';')
+                .filter(Boolean)
+                .map(extension => `copilot${extension.toLowerCase()}`)
+            : ['copilot'];
+        const pathEntries = (process.env.PATH ?? '')
+            .split(delimiter)
+            .map(entry => entry.trim().replace(/^"|"$/g, ''))
+            .filter(entry => entry.length > 0 && isAbsolute(entry));
+        const accessMode = process.platform === 'win32' ? constants.F_OK : constants.X_OK;
+
+        for (const directory of pathEntries) {
+            for (const executableName of executableNames) {
+                const candidate = join(directory, executableName);
+                try {
+                    await access(candidate, accessMode);
+                    const resolved = await realpath(candidate);
+                    if ((await stat(resolved)).isFile()) {
+                        this.outputChannel.appendLine(`[CopilotService] Found CLI at: ${resolved}`);
+                        return resolved;
+                    }
+                } catch (error) {
+                    const code = error instanceof Error
+                        ? (error as NodeJS.ErrnoException).code
+                        : undefined;
+                    if (code !== 'ENOENT' && code !== 'ENOTDIR' && code !== 'EACCES') {
+                        throw error;
+                    }
+                }
+            }
         }
         return undefined;
     }
@@ -196,28 +237,27 @@ export class CopilotService {
         }
 
         const tools = await this.buildTools(data, repoStats);
-        const session = await this.createAnalysisSession(tools);
+        const session = await this.createAnalysisSession(tools, true);
 
         try {
             const prompt = this.buildAnalysisPrompt(data.repository, repoStats);
             
             let latestAssistantMessage: AssistantMessageEvent | undefined;
 
-            const unsubscribe = session.on('assistant.message', (event) => {
+            const unsubscribeMessage = session.on('assistant.message', (event) => {
                 latestAssistantMessage = event;
-                if (event.data?.content) {
-                    onDelta(this.normalizeStreamingDelta(event.data.content));
+            });
+            const unsubscribeDelta = session.on('assistant.message_delta', (event) => {
+                const delta = this.normalizeStreamingDelta(event.data.deltaContent);
+                if (delta) {
+                    onDelta(delta);
                 }
             });
 
-            const unsubscribeIdle = session.on('session.idle', () => {
-                // Session is idle; waitForSessionIdle will resolve
-            });
-
             try {
-                session.send({ prompt });
-                
-                await this.waitForSessionIdle(session, this.ANALYSIS_TIMEOUT_MS).catch((error: unknown) => {
+                const idle = this.waitForSessionIdle(session, this.ANALYSIS_TIMEOUT_MS);
+                await session.send({ prompt });
+                await idle.catch((error: unknown) => {
                     const message = error instanceof Error ? error.message : String(error);
                     this.outputChannel.appendLine(`[CopilotService] Session idle wait failed: ${message}`);
                     throw error;
@@ -255,8 +295,8 @@ export class CopilotService {
 
                 throw error;
             } finally {
-                unsubscribe();
-                unsubscribeIdle();
+                unsubscribeMessage();
+                unsubscribeDelta();
             }
         } finally {
             await session.destroy();
@@ -425,7 +465,10 @@ export class CopilotService {
 
     // ── Session creation ───────────────────────────────────────────────
 
-    private async createAnalysisSession(tools: Tool<any>[]): Promise<CopilotSessionInstance> {
+    private async createAnalysisSession(
+        tools: Tool<any>[],
+        streaming = false
+    ): Promise<CopilotSessionInstance> {
         if (!this.client) {
             throw new Error('CopilotService is not initialized');
         }
@@ -445,6 +488,10 @@ export class CopilotService {
             infiniteSessions: { enabled: false },
         };
 
+        if (streaming) {
+            sessionConfig.streaming = true;
+        }
+
         if (providerConfig) {
             sessionConfig.provider = providerConfig;
             const model = config.get<string>('byokModel')?.trim();
@@ -454,6 +501,11 @@ export class CopilotService {
                 );
             }
             sessionConfig.model = model;
+        } else {
+            const model = config.get<string>('copilotModel')?.trim();
+            if (model) {
+                sessionConfig.model = model;
+            }
         }
 
         try {
@@ -476,16 +528,18 @@ export class CopilotService {
         }
 
         const baseUrl = config.get<string>('byokBaseUrl');
-        const apiKey = await this.secretStorage.get('teamxray.byokApiKey')
-            ?? config.get<string>('byokApiKey'); // Fall back to settings for migration
+        const apiKey = await this.secretStorage.get('teamxray.byokApiKey');
 
         if (!baseUrl) {
-            const warningMessage = `[CopilotService] BYOK provider "${provider}" is selected but teamxray.byokBaseUrl is not configured. Falling back to default Copilot auth.`;
-            this.outputChannel.appendLine(warningMessage);
-            vscode.window.showWarningMessage(
-                `Team X-Ray: BYOK provider "${provider}" selected but Base URL is not configured. Set teamxray.byokBaseUrl in settings.`
+            throw new Error(
+                `BYOK provider "${provider}" requires teamxray.byokBaseUrl. Set it in user or remote settings.`
             );
-            return undefined;
+        }
+
+        if (!apiKey) {
+            throw new Error(
+                `BYOK provider "${provider}" requires an API key. Run "Team X-Ray: Set BYOK API Key (Secure)".`
+            );
         }
 
         const providerType = provider === 'byok-anthropic'
@@ -497,7 +551,7 @@ export class CopilotService {
         return {
             type: providerType,
             baseUrl,
-            apiKey: apiKey || undefined,
+            apiKey,
         };
     }
 
@@ -905,7 +959,7 @@ export class CopilotService {
             name: e.name ?? 'Unknown',
             email: e.email ?? '',
             isBot: detectBotContributor(e.name, e.email),
-            expertise: typeof e.expertise === 'number' ? e.expertise : 50,
+            expertise: this.normalizeExpertise(e.expertise),
             contributions: e.contributions ?? 0,
             lastCommit: this.ensureValidDate(e.lastCommit),
             specializations: e.specializations ?? [],
@@ -917,6 +971,12 @@ export class CopilotService {
             collaborationStyle: e.collaborationStyle,
             riskFactors: e.riskFactors,
         };
+    }
+
+    private normalizeExpertise(value: unknown): number {
+        const raw = typeof value === 'number' && Number.isFinite(value) ? value : 50;
+        const normalized = raw > 0 && raw <= 1 ? raw * 100 : raw;
+        return Math.round(Math.max(0, Math.min(100, normalized)));
     }
 
     private buildMinimalAnalysis(

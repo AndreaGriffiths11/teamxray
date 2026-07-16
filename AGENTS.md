@@ -103,6 +103,8 @@ Agent can request:
 |---------|---------|-------------|
 | `teamxray.cliPath` | (auto) | Copilot CLI path (if not on PATH) |
 | `teamxray.aiProvider` | `copilot` | AI provider mode |
+| `teamxray.copilotModel` | (auto) | Optional Copilot model override |
+| `teamxray.githubModelsModel` | `openai/gpt-4.1` | GitHub Models catalog ID for direct or fallback analysis |
 | `teamxray.byokBaseUrl` | (empty) | BYOK endpoint URL |
 | `teamxray.byokModel` | (empty) | BYOK model name |
 | `teamxray.maxCommits` | 1000 | Max commits to analyze |

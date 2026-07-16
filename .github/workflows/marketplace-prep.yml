@@ -139,9 +139,12 @@ jobs:
       run: |
         echo "🔨 Building extension..."
         npm run compile
+
+        echo "🧪 Running unit tests..."
+        npm test
         
         echo "📦 Packaging extension..."
-        vsce package --no-dependencies
+        vsce package
         
         VSIX_FILE=$(ls *.vsix)
         echo "vsix_file=$VSIX_FILE" >> $GITHUB_OUTPUT
@@ -247,5 +250,5 @@ jobs:
         VSCE_PAT: ${{ secrets.VSCE_PAT }}
       run: |
         echo "🚀 Publishing to VS Code Marketplace..."
-        vsce publish --no-dependencies
+        vsce publish
         echo "✅ Extension published successfully!"

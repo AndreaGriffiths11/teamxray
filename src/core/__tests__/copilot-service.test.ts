@@ -35,6 +35,7 @@ vi.mock('zod', async () => {
 
 import { CopilotService } from '../copilot-service';
 import type { RepositoryData, RepositoryStats } from '../../types/expert';
+import { Validator } from '../../utils/validation';
 
 /**
  * Helper to access private methods for testing via type assertion.
@@ -137,6 +138,19 @@ describe('CopilotService', () => {
         });
     });
 
+    describe('validateGitHubModelId', () => {
+        it('accepts catalog model IDs', () => {
+            expect(Validator.validateGitHubModelId('openai/gpt-4.1').isValid).toBe(true);
+            expect(Validator.validateGitHubModelId('deepseek/deepseek-r1-0528').isValid).toBe(true);
+        });
+
+        it('rejects malformed catalog model IDs', () => {
+            expect(Validator.validateGitHubModelId('gpt-4.1').isValid).toBe(false);
+            expect(Validator.validateGitHubModelId('openai/gpt-4.1;curl example.com').isValid).toBe(false);
+            expect(Validator.validateGitHubModelId({ id: 'openai/gpt-4.1' }).isValid).toBe(false);
+        });
+    });
+
     describe('extractJSON (private)', () => {
         const extract = (text: string) => getPrivate(service).extractJSON(text);
 
@@ -188,7 +202,7 @@ describe('CopilotService', () => {
             const result = mapExpert(input);
             expect(result.name).toBe('Alice');
             expect(result.email).toBe('alice@test.com');
-            expect(result.expertise).toBe(0.85);
+            expect(result.expertise).toBe(85);
             expect(result.specializations).toEqual(['TypeScript', 'React']);
             expect(result.workloadIndicator).toBe('balanced');
             expect(result.riskFactors).toEqual(['key person risk']);
@@ -207,7 +221,7 @@ describe('CopilotService', () => {
             const result = mapExpert({});
             expect(result.name).toBe('Unknown');
             expect(result.email).toBe('');
-            expect(result.expertise).toBe(0.5);
+            expect(result.expertise).toBe(50);
             expect(result.contributions).toBe(0);
             expect(result.specializations).toEqual([]);
             expect(result.communicationStyle).toBe('technical');
@@ -225,7 +239,7 @@ describe('CopilotService', () => {
             expect(result.repository).toBe('test-org/test-repo');
             expect(result.experts).toHaveLength(2);
             expect(result.experts[0].name).toBe('Alice');
-            expect(result.experts[0].expertise).toBeCloseTo(30 / 500, 2);
+            expect(result.experts[0].expertise).toBe(6);
             expect(result.insights[0].type).toBe('gap');
             expect(result.insights[0].title).toContain('incomplete');
         });
@@ -340,6 +354,7 @@ describe('CopilotService', () => {
             expect(result.repository).toBe('test-org/test-repo');
             expect(result.experts).toHaveLength(1);
             expect(result.experts[0].name).toBe('Alice');
+            expect(result.experts[0].expertise).toBe(90);
             expect(result.fileExpertise).toHaveLength(1);
             expect(result.insights).toHaveLength(1);
             expect(result.managementInsights).toHaveLength(1);
@@ -368,6 +383,7 @@ describe('CopilotService', () => {
             const result = parse(content);
             expect(result).toHaveLength(1);
             expect(result[0].name).toBe('Alice');
+            expect(result[0].expertise).toBe(90);
         });
 
         it('parses experts from object with experts key', () => {
@@ -383,10 +399,10 @@ describe('CopilotService', () => {
     });
 
     describe('buildTools (private)', () => {
-        it('creates 5 tools with correct names', () => {
+        it('creates 5 tools with correct names', async () => {
             const data = makeRepoData();
             const stats = makeStats();
-            const tools = getPrivate(service).buildTools(data, stats);
+            const tools = await getPrivate(service).buildTools(data, stats);
 
             expect(tools).toHaveLength(5);
             const names = tools.map((t: any) => t.name);
@@ -400,7 +416,7 @@ describe('CopilotService', () => {
         it('get_contributors tool returns contributor data', async () => {
             const data = makeRepoData();
             const stats = makeStats();
-            const tools = getPrivate(service).buildTools(data, stats);
+            const tools = await getPrivate(service).buildTools(data, stats);
             const contributorsTool = tools.find((t: any) => t.name === 'get_contributors');
 
             const result = await contributorsTool.handler({});
@@ -412,7 +428,7 @@ describe('CopilotService', () => {
         it('get_recent_commits tool filters by author', async () => {
             const data = makeRepoData();
             const stats = makeStats();
-            const tools = getPrivate(service).buildTools(data, stats);
+            const tools = await getPrivate(service).buildTools(data, stats);
             const commitsTool = tools.find((t: any) => t.name === 'get_recent_commits');
 
             const result = await commitsTool.handler({ author: 'alice' });
@@ -424,7 +440,7 @@ describe('CopilotService', () => {
         it('get_recent_commits tool respects limit', async () => {
             const data = makeRepoData();
             const stats = makeStats();
-            const tools = getPrivate(service).buildTools(data, stats);
+            const tools = await getPrivate(service).buildTools(data, stats);
             const commitsTool = tools.find((t: any) => t.name === 'get_recent_commits');
 
             const result = await commitsTool.handler({ limit: 1 });
@@ -435,7 +451,7 @@ describe('CopilotService', () => {
         it('get_file_experts tool finds experts for a file', async () => {
             const data = makeRepoData();
             const stats = makeStats();
-            const tools = getPrivate(service).buildTools(data, stats);
+            const tools = await getPrivate(service).buildTools(data, stats);
             const fileExpertsTool = tools.find((t: any) => t.name === 'get_file_experts');
 
             const result = await fileExpertsTool.handler({ file_path: 'src/utils.ts' });
@@ -447,7 +463,7 @@ describe('CopilotService', () => {
         it('get_repo_stats tool returns stats', async () => {
             const data = makeRepoData();
             const stats = makeStats();
-            const tools = getPrivate(service).buildTools(data, stats);
+            const tools = await getPrivate(service).buildTools(data, stats);
             const statsTool = tools.find((t: any) => t.name === 'get_repo_stats');
 
             const result = await statsTool.handler({});
@@ -458,9 +474,20 @@ describe('CopilotService', () => {
     });
 
     describe('getProviderConfig (private)', () => {
-        it('returns undefined for default copilot provider', () => {
-            const result = getPrivate(service).getProviderConfig();
+        it('returns undefined for default copilot provider', async () => {
+            const result = await getPrivate(service).getProviderConfig();
             expect(result).toBeUndefined();
+        });
+
+        it('rejects a BYOK provider without an endpoint', async () => {
+            const vscode = await import('vscode');
+            vi.mocked(vscode.workspace.getConfiguration).mockReturnValue({
+                get: vi.fn((key: string) => key === 'aiProvider' ? 'byok-openai' : undefined),
+            } as any);
+
+            await expect(getPrivate(service).getProviderConfig())
+                .rejects
+                .toThrow('BYOK provider "byok-openai" requires teamxray.byokBaseUrl');
         });
     });
 
@@ -473,6 +500,7 @@ describe('CopilotService', () => {
             // Mock session with event listeners
             const eventListeners: Record<string, any[]> = {
                 'assistant.message': [],
+                'assistant.message_delta': [],
                 'session.idle': [],
             };
 
@@ -485,15 +513,23 @@ describe('CopilotService', () => {
                     return vi.fn(); // unsubscribe
                 }),
                 send: vi.fn(async () => {
-                    // Simulate streaming: emit assistant.message events then session.idle
+                    // Simulate streaming: emit deltas, then a final message and idle.
                     setTimeout(() => {
-                        eventListeners['assistant.message'].forEach(h => {
+                        eventListeners['assistant.message_delta'].forEach(h => {
                             h({
-                                data: { content: 'Chunk 1 ' },
-                                type: 'assistant.message',
+                                data: { deltaContent: 'Chunk 1 ' },
+                                type: 'assistant.message_delta',
                             });
                         });
                     }, 10);
+                    setTimeout(() => {
+                        eventListeners['assistant.message_delta'].forEach(h => {
+                            h({
+                                data: { deltaContent: 'Chunk 2 ' },
+                                type: 'assistant.message_delta',
+                            });
+                        });
+                    }, 20);
                     setTimeout(() => {
                         eventListeners['assistant.message'].forEach(h => {
                             h({
@@ -501,7 +537,7 @@ describe('CopilotService', () => {
                                 type: 'assistant.message',
                             });
                         });
-                    }, 20);
+                    }, 25);
                     setTimeout(() => {
                         eventListeners['session.idle'].forEach(h => h());
                     }, 30);
@@ -545,6 +581,7 @@ describe('CopilotService', () => {
             expect(onDelta).toHaveBeenCalled();
             expect(chunks.length).toBeGreaterThan(0);
             expect(chunks.join('')).toContain('Chunk');
+            expect(privService.createAnalysisSession).toHaveBeenCalledWith(expect.any(Array), true);
 
             // Verify analysis was returned
             expect(result).toBeDefined();

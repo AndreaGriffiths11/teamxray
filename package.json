@@ -3,7 +3,7 @@
   "name": "teamxray",
   "displayName": "Team X-Ray",
   "description": "Human discovery through code analysis - reveal team expertise, communication styles, and hidden strengths using the Copilot SDK and git history",
-  "version": "2.0.7",
+  "version": "2.1.0",
   "publisher": "AndreaGriffiths",
   "author": {
     "name": "alacolombiadev"
@@ -46,6 +46,12 @@
     "onStartupFinished"
   ],
   "main": "./dist/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "Team X-Ray runs local Git and Copilot CLI analysis, so it requires a trusted workspace."
+    }
+  },
   "scripts": {
     "postinstall": "node -e \"const fs=require('fs');const f='node_modules/@github/copilot-sdk/dist/session.js';if(fs.existsSync(f)){let c=fs.readFileSync(f,'utf8');c=c.replace(/from \\\"vscode-jsonrpc\\/node\\\"/g,'from \\\"vscode-jsonrpc/node.js\\\"');fs.writeFileSync(f,c)}\"",
     "vscode:prepublish": "npm run package",
@@ -56,7 +62,7 @@
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
-    "test": "vscode-test",
+    "test": "vitest run --dir src",
     "clean": "rimraf ./dist",
     "eval:dev": "evalite watch",
     "eval:run": "evalite run",
@@ -137,14 +143,18 @@
       "properties": {
         "teamxray.githubToken": {
           "type": "string",
-          "description": "GitHub token for API calls (not required when using Copilot)"
+          "scope": "machine",
+          "description": "DEPRECATED: Team X-Ray stores GitHub tokens in VS Code SecretStorage.",
+          "deprecationMessage": "Team X-Ray no longer reads tokens from settings. Use the 'Team X-Ray: Set GitHub Token' command instead."
         },
         "teamxray.cliPath": {
           "type": "string",
-          "description": "Path to the Copilot CLI executable. If not set, the extension looks on your system PATH."
+          "scope": "machine",
+          "description": "Absolute path to the Copilot CLI executable. This can only be set in user or remote settings."
         },
         "teamxray.aiProvider": {
           "type": "string",
+          "scope": "machine",
           "enum": [
             "copilot",
             "byok-openai",
@@ -158,21 +168,38 @@
             "Bring Your Own Key — OpenAI-compatible API",
             "Bring Your Own Key — Anthropic API",
             "Bring Your Own Key — Azure OpenAI",
-            "GitHub Models API (requires GitHub token)"
+            "Use GitHub Models directly (requires GitHub token)"
           ],
           "description": "AI provider for team expertise analysis"
         },
+        "teamxray.copilotModel": {
+          "type": "string",
+          "scope": "machine",
+          "default": "",
+          "description": "Optional GitHub Copilot model ID. Leave empty to use the Copilot CLI default."
+        },
+        "teamxray.githubModelsModel": {
+          "type": "string",
+          "scope": "machine",
+          "default": "openai/gpt-4.1",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*\\/[A-Za-z0-9][A-Za-z0-9._-]*$",
+          "patternErrorMessage": "Use a GitHub Models catalog ID in the format publisher/model-name.",
+          "description": "GitHub Models catalog ID used when teamxray.aiProvider is github-models or as the fallback model."
+        },
         "teamxray.byokBaseUrl": {
           "type": "string",
+          "scope": "machine",
           "description": "Base URL for BYOK provider (e.g. https://api.openai.com/v1)"
         },
         "teamxray.byokApiKey": {
           "type": "string",
+          "scope": "machine",
           "description": "DEPRECATED: Use the 'Team X-Ray: Set BYOK API Key (Secure)' command instead. This setting is kept for migration only.",
-          "deprecationMessage": "For security, use the command 'Team X-Ray: Set BYOK API Key (Secure)' to store your API key in VS Code's encrypted secret storage."
+          "deprecationMessage": "Team X-Ray no longer reads API keys from settings. Use the command 'Team X-Ray: Set BYOK API Key (Secure)' to store your API key in VS Code's encrypted SecretStorage."
         },
         "teamxray.byokModel": {
           "type": "string",
+          "scope": "machine",
           "description": "Model name for BYOK provider (required when teamxray.aiProvider is byok-openai/byok-anthropic/byok-azure)"
         },
         "teamxray.historyWindowDays": {

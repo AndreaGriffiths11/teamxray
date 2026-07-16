@@ -151,13 +151,19 @@ export function activate(context: vscode.ExtensionContext) {
      * Ensures AI analysis is possible — either via Copilot SDK or GitHub token.
      */
     async function ensureAIAccess(): Promise<boolean> {
-        if (copilotService?.isAvailable()) {
+        const aiProvider = vscode.workspace
+            .getConfiguration('teamxray')
+            .get<string>('aiProvider', 'copilot');
+
+        if (aiProvider !== 'github-models' && copilotService?.isAvailable()) {
             return true; // Copilot handles its own auth
         }
         const token = await tokenManager.getToken();
         if (!token) {
             vscode.window.showErrorMessage(
-                'No AI provider available. Install the Copilot CLI, or set a GitHub token via "Team X-Ray: Set GitHub Token".'
+                aiProvider === 'github-models'
+                    ? 'GitHub Models requires a GitHub token. Run "Team X-Ray: Set GitHub Token".'
+                    : 'No AI provider available. Install the Copilot CLI, or set a GitHub token via "Team X-Ray: Set GitHub Token".'
             );
             return false;
         }

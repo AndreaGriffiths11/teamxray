@@ -210,6 +210,41 @@ export class Validator {
     }
 
     /**
+     * Validates a GitHub Models catalog identifier.
+     */
+    static validateGitHubModelId(model: unknown): ValidationResult {
+        const result: ValidationResult = {
+            isValid: false,
+            errors: [],
+            warnings: []
+        };
+
+        if (typeof model !== 'string') {
+            result.errors.push('GitHub Models model ID must be a string');
+            return result;
+        }
+
+        const normalized = model.trim();
+        if (!normalized) {
+            result.errors.push('GitHub Models model ID is required');
+            return result;
+        }
+
+        if (normalized.length > 200) {
+            result.errors.push('GitHub Models model ID is too long');
+            return result;
+        }
+
+        if (!/^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*$/i.test(normalized)) {
+            result.errors.push('GitHub Models model ID must use the format "publisher/model-name"');
+            return result;
+        }
+
+        result.isValid = true;
+        return result;
+    }
+
+    /**
      * Validates input against potential command injection
      */
     static validateShellInput(input: string): ValidationResult {
