@@ -82,15 +82,18 @@ export class CopilotService {
                 opts.githubToken = githubToken;
             }
 
-            // Resolve CLI path: user setting > PATH lookup > default SDK resolution
+            // Resolve CLI path: user setting > PATH lookup.
             const configuredCliPath = config.get<string>('cliPath');
             if (configuredCliPath) {
                 opts.cliPath = configuredCliPath;
             } else {
                 const resolvedPath = await this.findCliOnPath();
-                if (resolvedPath) {
-                    opts.cliPath = resolvedPath;
+                if (!resolvedPath) {
+                    throw new Error(
+                        'Copilot CLI not found. Install it or set teamxray.cliPath in VS Code settings.'
+                    );
                 }
+                opts.cliPath = resolvedPath;
             }
 
             const sdk = await loadSdk();
@@ -120,8 +123,12 @@ export class CopilotService {
             const { execFile } = await import('child_process');
             const { promisify } = await import('util');
             const execFileAsync = promisify(execFile);
-            const { stdout } = await execFileAsync('which', ['copilot']);
-            const resolved = stdout.trim();
+            const command = process.platform === 'win32' ? 'where.exe' : 'which';
+            const { stdout } = await execFileAsync(command, ['copilot']);
+            const resolved = stdout
+                .split(/\r?\n/)
+                .map(candidate => candidate.trim())
+                .find(Boolean);
             if (resolved) {
                 this.outputChannel.appendLine(`[CopilotService] Found CLI at: ${resolved}`);
                 return resolved;
@@ -196,28 +203,27 @@ export class CopilotService {
         }
 
         const tools = await this.buildTools(data, repoStats);
-        const session = await this.createAnalysisSession(tools);
+        const session = await this.createAnalysisSession(tools, true);
 
         try {
             const prompt = this.buildAnalysisPrompt(data.repository, repoStats);
             
             let latestAssistantMessage: AssistantMessageEvent | undefined;
 
-            const unsubscribe = session.on('assistant.message', (event) => {
+            const unsubscribeMessage = session.on('assistant.message', (event) => {
                 latestAssistantMessage = event;
-                if (event.data?.content) {
-                    onDelta(this.normalizeStreamingDelta(event.data.content));
+            });
+            const unsubscribeDelta = session.on('assistant.message_delta', (event) => {
+                const delta = this.normalizeStreamingDelta(event.data.deltaContent);
+                if (delta) {
+                    onDelta(delta);
                 }
             });
 
-            const unsubscribeIdle = session.on('session.idle', () => {
-                // Session is idle; waitForSessionIdle will resolve
-            });
-
             try {
-                session.send({ prompt });
-                
-                await this.waitForSessionIdle(session, this.ANALYSIS_TIMEOUT_MS).catch((error: unknown) => {
+                const idle = this.waitForSessionIdle(session, this.ANALYSIS_TIMEOUT_MS);
+                await session.send({ prompt });
+                await idle.catch((error: unknown) => {
                     const message = error instanceof Error ? error.message : String(error);
                     this.outputChannel.appendLine(`[CopilotService] Session idle wait failed: ${message}`);
                     throw error;
@@ -255,8 +261,8 @@ export class CopilotService {
 
                 throw error;
             } finally {
-                unsubscribe();
-                unsubscribeIdle();
+                unsubscribeMessage();
+                unsubscribeDelta();
             }
         } finally {
             await session.destroy();
@@ -425,7 +431,10 @@ export class CopilotService {
 
     // ── Session creation ───────────────────────────────────────────────
 
-    private async createAnalysisSession(tools: Tool<any>[]): Promise<CopilotSessionInstance> {
+    private async createAnalysisSession(
+        tools: Tool<any>[],
+        streaming = false
+    ): Promise<CopilotSessionInstance> {
         if (!this.client) {
             throw new Error('CopilotService is not initialized');
         }
@@ -445,6 +454,10 @@ export class CopilotService {
             infiniteSessions: { enabled: false },
         };
 
+        if (streaming) {
+            sessionConfig.streaming = true;
+        }
+
         if (providerConfig) {
             sessionConfig.provider = providerConfig;
             const model = config.get<string>('byokModel')?.trim();
@@ -454,6 +467,11 @@ export class CopilotService {
                 );
             }
             sessionConfig.model = model;
+        } else {
+            const model = config.get<string>('copilotModel')?.trim();
+            if (model) {
+                sessionConfig.model = model;
+            }
         }
 
         try {
@@ -905,7 +923,7 @@ export class CopilotService {
             name: e.name ?? 'Unknown',
             email: e.email ?? '',
             isBot: detectBotContributor(e.name, e.email),
-            expertise: typeof e.expertise === 'number' ? e.expertise : 50,
+            expertise: this.normalizeExpertise(e.expertise),
             contributions: e.contributions ?? 0,
             lastCommit: this.ensureValidDate(e.lastCommit),
             specializations: e.specializations ?? [],
@@ -917,6 +935,12 @@ export class CopilotService {
             collaborationStyle: e.collaborationStyle,
             riskFactors: e.riskFactors,
         };
+    }
+
+    private normalizeExpertise(value: unknown): number {
+        const raw = typeof value === 'number' && Number.isFinite(value) ? value : 50;
+        const normalized = raw > 0 && raw <= 1 ? raw * 100 : raw;
+        return Math.round(Math.max(0, Math.min(100, normalized)));
     }
 
     private buildMinimalAnalysis(

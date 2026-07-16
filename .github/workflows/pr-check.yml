@@ -29,6 +29,9 @@ jobs:
       
     - name: ESLint code quality
       run: npm run lint
+
+    - name: Run unit tests
+      run: npm test
       
     - name: Build extension
       run: npm run compile
@@ -36,7 +39,7 @@ jobs:
     - name: Validate extension package
       run: |
         npm install -g @vscode/vsce
-        vsce package --no-dependencies
+        vsce package
         
     - name: Check package.json validity
       run: |

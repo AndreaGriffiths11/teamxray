@@ -56,6 +56,16 @@ Almost always a `byokBaseUrl` mistake.
 
 If you're behind a corporate proxy or gateway, confirm the gateway path matches what the provider's SDK expects, not just the hostname.
 
+## GitHub Models reports a model error
+
+The selected model ID is unavailable to your token or no longer appears in the catalog.
+
+1. Open the [GitHub Models catalog](https://github.com/marketplace/models) and choose an available model ID.
+2. Set `teamxray.githubModelsModel` to that ID.
+3. Run the analysis again.
+
+`teamxray.aiProvider = github-models` runs the direct API path. With `copilot` or a `byok-*` provider, GitHub Models is the fallback path.
+
 ## Azure BYOK: "deployment not found"
 
 Azure routes by **deployment name**, not model name. If you set `teamxray.byokModel` to `gpt-4o`, Azure will reject it unless your deployment happens to be named `gpt-4o`.

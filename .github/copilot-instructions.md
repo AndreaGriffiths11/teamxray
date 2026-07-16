@@ -36,7 +36,7 @@ npm run eval:run         # Run evalite evaluations
 
 ## Architecture
 
-**Data Flow**: Repository → Git/MCP Analysis → GitHub Models AI (`models.github.ai`, `gpt-4o`) → Human Insights
+**Data Flow**: Repository → local Git analysis → Copilot SDK (default) → GitHub Models API (fallback or direct setting) → Human Insights
 
 ### Key Modules
 

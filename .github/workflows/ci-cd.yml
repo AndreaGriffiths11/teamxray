@@ -35,11 +35,14 @@ jobs:
       
     - name: Compile TypeScript
       run: npm run compile
+
+    - name: Run unit tests
+      run: npm test
       
     - name: Package extension
       run: |
         npm install -g @vscode/vsce
-        vsce package --no-dependencies
+        vsce package
         
     - name: Upload VSIX artifact
       uses: actions/upload-artifact@v4
@@ -100,11 +103,11 @@ jobs:
     - name: Publish to VS Code Marketplace
       env:
         VSCE_PAT: ${{ secrets.VSCE_PAT }}
-      run: vsce publish --no-dependencies
+      run:       vsce publish
       
     - name: Create GitHub Release Asset
       run: |
-        vsce package --no-dependencies
+        vsce package
         echo "VSIX_FILE=$(ls *.vsix)" >> $GITHUB_ENV
         
     - name: Upload Release Asset

@@ -19,7 +19,7 @@ Transform your repository into a team expertise map. Discover who knows what, re
 
 ## How It Works
 
-Team X-Ray reads your local git history — commits, contributors, file ownership — and feeds that data into the GitHub Copilot SDK when available. If Copilot is unavailable, it falls back to GitHub Models with your GitHub token; if AI output still fails, it produces a reduced git-based analysis.
+Team X-Ray reads your local git history — commits, contributors, file ownership — and feeds that data into the GitHub Copilot SDK when available. If Copilot is unavailable, it falls back to GitHub Models with your GitHub token; if AI output still fails, it produces a reduced git-based analysis. Set `teamxray.aiProvider` to `github-models` to use the GitHub Models path directly.
 
 ![Team X-Ray Architecture](docs/architecture.png)
 
@@ -29,7 +29,7 @@ Team X-Ray reads your local git history — commits, contributors, file ownershi
 |------|------|--------------|
 | 1 | **Copilot SDK (`copilot`)** | Copilot CLI installed + authenticated; set `teamxray.cliPath` if the CLI is not on your PATH |
 | 2 | **BYOK via Copilot SDK** | `teamxray.aiProvider` = `byok-openai`, `byok-anthropic`, or `byok-azure`; run `Team X-Ray: Set BYOK API Key (Secure)`; set `teamxray.byokBaseUrl` and `teamxray.byokModel` |
-| 3 | **GitHub Models fallback** | Run `Team X-Ray: Set GitHub Token` |
+| 3 | **GitHub Models** | Run `Team X-Ray: Set GitHub Token`; choose a catalog ID with `teamxray.githubModelsModel` if needed |
 | 4 | **Reduced local fallback** | No extra setup; basic git-derived analysis only if AI output cannot be produced |
 
 ## Installation

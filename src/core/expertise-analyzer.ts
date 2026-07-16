@@ -384,8 +384,12 @@ export class ExpertiseAnalyzer {
         repoStats: RepositoryStats,
         onDelta?: (chunk: string) => void
     ): Promise<ExpertiseAnalysis | null> {
-        // Try Copilot SDK first
-        if (this.copilotService?.isAvailable()) {
+        const aiProvider = vscode.workspace
+            .getConfiguration('teamxray')
+            .get<string>('aiProvider', 'copilot');
+
+        // Try Copilot SDK first unless GitHub Models was explicitly selected.
+        if (aiProvider !== 'github-models' && this.copilotService?.isAvailable()) {
             try {
                 this.outputChannel.appendLine('🤖 Analyzing with Copilot SDK...');
                 const repoData = this.toRepositoryData(repositoryData, repoStats);
@@ -478,12 +482,16 @@ export class ExpertiseAnalyzer {
         }
 
         const prompt = this.buildOptimizedAnalysisPrompt(repositoryData, repoStats);
+        const model = vscode.workspace
+            .getConfiguration('teamxray')
+            .get<string>('githubModelsModel', 'openai/gpt-4.1')
+            ?.trim() || 'openai/gpt-4.1';
         
         try {
             const response = await axios.post(
                 'https://models.github.ai/inference/chat/completions',
                 {
-                    model: 'openai/gpt-4.1',
+                    model,
                     messages: [
                         {
                             role: 'system',
@@ -501,7 +509,7 @@ export class ExpertiseAnalyzer {
                     headers: {
                         'Accept': 'application/vnd.github+json',
                         'Authorization': `Bearer ${apiKey}`,
-                        'X-GitHub-Api-Version': '2022-11-28',
+                        'X-GitHub-Api-Version': '2026-03-10',
                         'Content-Type': 'application/json'
                     }
                 }

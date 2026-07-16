@@ -6,7 +6,7 @@ Team X-Ray analyzes local git data and then chooses the AI path that the current
 |------|---------------|--------------|--------------|
 | Copilot SDK | `copilot` | Default analysis path with custom tools over local repo data | Copilot CLI installed + authenticated; set `teamxray.cliPath` if needed |
 | BYOK via Copilot SDK | `byok-openai`, `byok-anthropic`, `byok-azure` | Applies a provider override to the Copilot SDK session | Copilot CLI, `Team X-Ray: Set BYOK API Key (Secure)`, `teamxray.byokBaseUrl`, `teamxray.byokModel` |
-| GitHub Models fallback | `github-models` | Uses your GitHub token when Copilot is unavailable or analysis falls back | `Team X-Ray: Set GitHub Token` |
+| GitHub Models | `github-models` | Uses your GitHub token directly when selected, or as the fallback when Copilot analysis fails | `Team X-Ray: Set GitHub Token` |
 | Reduced local fallback | — | Builds a basic git-derived analysis if AI output fails | No extra setup |
 
 ## Copilot SDK
@@ -76,9 +76,9 @@ The `teamxray.byokApiKey` setting is deprecated because settings JSON is plainte
 
 The extension reads SecretStorage first and only falls back to the plaintext setting for migration.
 
-## GitHub Models fallback
+## GitHub Models
 
-If the Copilot SDK is unavailable, Team X-Ray falls back to GitHub Models using your GitHub token.
+Set `teamxray.aiProvider` to `github-models` to use the GitHub Models API directly. With `copilot` or a `byok-*` value, GitHub Models remains the fallback when the Copilot SDK cannot complete analysis.
 
 Store the token with:
 
@@ -86,7 +86,13 @@ Store the token with:
 Command Palette → Team X-Ray: Set GitHub Token
 ```
 
-The current implementation calls `https://models.github.ai/inference/chat/completions`.
+The current implementation calls `https://models.github.ai/inference/chat/completions`. It defaults to `openai/gpt-4.1`, which you can override with `teamxray.githubModelsModel`. Use a model ID from the [GitHub Models catalog](https://github.com/marketplace/models).
+
+Copilot model retirements and GitHub Models catalog availability are separate. Check the catalog before changing this setting rather than assuming a Copilot retirement removes the direct GitHub Models ID.
+
+## Copilot model selection
+
+By default, Team X-Ray lets the Copilot CLI choose its default model. Set `teamxray.copilotModel` only when you need to pin a supported Copilot model for a specific environment. Leave it empty to avoid coupling normal analysis to a retired model.
 
 ## Reduced local fallback
 

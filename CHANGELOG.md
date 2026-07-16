@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-07-16
+
+### ✨ Features
+- Added progressive Copilot SDK response streaming to the analysis webview.
+- Added optional `teamxray.copilotModel` and `teamxray.githubModelsModel` settings so model migrations do not require an extension update.
+- Made `teamxray.aiProvider = github-models` use the GitHub Models API directly.
+
+### 🐛 Bug Fixes
+- Fixed streamed analysis to use Copilot SDK delta events instead of final assistant messages.
+- Normalized fractional AI expertise scores to Team X-Ray's 0-100 display scale.
+- Included the Copilot SDK's `vscode-jsonrpc` runtime dependency in packaged VSIX files.
+
+### 🔧 Infrastructure
+- Replaced the broken VS Code test command with the existing Vitest suite and run it in CI.
+- Package and publish workflows now include runtime dependencies.
+- Updated the GitHub Models API version header to `2026-03-10`.
+
 ## [2.0.7] - 2026-04-17
 
 ### 🔧 Infrastructure

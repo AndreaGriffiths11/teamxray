@@ -39,7 +39,7 @@ Use BYOK to route analysis through your own OpenAI, Anthropic, or Azure OpenAI k
 
 See [AI Providers → BYOK provider overrides](ai-providers.md#byok-provider-overrides) for the full setup, provider-specific `byokBaseUrl` values, and an end-to-end example.
 
-### Option 3: GitHub Models fallback
+### Option 3: GitHub Models
 
 Open the Command Palette and run:
 
@@ -49,7 +49,7 @@ Team X-Ray: Set GitHub Token
 
 Store a GitHub token with access to GitHub Models. If the Copilot SDK is unavailable, Team X-Ray uses that token to call GitHub Models.
 
-Set `teamxray.aiProvider` to `github-models` if you want settings to reflect the non-BYOK path.
+Set `teamxray.aiProvider` to `github-models` to use this path directly. Set `teamxray.githubModelsModel` to a model ID from the GitHub Models catalog when you need to change models.
 
 ### Reduced local fallback
 
@@ -61,5 +61,7 @@ There is no separate "local-only" provider to configure in the normal success pa
 |---------|-------------|---------|
 | `teamxray.aiProvider` | Provider setting: `copilot`, `byok-openai`, `byok-anthropic`, `byok-azure`, `github-models` | `copilot` |
 | `teamxray.cliPath` | Path to the Copilot CLI executable when it is not available on your PATH | auto-detect |
+| `teamxray.copilotModel` | Optional Copilot model ID; leave empty to use the Copilot CLI default | — |
+| `teamxray.githubModelsModel` | GitHub Models catalog ID for direct or fallback analysis | `openai/gpt-4.1` |
 | `teamxray.byokModel` | Required model override for BYOK providers (e.g. `gpt-4o`, `claude-sonnet-4-5-20250929`) | — |
 | `teamxray.byokBaseUrl` | Custom API endpoint for BYOK (useful for proxies or Azure deployments) | — |
