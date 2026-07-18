@@ -3,6 +3,7 @@ import * as path from 'path';
 import { ExpertiseAnalyzer } from './expertise-analyzer';
 import { Expert } from '../types/expert';
 import { GitService } from './git-service';
+import { classifyContributor } from '../utils/bot-detection';
 
 export interface GitHubRepository {
     owner: string;
@@ -96,7 +97,7 @@ export class RepositoryActivityService {
                 const recentCommits = commits.map(commit => ({
                     repo: 'Current Repository',
                     message: commit.message || 'No message',
-                    date: commit.date.split(' ')[0] || new Date().toISOString().split('T')[0],
+                    date: commit.date.split('T')[0] || new Date().toISOString().split('T')[0],
                     url: `#${commit.sha.substring(0, 7)}`,
                 }));
 
@@ -232,18 +233,24 @@ export class RepositoryActivityService {
             return Array.from(authorMap.values())
                 .sort((a, b) => b.commits - a.commits)
                 .slice(0, 5)
-                .map(a => ({
-                    name: a.name,
-                    email: a.email,
-                    expertise: Math.min(100, Math.round((a.commits / maxCommits) * 100)),
-                    contributions: a.commits,
-                    lastCommit: new Date(a.lastDate),
-                    specializations: this.inferSpecializationsFromFile(filePath),
-                    communicationStyle: 'Inferred from commit patterns',
-                    teamRole: a.commits > 10 ? 'Regular contributor' : 'Occasional contributor',
-                    hiddenStrengths: [],
-                    idealChallenges: [],
-                }));
+                .map(a => {
+                    const classification = classifyContributor(a.name, a.email);
+                    return {
+                        name: a.name,
+                        email: a.email,
+                        expertise: Math.min(100, Math.round((a.commits / maxCommits) * 100)),
+                        contributions: a.commits,
+                        lastCommit: new Date(a.lastDate),
+                        specializations: this.inferSpecializationsFromFile(filePath),
+                        communicationStyle: 'Inferred from commit patterns',
+                        teamRole: a.commits > 10 ? 'Regular contributor' : 'Occasional contributor',
+                        hiddenStrengths: [],
+                        idealChallenges: [],
+                        isBot: classification.kind === 'ai-agent' || classification.kind === 'automation-bot',
+                        contributorKind: classification.kind,
+                        agentName: classification.agentName,
+                    };
+                });
         } catch (error) {
             this.outputChannel.appendLine(`Error analyzing file experts: ${error}`);
             return null;

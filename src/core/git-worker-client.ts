@@ -71,6 +71,10 @@ export class GitWorkerClient {
         return this.send({ type: 'getContributors', repoPath });
     }
 
+    async getHead(repoPath: string): Promise<string> {
+        return this.send({ type: 'getHead', repoPath });
+    }
+
     dispose(): void {
         if (this.worker) {
             this.worker.terminate();
