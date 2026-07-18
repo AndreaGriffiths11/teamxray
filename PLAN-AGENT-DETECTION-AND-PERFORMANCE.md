@@ -214,14 +214,14 @@ Add duration logging around each phase (`snapshot`, `sampling`, `ai`, `render`) 
 
 ---
 
-## Suggested rollout
+## Rollout status
 
-| Phase | Scope | Size |
+| Phase | Scope | Status |
 |---|---|---|
-| 1 | P1 + P2 + P7 (single snapshot, parallel, timings) — pure refactor, no behavior change | S |
-| 2 | §1.1 + §1.2 + §1.3 + §1.7 (trailer fetch, classification, identity table, tests) + P6 | M |
-| 3 | P3 + P4 + P5 (in-memory contributors, HEAD cache, bot-aware sampling) | M |
-| 4 | §1.4 + §1.5 (config patterns, AI-attribution metrics & UI) | M |
-| 5 | §1.6 (checkpoint session integration) + Part 3 items | S–M |
+| 1 | P1 + P2 + P7 (single snapshot, parallel, timings) — pure refactor, no behavior change | ✅ Done |
+| 2 | §1.1 + §1.2 + §1.3 + §1.7 (trailer fetch, classification, identity table, tests) + P6 | ✅ Done |
+| 3 | P3 + P4 + P5 (in-memory contributors, HEAD cache, bot-aware sampling) | ✅ Done |
+| 4 | §1.4 + §1.5 (config patterns, AI-attribution metrics & UI) | ✅ Done |
+| 5 | §1.6 (checkpoint session integration) + Part 3 items 3, 5, 6 | Pending |
 
-Phases 1 and 2 are independent and can land in either order; nothing here breaks the existing `isBot` contract, saved analyses, or the fallback tiers.
+Also landed along the way: the `findExpertForFile` fix (its commit filter matched against a file-list-less log, so the Copilot file-expert path always saw zero commits), `.mailmap` support via `%aN`/`%aE` (Part 3 item 2), the `Math.random()` changeFrequency removal (item 1), and the in-place `sampleCommits` sort fix (item 4). Nothing changed the existing `isBot` contract, saved analyses, or the fallback tiers.
