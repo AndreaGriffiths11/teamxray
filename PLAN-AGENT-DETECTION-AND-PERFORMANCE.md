@@ -2,18 +2,13 @@
 
 ## Why this plan exists
 
-[Entire](https://entire.io) — the platform launched by former GitHub CEO Thomas Dohmke — is built on one core observation: **AI agents now write a large share of code, and git only records the final diff, not who (or what) actually produced it.** Their first product, Checkpoints, captures agent sessions (prompts, reasoning, tool calls) and links them to commits through git itself:
+AI agents now write a large share of code, and git only records the final diff — not who (or what) actually produced it. The tooling ecosystem is converging on commit *trailers* as the attribution mechanism: agents record their involvement in the commit message body (`Co-Authored-By:` lines, checkpoint/attribution trailers), while the commit's author fields stay the human's.
 
-- A commit trailer `Entire-Checkpoint: <12-char hex id>` ties each commit to a captured agent session.
-- An `Entire-Attribution` trailer records how much of a commit came from the agent vs. the human.
-- Session metadata is stored on a dedicated `entire/checkpoints/v1` ref, so the record travels with the repo.
-- It plugs into every major coding agent: Claude Code, Codex, Cursor, Gemini CLI, Factory, Copilot.
-
-The lesson for Team X-Ray: **agent attribution lives in commit *messages and trailers*, not just in author name/email.** Most agent-assisted work is committed under the *human's* identity with a `Co-Authored-By:` trailer (Claude Code adds one by default; Cursor and Aider do too). Our current detector never sees any of that, because we only fetch `%s` (the subject line) and only inspect author name/email.
+That means **agent attribution lives in commit messages and trailers, not just in author name/email.** Most agent-assisted work is committed under the *human's* identity with a `Co-Authored-By:` trailer (Claude Code adds one by default; Cursor and Aider do too). Team X-Ray's current detector never sees any of that, because we only fetch `%s` (the subject line) and only inspect author name/email.
 
 This plan covers three things:
 
-1. **Part 1** — making bot/agent detection dramatically more accurate (the Entire-inspired work).
+1. **Part 1** — making bot/agent detection dramatically more accurate (trailer-aware classification).
 2. **Part 2** — making the extension measurably faster (the analysis pipeline currently does every git scan twice).
 3. **Part 3** — other improvements noticed along the way.
 
@@ -29,7 +24,7 @@ This plan covers three things:
 - ✅ Catches `noreply@anthropic.com` and `claude@users.noreply.github.com` authors.
 - ❌ Misses agents that commit as regular-looking authors: Cursor (`Cursor Agent <cursoragent@cursor.com>` / `agent@cursor.com`), OpenCode (`noreply@opencode.ai`), OpenHands (`openhands@all-hands.dev`), Aider.
 - ❌ Misses **all co-authored agent work** — a human-authored commit with `Co-Authored-By: Claude <noreply@anthropic.com>` counts as 100% human today.
-- ❌ Misses Entire's own `Entire-Checkpoint` / `Entire-Attribution` trailers — the strongest possible signal that a commit was agent-produced.
+- ❌ Misses checkpoint/attribution trailers (`Entire-Checkpoint` / `Entire-Attribution`) that session-capture tooling writes into commits — the strongest possible signal that a commit was agent-produced.
 - ❌ Binary output — no distinction between an *automation bot* (Dependabot bumping deps) and an *AI coding agent* (Claude Code shipping features), which mean very different things in a management-insights report.
 - ❌ Hard-coded lists — no user-extensible patterns for org-internal bots.
 
@@ -46,7 +41,7 @@ Net effect: a single "Analyze Repository" run spawns **~16 git processes where ~
 
 ---
 
-## Part 1 — Agent & bot detection, Entire-style
+## Part 1 — Agent & bot detection, trailer-aware
 
 ### 1.1 Fetch trailers, not just subjects (foundation)
 
@@ -90,7 +85,7 @@ export function detectBotContributor(name?: string, email?: string): boolean;
 
 ### 1.3 Expand the identity table (data-driven, not if-chains)
 
-Move patterns into a declarative table so adding an agent is a one-line change. Confirmed identities to ship (sources at the end):
+Move patterns into a declarative table so adding an agent is a one-line change. Confirmed identities to ship:
 
 | Agent | Author-side signal | Trailer/message signal |
 |---|---|---|
@@ -104,7 +99,7 @@ Move patterns into a declarative table so adding an agent is a one-line change. 
 | OpenCode | `noreply@opencode.ai` | — |
 | OpenHands | `openhands@all-hands.dev` | — |
 | Aider | `aider.chat` email domain | subject suffix `(aider)`, `Co-authored-by: aider (<model>) <…>` |
-| Entire-instrumented agents | — | `Entire-Checkpoint:` / `Entire-Attribution:` trailers (any agent run under Entire CLI) |
+| Session-capture tooling | — | `Entire-Checkpoint:` / `Entire-Attribution:` trailers (any agent run under checkpoint instrumentation) |
 
 Generic rules stay (any `[bot]` name, GitHub App noreply pattern), so future GitHub-App agents are caught automatically.
 
@@ -115,7 +110,7 @@ New settings in `package.json`:
 - `teamxray.additionalBotPatterns: string[]` — glob/regex over `name <email>` for org-internal bots and agents.
 - `teamxray.humanOverrides: string[]` — emails to *never* classify as bots (escape hatch for false positives).
 
-### 1.5 "AI-assisted" as a first-class metric (the Entire-inspired feature)
+### 1.5 "AI-assisted" as a first-class metric
 
 With trailers available per commit, compute during `extractContributorsFromCommits` / contributor aggregation:
 
@@ -124,11 +119,11 @@ With trailers available per commit, compute during `extractContributorsFromCommi
 - **Surfacing:** a new "AI Attribution" card in the webview + HTML report next to the existing `N humans · M agents` pill; feed the numbers into `analysis-enrichment.ts` so management insights can say things like "60% of commits in `src/core` are agent-assisted with a single human reviewer — review-capacity risk", and so bus-factor math stops counting bots as owners.
 - **Prompt enrichment:** include the attribution summary in the AI prompt (`buildAnalysisPrompt`) — it materially improves the quality of team-dynamics output because the model stops inventing personalities for Dependabot.
 
-### 1.6 Optional: native Entire Checkpoints integration (stretch)
+### 1.6 Optional: checkpoint session integration (stretch)
 
-If the repo has Entire installed (`git show-ref --verify refs/heads/entire/checkpoints/v1` or the ref on origin), Team X-Ray can:
+If the repo carries checkpoint instrumentation (`git show-ref --verify refs/heads/entire/checkpoints/v1` or the ref on origin), Team X-Ray can:
 
-- Show a "session context available" link per commit/expert that deep-links to `entire.io` via the checkpoint ID.
+- Surface a "session context available" indicator per commit/expert, keyed by the checkpoint ID.
 - Parse `Entire-Attribution` values for line-level agent/human split instead of estimating from co-authorship.
 
 Cheap to detect (one `git show-ref`), high wow-factor, degrades gracefully when absent.
@@ -227,16 +222,6 @@ Add duration logging around each phase (`snapshot`, `sampling`, `ai`, `render`) 
 | 2 | §1.1 + §1.2 + §1.3 + §1.7 (trailer fetch, classification, identity table, tests) + P6 | M |
 | 3 | P3 + P4 + P5 (in-memory contributors, HEAD cache, bot-aware sampling) | M |
 | 4 | §1.4 + §1.5 (config patterns, AI-attribution metrics & UI) | M |
-| 5 | §1.6 (Entire Checkpoints deep-links) + Part 3 items | S–M |
+| 5 | §1.6 (checkpoint session integration) + Part 3 items | S–M |
 
 Phases 1 and 2 are independent and can land in either order; nothing here breaks the existing `isBot` contract, saved analyses, or the fallback tiers.
-
----
-
-## Sources
-
-- [Entire blog](https://entire.io/blog) · [Hello Entire World](https://entire.io/blog/hello-entire-world) · [The Entire CLI: How It Works](https://entire.io/blog/the-entire-cli-how-it-works-and-where-its-headed) · [Agent Hooks](https://entire.io/blog/agent-hooks-the-integration-layer-between-entire-cli-and-your-agent)
-- [Entire docs — Core Concepts](https://docs.entire.io/core-concepts) · [entireio/cli on GitHub](https://github.com/entireio/cli)
-- [TechCrunch: Former GitHub CEO raises record $60M seed](https://techcrunch.com/2026/02/10/former-github-ceo-raises-record-60m-dev-tool-seed-round-at-300m-valuation/) · [The New Stack interview with Thomas Dohmke](https://thenewstack.io/thomas-dohmke-interview-entire/)
-- [Detecting AI Coding Agents in Open Source: A Validated Multi-Method Census (arXiv)](https://arxiv.org/html/2606.24429v1) · [Fingerprinting AI Coding Agents on GitHub (arXiv)](https://arxiv.org/html/2601.17406v1)
-- [powerset-co/github-coding-agent-tracker](https://github.com/powerset-co/github-coding-agent-tracker) (agent commit-identity list) · [Coderbuds open-source AI-detection rules](https://coderbuds.com/blog/open-source-ai-code-detection-yaml-rules)
