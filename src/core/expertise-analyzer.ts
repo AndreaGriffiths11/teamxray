@@ -11,12 +11,18 @@ import {
     RepositoryData,
     RepositoryStats,
     ManagementInsight,
-    TeamHealthMetrics
+    TeamHealthMetrics,
+    AiAttributionSummary,
+    GitCommit
 } from '../types/expert';
 import { ErrorHandler } from '../utils/error-handler';
 import { ResourceManager } from '../utils/resource-manager';
 import { Validator } from '../utils/validation';
-import { detectBotContributor } from '../utils/bot-detection';
+import {
+    detectBotContributor,
+    classifyContributor,
+    detectCommitAgentSignals
+} from '../utils/bot-detection';
 import {
     buildFallbackManagementInsights,
     buildFallbackTeamHealthMetrics,
@@ -30,6 +36,14 @@ export interface ExpertiseAnalysis extends AnalysisResult {
     challengeMatching?: ChallengeMatching;
     managementInsights?: ManagementInsight[];
     teamHealthMetrics?: TeamHealthMetrics;
+    aiAttribution?: AiAttributionSummary;
+}
+
+/** One in-memory pass over the repo: files, commits, and contributors derived from those commits. */
+interface RepoSnapshot {
+    files: string[];
+    commits: GitCommit[];
+    contributors: any[];
 }
 
 export interface TeamDynamics {
@@ -67,6 +81,7 @@ export class ExpertiseAnalyzer {
     private resourceManager: ResourceManager;
     private gitService: GitService | null = null;
     private gitWorkerClient: GitWorkerClient | null = null;
+    private snapshotCache: { head: string; windowDays: number; snapshot: RepoSnapshot } | null = null;
 
     // Limits for different repository sizes
     private readonly SIZE_LIMITS = {
@@ -122,12 +137,19 @@ export class ExpertiseAnalyzer {
                 }
             }
 
-            // Step 3: Assess repository size and characteristics
-            const repoStats = await this.assessRepositorySize();
+            // Step 3: Collect repository data once (files + commits in parallel,
+            // contributors derived in memory) and assess size from it
+            const snapshotStart = Date.now();
+            const snapshot = await this.collectRepoSnapshot();
+            const snapshotMs = Date.now() - snapshotStart;
+
+            const repoStats = this.assessRepositorySize(snapshot);
             this.outputChannel.appendLine(`📏 Repository size: ${repoStats.repositorySize} (${repoStats.totalFiles} files, ${repoStats.totalContributors} contributors)`);
 
-            // Step 4: Gather repository data with size-appropriate limits
-            const repositoryData = await this.gatherRepositoryData(repositoryName, repoStats);
+            // Step 4: Apply size-appropriate sampling
+            const samplingStart = Date.now();
+            const repositoryData = this.gatherRepositoryData(repositoryName, repoStats, snapshot);
+            const samplingMs = Date.now() - samplingStart;
             if (!repositoryData) {
                 throw ErrorHandler.createError(
                     'ANALYSIS_FAILED',
@@ -138,7 +160,9 @@ export class ExpertiseAnalyzer {
             }
 
             // Step 5: Perform AI analysis with chunking for large repos
+            const aiStart = Date.now();
             const analysis = await this.performSmartAIAnalysis(repositoryData, repoStats, onDelta);
+            const aiMs = Date.now() - aiStart;
             if (!analysis) {
                 throw ErrorHandler.createError(
                     'ANALYSIS_FAILED',
@@ -148,6 +172,13 @@ export class ExpertiseAnalyzer {
                 );
             }
 
+            // Attach git-derived AI attribution and expert classifications —
+            // computed locally, independent of what the AI returned
+            this.enrichAnalysisWithAttribution(analysis, repositoryData);
+
+            this.outputChannel.appendLine(
+                `⏱ Timings: snapshot ${snapshotMs}ms · sampling ${samplingMs}ms · ai ${Math.round(aiMs / 1000)}s`
+            );
             this.outputChannel.appendLine('✅ Analysis completed successfully!');
             return analysis;
 
@@ -155,13 +186,61 @@ export class ExpertiseAnalyzer {
     }
 
     /**
-     * Assesses repository size and characteristics to determine analysis strategy
+     * Collect files, commits, and contributors in one pass. Files and commits
+     * are fetched in parallel; contributors (with first/last dates and AI-assist
+     * stats) are derived from the commit list in memory instead of separate
+     * `git shortlog` + per-author date invocations. Results are cached keyed
+     * on HEAD and the configured history window, so repeated commands within
+     * a session cost a single `git rev-parse`.
      */
-    private async assessRepositorySize(): Promise<RepositoryStats> {
+    private async collectRepoSnapshot(): Promise<RepoSnapshot> {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            return { files: [], commits: [], contributors: [] };
+        }
+
+        const repoPath = workspaceFolder.uri.fsPath;
+        const windowDays = vscode.workspace.getConfiguration('teamxray').get<number>('historyWindowDays', 90);
+
+        let head = '';
         try {
-            const files = await this.getWorkspaceFiles();
-            const commits = await this.getLocalGitCommits();
-            const contributors = await this.getLocalGitContributors();
+            head = await this.getOrCreateWorkerClient().getHead(repoPath);
+        } catch {
+            // Not a git repo or git unavailable — proceed uncached
+        }
+
+        if (head && this.snapshotCache &&
+            this.snapshotCache.head === head &&
+            this.snapshotCache.windowDays === windowDays) {
+            this.outputChannel.appendLine('⚡ Using cached repository snapshot (HEAD unchanged)');
+            return this.snapshotCache.snapshot;
+        }
+
+        const [files, commits] = await Promise.all([
+            this.getWorkspaceFiles(),
+            this.getLocalGitCommits()
+        ]);
+
+        let contributors = this.extractContributorsFromCommits(commits);
+        if (contributors.length === 0) {
+            // Degenerate case (no parseable commits) — fall back to shortlog
+            contributors = await this.getLocalGitContributors();
+        }
+
+        const snapshot: RepoSnapshot = { files, commits, contributors };
+        if (head) {
+            this.snapshotCache = { head, windowDays, snapshot };
+        }
+        return snapshot;
+    }
+
+    /**
+     * Assesses repository size and characteristics to determine analysis strategy.
+     * Pure computation over an already-collected snapshot — no git/FS access.
+     */
+    private assessRepositorySize(snapshot: RepoSnapshot): RepositoryStats {
+        try {
+            const { files, commits, contributors } = snapshot;
 
             // Determine repository size
             let repositorySize: 'small' | 'medium' | 'large' | 'enterprise' = 'small';
@@ -254,27 +333,41 @@ export class ExpertiseAnalyzer {
     /**
      * Gathers repository data with size-appropriate limits
      */
-    private async gatherRepositoryData(repositoryName: string, repoStats: RepositoryStats): Promise<any> {
+    private gatherRepositoryData(repositoryName: string, repoStats: RepositoryStats, snapshot: RepoSnapshot): any {
         try {
             this.outputChannel.appendLine('📥 Gathering repository data with smart limits...');
 
             const limits = this.SIZE_LIMITS[repoStats.repositorySize];
             this.outputChannel.appendLine(`🎯 Using ${repoStats.repositorySize} repo limits: ${limits.files} files, ${limits.contributors} contributors, ${limits.commits} commits`);
 
-            // Get limited data sets
-            const allFiles = await this.getWorkspaceFiles();
-            const allCommits = await this.getLocalGitCommits();
-            const allContributors = await this.getLocalGitContributors();
+            const { files: allFiles, commits: allCommits, contributors: allContributors } = snapshot;
+
+            // Bot-aware split: automation bots (Dependabot, Renovate, …) are
+            // aggregated into a one-line summary instead of occupying top
+            // contributor slots and prompt tokens; humans and AI agents are
+            // sampled normally.
+            const automationBots = allContributors.filter(c => c.contributorKind === 'automation-bot');
+            const analyzableContributors = allContributors.filter(c => c.contributorKind !== 'automation-bot');
+            const botEmails = new Set(automationBots.map(c => c.email));
+
+            const analyzableCommits = allCommits.filter(c => !botEmails.has(c.author?.email));
 
             // Apply intelligent sampling
             const files = this.sampleFiles(allFiles, limits.files);
-            const commits = this.sampleCommits(allCommits, limits.commits);
-            const contributors = this.sampleContributors(allContributors, limits.contributors);
+            const commits = this.sampleCommits(analyzableCommits, limits.commits);
+            const contributors = this.sampleContributors(analyzableContributors, limits.contributors);
+
+            const botSummary = automationBots
+                .map(c => `${c.name}: ${c.commits} automated commits`)
+                .join('; ');
+
+            const aiAttribution = this.computeAiAttribution(allCommits, botEmails);
 
             this.outputChannel.appendLine(
                 `📊 Sampled data: ${files.length}/${allFiles.length} files, ` +
                 `${contributors.length}/${allContributors.length} contributors, ` +
-                `${commits.length}/${allCommits.length} commits`
+                `${commits.length}/${allCommits.length} commits` +
+                (automationBots.length > 0 ? ` (${automationBots.length} automation bots aggregated)` : '')
             );
 
             return {
@@ -284,6 +377,9 @@ export class ExpertiseAnalyzer {
                 contributors,
                 pullRequests: [],
                 repositoryStats: repoStats,
+                botSummary,
+                aiAttribution,
+                allContributors,
                 samplingApplied: {
                     originalFiles: allFiles.length,
                     originalCommits: allCommits.length,
@@ -294,6 +390,73 @@ export class ExpertiseAnalyzer {
         } catch (error) {
             this.outputChannel.appendLine(`❌ Error gathering repository data: ${error}`);
             throw error;
+        }
+    }
+
+    /**
+     * Roll up commit-level agent signals into a repository summary:
+     * how much of the history is agent-assisted, and by which agents.
+     */
+    private computeAiAttribution(commits: GitCommit[], automationBotEmails: Set<string>): AiAttributionSummary {
+        let assistedCommits = 0;
+        let automationBotCommits = 0;
+        const byAgent: Record<string, number> = {};
+
+        for (const commit of commits) {
+            if (automationBotEmails.has(commit.author?.email)) {
+                automationBotCommits++;
+                continue;
+            }
+            const authorClassification = classifyContributor(commit.author?.name, commit.author?.email);
+            if (authorClassification.kind === 'ai-agent') {
+                assistedCommits++;
+                const agent = authorClassification.agentName ?? 'Unknown agent';
+                byAgent[agent] = (byAgent[agent] ?? 0) + 1;
+                continue;
+            }
+            const signals = detectCommitAgentSignals(commit);
+            if (signals.assisted) {
+                assistedCommits++;
+                for (const agent of signals.agents) {
+                    byAgent[agent] = (byAgent[agent] ?? 0) + 1;
+                }
+            }
+        }
+
+        return {
+            totalCommits: commits.length,
+            assistedCommits,
+            assistedShare: commits.length > 0 ? assistedCommits / commits.length : 0,
+            byAgent,
+            automationBotCommits,
+        };
+    }
+
+    /**
+     * Attach locally computed attribution to the final analysis: the repo-level
+     * rollup plus per-expert classification (kind, AI-assist rate, agent name)
+     * matched by email against the git-derived contributor list.
+     */
+    private enrichAnalysisWithAttribution(analysis: ExpertiseAnalysis, repositoryData: any): void {
+        if (repositoryData.aiAttribution) {
+            analysis.aiAttribution = repositoryData.aiAttribution;
+        }
+
+        const byEmail = new Map<string, any>(
+            (repositoryData.allContributors ?? repositoryData.contributors ?? [])
+                .map((c: any) => [String(c.email ?? '').toLowerCase(), c])
+        );
+
+        for (const expert of [...(analysis.expertProfiles ?? []), ...(analysis.experts ?? [])]) {
+            const contributor = byEmail.get(String(expert.email ?? '').toLowerCase());
+            if (contributor) {
+                expert.contributorKind = contributor.contributorKind ?? expert.contributorKind;
+                expert.aiAssistRate = contributor.aiAssistRate ?? expert.aiAssistRate;
+                expert.agentName = contributor.agentName ?? expert.agentName;
+                if (contributor.contributorKind === 'ai-agent' || contributor.contributorKind === 'automation-bot') {
+                    expert.isBot = true;
+                }
+            }
         }
     }
 
@@ -343,8 +506,8 @@ export class ExpertiseAnalyzer {
     private sampleCommits(commits: any[], limit: number): any[] {
         if (commits.length <= limit) return commits;
 
-        // Sort by date (newest first) and take a mix of recent and distributed
-        const sorted = commits.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        // Sort a copy by date (newest first) and take a mix of recent and distributed
+        const sorted = [...commits].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         
         // Take 70% recent commits, 30% distributed throughout history
         const recentCount = Math.floor(limit * 0.7);
@@ -696,6 +859,16 @@ export class ExpertiseAnalyzer {
 
         const filesSample = repositoryData.files.slice(0, maxFiles).join(', ');
 
+        const attribution = repositoryData.aiAttribution;
+        const attributionInfo = attribution && attribution.assistedCommits > 0
+            ? `\nAI Attribution (from commit trailers): ${attribution.assistedCommits}/${attribution.totalCommits} commits (${Math.round(attribution.assistedShare * 100)}%) were AI-agent-assisted.` +
+              ` By agent: ${Object.entries(attribution.byAgent).map(([agent, count]) => `${agent} ${count}`).join(', ')}.` +
+              ' Treat AI agents as tooling, not team members — focus personality and growth insights on the humans, and consider review-capacity risk where AI-assisted share is high.\n'
+            : '';
+        const botInfo = repositoryData.botSummary
+            ? `\nAutomation bots (excluded from team profiles): ${repositoryData.botSummary}\n`
+            : '';
+
         return `You are an AI assistant helping engineering managers understand their team dynamics and make data-driven decisions. Analyze this ${repoStats.repositorySize} software repository for actionable management insights.
 
 Repository: ${repositoryData.repository}
@@ -708,7 +881,7 @@ ${contributorsInfo}
 
 Recent Communication Patterns (${maxCommits} commits):
 ${recentCommitMessages}
-
+${attributionInfo}${botInfo}
 Key Files: ${filesSample}
 
 ENGINEERING MANAGER FOCUS AREAS:
@@ -801,11 +974,10 @@ Respond with JSON only (NO markdown, NO explanations):
                         if (!this.gitService) {
                             this.gitService = new GitService(workspaceFolder.uri.fsPath, this.outputChannel);
                         }
-                        const commits = await this.gitService.getCommits(200);
-                        const fileCommits = commits.filter((c: any) =>
-                            c.files?.some((f: string) => f.includes(filePath) || filePath.includes(f))
-                        );
-                        const repoStats = await this.assessRepositorySize();
+                        // Per-file history (with --follow) — a plain `git log`
+                        // carries no file lists, so filtering it finds nothing
+                        const fileCommits = await this.gitService.getCommitsForFile(filePath, 200);
+                        const repoStats = this.assessRepositorySize(await this.collectRepoSnapshot());
                         const minimalData: RepositoryData = {
                             repository: workspaceFolder.name,
                             files: [],
@@ -889,29 +1061,61 @@ Respond with JSON only (NO markdown, NO explanations):
         }
     }
 
-        private extractContributorsFromCommits(commits: any[]): any[] {
-        const authorMap = new Map<string, { name: string; email: string; commits: number; lastCommit: string }>();
+    /**
+     * Derive contributors from a commit list in one in-memory pass: commit
+     * counts, first/last dates, classification (human / agent / bot), and
+     * per-contributor AI-assist stats from commit trailers. Replaces separate
+     * `git shortlog` and per-author date invocations.
+     */
+    private extractContributorsFromCommits(commits: any[]): any[] {
+        interface Aggregate {
+            name: string;
+            email: string;
+            commits: number;
+            firstCommit: string;
+            lastCommit: string;
+            authoredCommits: any[];
+        }
+        const authorMap = new Map<string, Aggregate>();
         for (const c of commits) {
             const key = c.author?.email ?? 'unknown';
             const existing = authorMap.get(key);
             if (existing) {
                 existing.commits++;
                 if (c.date > existing.lastCommit) { existing.lastCommit = c.date; }
+                if (c.date < existing.firstCommit) { existing.firstCommit = c.date; }
+                existing.authoredCommits.push(c);
             } else {
                 authorMap.set(key, {
                     name: c.author?.name ?? 'Unknown',
                     email: key,
                     commits: 1,
+                    firstCommit: c.date ?? new Date().toISOString(),
                     lastCommit: c.date ?? new Date().toISOString(),
+                    authoredCommits: [c],
                 });
             }
         }
-        return Array.from(authorMap.values()).sort((a, b) => b.commits - a.commits);
+
+        return Array.from(authorMap.values())
+            .map(({ authoredCommits, ...contributor }) => {
+                const classification = classifyContributor(contributor.name, contributor.email, authoredCommits);
+                return {
+                    ...contributor,
+                    additions: 0,
+                    deletions: 0,
+                    contributorKind: classification.kind,
+                    aiAssistRate: classification.aiAssistRate,
+                    agentName: classification.agentName,
+                };
+            })
+            .sort((a, b) => b.commits - a.commits);
     }
 
     private async analyzeFileExperts(fileData: any): Promise<Expert[]> {
         try {
-            const repositoryData = await this.gatherRepositoryData(fileData.repository || 'current', await this.assessRepositorySize());
+            const snapshot = await this.collectRepoSnapshot();
+            const repositoryData = this.gatherRepositoryData(fileData.repository || 'current', this.assessRepositorySize(snapshot), snapshot);
             
             const filePath = fileData.path || fileData.filePath;
             if (!filePath) {
@@ -931,7 +1135,12 @@ Respond with JSON only (NO markdown, NO explanations):
                     teamRole: contributor.commits > 10 ? 'Regular contributor' : 'Occasional contributor',
                     hiddenStrengths: ['Code review', 'Documentation'],
                     idealChallenges: ['Bug fixes', 'Feature development'],
-                    isBot: detectBotContributor(contributor.name, contributor.email)
+                    isBot: contributor.contributorKind
+                        ? contributor.contributorKind === 'ai-agent' || contributor.contributorKind === 'automation-bot'
+                        : detectBotContributor(contributor.name, contributor.email),
+                    contributorKind: contributor.contributorKind,
+                    aiAssistRate: contributor.aiAssistRate,
+                    agentName: contributor.agentName
                 }))
                 .sort((a: any, b: any) => b.contributions - a.contributions)
                 .slice(0, 5);
@@ -1296,12 +1505,14 @@ Respond with JSON only (NO markdown, NO explanations):
     }
 
     private mapFileExpertise(files: string[], experts: Expert[]): FileExpertise[] {
+        // changeFrequency 0 = not measured; per-file commit counts aren't
+        // fetched in this fallback path, and fabricated values mislead reports
         return files.map(file => ({
             fileName: file.split('/').pop() || file,
             filePath: file,
             experts: experts.slice(0, 2),
             lastModified: new Date(),
-            changeFrequency: Math.floor(Math.random() * 10) + 1
+            changeFrequency: 0
         }));
     }
 
@@ -1382,6 +1593,7 @@ Respond with JSON only (NO markdown, NO explanations):
             this.gitWorkerClient.dispose();
             this.gitWorkerClient = null;
         }
+        this.snapshotCache = null;
     }
 
     async saveAnalysis(analysis: ExpertiseAnalysis): Promise<void> {

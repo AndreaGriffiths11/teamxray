@@ -609,6 +609,7 @@ export class ExpertiseWebviewProvider {
             <span class="pill">Generated <strong>${this.safeFormatDate(analysis.generatedAt)}</strong></span>
             <span class="pill"><strong>${analysis.totalFiles}</strong> files scanned</span>
             <span class="pill"><strong>${analysis.expertProfiles.filter((e: any) => !e.isBot).length}</strong> humans · <strong>${analysis.expertProfiles.filter((e: any) => e.isBot).length}</strong> agents</span>
+            ${analysis.aiAttribution?.assistedCommits ? `<span class="pill">🤝 <strong>${Math.round(analysis.aiAttribution.assistedShare * 100)}%</strong> AI-assisted commits</span>` : ''}
         </div>
     </div>
 
@@ -619,7 +620,7 @@ export class ExpertiseWebviewProvider {
                 const barColor = expert.isBot ? '#374151' : (expert.expertise >= 20 ? '#06b6d4' : '#374151');
                 const cardClass = expert.isBot ? 'bot' : (expert.expertise >= 60 ? 'high' : expert.expertise < 20 ? 'low' : '');
                 return `<div class="expert-card ${cardClass}">
-                    <div class="expert-name">${expert.isBot ? '🤖 ' : ''}${expert.name}${expert.teamRole ? `<span class="role-badge">${expert.teamRole}</span>` : ''}</div>
+                    <div class="expert-name">${expert.isBot ? '🤖 ' : expert.contributorKind === 'ai-assisted-human' ? '🤝 ' : ''}${expert.name}${expert.teamRole ? `<span class="role-badge">${expert.teamRole}</span>` : ''}</div>
                     <div class="expert-email">${expert.email}</div>
                     <div class="bar-chart"><svg viewBox="0 0 400 24"><rect width="400" height="24" fill="#1e293b"/><rect width="${expert.expertise * 4}" height="24" fill="${barColor}"/><text x="${Math.max(expert.expertise * 4 - 8, 30)}" y="17" text-anchor="end" fill="#fff" font-size="12" font-weight="bold" font-family="sans-serif">${expert.expertise}%</text></svg></div>
                     <div class="expert-stats">
@@ -1152,6 +1153,7 @@ export class ExpertiseWebviewProvider {
             <span class="pill">Generated <strong>${this.safeFormatDate(analysis.generatedAt)}</strong></span>
             <span class="pill"><strong>${analysis.totalFiles}</strong> files scanned</span>
             <span class="pill"><strong>${analysis.expertProfiles.filter((e: any) => !e.isBot).length}</strong> humans · <strong>${analysis.expertProfiles.filter((e: any) => e.isBot).length}</strong> agents</span>
+            ${analysis.aiAttribution?.assistedCommits ? `<span class="pill">🤝 <strong>${Math.round(analysis.aiAttribution.assistedShare * 100)}%</strong> AI-assisted commits</span>` : ''}
             <span class="pill"><strong>${analysis.insights.length}</strong> insights</span>
         </div>
     </div>
@@ -1179,7 +1181,7 @@ export class ExpertiseWebviewProvider {
                 <tbody>
                     ${analysis.expertProfiles.map(expert => `
                     <tr data-name="${(expert.name || '').replace(/"/g, '&quot;')}" data-email="${(expert.email || '').replace(/"/g, '&quot;')}" data-expertise="${expert.expertise}" data-contributions="${expert.contributions}" data-lastcommit="${this.toSafeIsoDate(expert.lastCommit)}" data-specs="${(expert.specializations || []).join(', ')}">
-                        <td>${expert.isBot ? '🤖 ' : ''}${expert.name}${expert.teamRole ? ` <span class="role-badge">${expert.teamRole}</span>` : ''}</td>
+                        <td>${expert.isBot ? '🤖 ' : expert.contributorKind === 'ai-assisted-human' ? '🤝 ' : ''}${expert.name}${expert.teamRole ? ` <span class="role-badge">${expert.teamRole}</span>` : ''}</td>
                         <td class="email-cell">${expert.email}</td>
                         <td><div class="mini-bar"><div class="mini-bar-fill" style="width:${expert.expertise}%"></div></div> ${expert.expertise}%</td>
                         <td>${expert.contributions}</td>
@@ -1208,7 +1210,7 @@ export class ExpertiseWebviewProvider {
                                 </div>
                             </div>
                             <div class="expert-info">
-                                <h3>${expert.isBot ? '🤖 ' : ''}${expert.name}${expert.teamRole ? `<span class="role-badge">${expert.teamRole}</span>` : ''}</h3>
+                                <h3>${expert.isBot ? '🤖 ' : expert.contributorKind === 'ai-assisted-human' ? '🤝 ' : ''}${expert.name}${expert.teamRole ? `<span class="role-badge">${expert.teamRole}</span>` : ''}</h3>
                                 <div class="expert-email">${expert.email}</div>
                             </div>
                         </div>

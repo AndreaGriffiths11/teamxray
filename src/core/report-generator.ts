@@ -157,6 +157,7 @@ export class ReportGenerator {
             <div>
                 <span class="pill">${analysis.totalFiles} files scanned</span>
                 <span class="pill">${analysis.expertProfiles.filter(e => !e.isBot).length} humans · ${analysis.expertProfiles.filter(e => e.isBot).length} agents</span>
+                ${analysis.aiAttribution?.assistedCommits ? `<span class="pill">🤝 ${Math.round(analysis.aiAttribution.assistedShare * 100)}% AI-assisted commits</span>` : ''}
                 <span class="pill">${windowLabel}</span>
             </div>
         </div>
@@ -172,7 +173,7 @@ export class ReportGenerator {
                     <div class="expert-card${glowClass}">
                         <div class="expert-top">
                             <div>
-                                <div class="expert-name">${expert.isBot ? '🤖 ' : ''}${expert.name}</div>
+                                <div class="expert-name">${expert.isBot ? '🤖 ' : expert.contributorKind === 'ai-assisted-human' ? '🤝 ' : ''}${expert.name}</div>
                                 <div class="expert-email mono">${expert.email}</div>
                             </div>
                             ${expert.teamRole ? `<span class="role-badge">${expert.teamRole}</span>` : ''}
