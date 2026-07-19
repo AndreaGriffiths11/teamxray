@@ -9,6 +9,7 @@ import { TokenManager } from './core/token-manager';
 import { ErrorHandler } from './utils/error-handler';
 import { ResourceManager } from './utils/resource-manager';
 import { Validator } from './utils/validation';
+import { setBotDetectionOptions } from './utils/bot-detection';
 
 // Module-level reference for cleanup in deactivate()
 let copilotService: CopilotService | undefined;
@@ -31,6 +32,25 @@ export function activate(context: vscode.ExtensionContext) {
     
     // Initialize the token manager
     const tokenManager = new TokenManager(context, outputChannel);
+
+    // Feed user-configured bot/agent detection patterns into the classifier,
+    // and keep them fresh when settings change
+    const applyBotDetectionConfig = () => {
+        const config = vscode.workspace.getConfiguration('teamxray');
+        setBotDetectionOptions({
+            additionalBotPatterns: config.get<string[]>('additionalBotPatterns', []),
+            humanOverrides: config.get<string[]>('humanOverrides', []),
+        });
+    };
+    applyBotDetectionConfig();
+    context.subscriptions.push(
+        vscode.workspace.onDidChangeConfiguration(e => {
+            if (e.affectsConfiguration('teamxray.additionalBotPatterns') ||
+                e.affectsConfiguration('teamxray.humanOverrides')) {
+                applyBotDetectionConfig();
+            }
+        })
+    );
     
     // Command to allow user to set their GitHub token
     context.subscriptions.push(

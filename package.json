@@ -207,6 +207,22 @@
           "default": 90,
           "minimum": 0,
           "description": "Limit git history to the last N days. Set to 0 to analyze all history (still capped at 1000 commits)."
+        },
+        "teamxray.additionalBotPatterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Extra case-insensitive substrings matched against contributor \"name <email>\" identities. Matches are classified as automation bots (e.g. org-internal CI accounts)."
+        },
+        "teamxray.humanOverrides": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Contributor emails that must never be classified as bots or agents, overriding all detection patterns."
         }
       }
     }

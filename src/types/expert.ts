@@ -13,6 +13,25 @@ export interface Expert {
     collaborationStyle?: 'independent' | 'collaborative' | 'mentoring';
     riskFactors?: string[];
     isBot?: boolean;
+    /** Finer-grained classification than isBot; 'ai-assisted-human' still counts as human */
+    contributorKind?: 'human' | 'ai-agent' | 'automation-bot' | 'ai-assisted-human';
+    /** Share (0-1) of this contributor's commits carrying agent-attribution signals */
+    aiAssistRate?: number;
+    /** Friendly name of the identified agent/bot, e.g. 'Claude Code', 'Dependabot' */
+    agentName?: string;
+}
+
+/** Repository-level AI attribution rollup derived from commit trailers */
+export interface AiAttributionSummary {
+    totalCommits: number;
+    /** Commits carrying agent signals (co-author trailers, checkpoints, aider marker) */
+    assistedCommits: number;
+    /** assistedCommits / totalCommits (0-1) */
+    assistedShare: number;
+    /** Assisted-commit counts per identified agent */
+    byAgent: Record<string, number>;
+    /** Commits authored directly by automation bots (Dependabot, Renovate, …) */
+    automationBotCommits: number;
 }
 
 export interface FileExpertise {
@@ -30,6 +49,12 @@ export interface GitCommit {
     message: string;
     date: string;
     files: string[];
+    /** Co-authored-by trailer identities (how most AI agents attribute their work) */
+    coAuthors?: GitAuthor[];
+    /** Checkpoint trailer id (Entire-Checkpoint) when session-capture tooling recorded this commit */
+    checkpointId?: string;
+    /** Attribution trailer value (Entire-Attribution) when present */
+    attribution?: string;
 }
 
 export interface GitAuthor {

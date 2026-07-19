@@ -1,21 +1,21 @@
 /**
  * Worker thread for git operations — runs off the extension host thread.
- * Must NOT import 'vscode'. Only Node built-ins.
+ * Must NOT import 'vscode'. Only Node built-ins and vscode-free utils.
  */
 import { parentPort } from 'worker_threads';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { COMMIT_LOG_FORMAT, parseCommitLog } from '../utils/git-log-format';
 
 const execFileAsync = promisify(execFile);
 
 const GIT_TIMEOUT_MS = 30_000;
-const AUTHOR_DATE_TIMEOUT_MS = 5_000;
+const HEAD_TIMEOUT_MS = 5_000;
 const MAX_BUFFER = 10 * 1024 * 1024;
-const DATE_ENRICHMENT_LIMIT = 5;
 
 interface WorkerMessage {
     id: number;
-    type: 'getCommits' | 'getContributors';
+    type: 'getCommits' | 'getContributors' | 'getHead';
     repoPath: string;
     limit?: number;
     sinceDate?: string;
@@ -24,8 +24,7 @@ interface WorkerMessage {
 async function getCommits(repoPath: string, limit: number, sinceDate?: string) {
     const args = [
         'log',
-        '--pretty=format:%H|%an|%ae|%ad|%s',
-        '--date=iso',
+        `--pretty=format:${COMMIT_LOG_FORMAT}`,
         '-n',
         String(Math.max(1, Math.min(limit, 1000)))
     ];
@@ -38,31 +37,20 @@ async function getCommits(repoPath: string, limit: number, sinceDate?: string) {
         maxBuffer: MAX_BUFFER
     });
 
-    return stdout
-        .split('\n')
-        .filter(line => line.trim())
-        .map(line => {
-            const parts = line.split('|');
-            if (parts.length >= 5) {
-                return {
-                    sha: parts[0],
-                    author: { name: parts[1], email: parts[2] },
-                    message: parts.slice(4).join('|'),
-                    date: parts[3],
-                    files: [] as string[]
-                };
-            }
-            return null;
-        })
-        .filter(Boolean);
+    return parseCommitLog(stdout);
 }
 
+/**
+ * Contributor list via `git shortlog`. Kept as a fallback for repositories
+ * where the commit log comes back empty — the analyzer normally derives
+ * contributors (with first/last dates) from the commit list in one pass.
+ */
 async function getContributors(repoPath: string) {
     const { stdout } = await execFileAsync('git', [
-        'shortlog', '-sne', '--all'
+        'shortlog', '-sne', 'HEAD'
     ], { cwd: repoPath, timeout: GIT_TIMEOUT_MS, maxBuffer: MAX_BUFFER });
 
-    const contributors = stdout
+    return stdout
         .split('\n')
         .filter(line => line.trim())
         .map(line => {
@@ -82,25 +70,15 @@ async function getContributors(repoPath: string) {
         })
         .filter(Boolean)
         .sort((a: any, b: any) => b.commits - a.commits);
+}
 
-    // Get first/last commit dates for top contributors only to keep analysis responsive on large repos
-    for (const contrib of contributors.slice(0, DATE_ENRICHMENT_LIMIT) as any[]) {
-        try {
-            const { stdout: lastOut } = await execFileAsync('git', [
-                'log', `--author=${contrib.email}`, '--pretty=format:%ad', '--date=iso', '-n', '1'
-            ], { cwd: repoPath, timeout: AUTHOR_DATE_TIMEOUT_MS, maxBuffer: MAX_BUFFER });
-            contrib.lastCommit = lastOut.trim() || '';
-
-            const { stdout: firstOut } = await execFileAsync('git', [
-                'log', `--author=${contrib.email}`, '--pretty=format:%ad', '--date=iso', '--reverse', '-n', '1'
-            ], { cwd: repoPath, timeout: AUTHOR_DATE_TIMEOUT_MS, maxBuffer: MAX_BUFFER });
-            contrib.firstCommit = firstOut.trim() || '';
-        } catch {
-            // continue
-        }
-    }
-
-    return contributors;
+async function getHead(repoPath: string): Promise<string> {
+    const { stdout } = await execFileAsync('git', ['rev-parse', 'HEAD'], {
+        cwd: repoPath,
+        timeout: HEAD_TIMEOUT_MS,
+        maxBuffer: MAX_BUFFER
+    });
+    return stdout.trim();
 }
 
 if (parentPort) {
@@ -111,6 +89,8 @@ if (parentPort) {
                 result = await getCommits(msg.repoPath, msg.limit ?? 500, msg.sinceDate);
             } else if (msg.type === 'getContributors') {
                 result = await getContributors(msg.repoPath);
+            } else if (msg.type === 'getHead') {
+                result = await getHead(msg.repoPath);
             } else {
                 throw new Error(`Unknown message type: ${(msg as any).type}`);
             }

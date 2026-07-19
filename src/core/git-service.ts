@@ -3,7 +3,13 @@ import { promisify } from 'util';
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import type { GitCommit, GitContributor, GitAuthor } from '../types/expert';
+import type { GitCommit, GitContributor } from '../types/expert';
+import {
+    COMMIT_LOG_FORMAT,
+    COMMIT_LOG_FORMAT_WITH_FILES,
+    parseCommitLog,
+    parseCommitLogWithFiles
+} from '../utils/git-log-format';
 
 const execFileAsync = promisify(execFile);
 
@@ -88,72 +94,18 @@ export class GitService {
     }
 
     /**
-     * Parse git log output into GitCommit objects (DRY helper method)
-     * @param output - Raw git log output with format %H|%an|%ae|%ad|%s
-     * @returns Array of parsed GitCommit objects
+     * Parse git log output into GitCommit objects. The shared NUL-delimited
+     * format carries co-author and checkpoint trailers alongside the basics.
      */
     private parseCommitOutput(output: string): GitCommit[] {
-        return output
-            .split('\n')
-            .filter(line => line.trim())
-            .map(line => {
-                const parts = line.split('|');
-                if (parts.length >= 5) {
-                    const author: GitAuthor = {
-                        name: parts[1],
-                        email: parts[2]
-                    };
-                    const commit: GitCommit = {
-                        sha: parts[0],
-                        author: author,
-                        message: parts.slice(4).join('|'),
-                        date: parts[3],
-                        files: [] as string[]  // Files not fetched in basic log, would require --name-only
-                    };
-                    return commit;
-                }
-                return null;
-            })
-            .filter((commit): commit is GitCommit => commit !== null);
+        return parseCommitLog(output);
     }
 
     /**
      * Parse git log output where each commit is followed by a list of touched files.
      */
     private parseCommitOutputWithFiles(output: string): GitCommit[] {
-        return output
-            .split('__TEAMXRAY_COMMIT__')
-            .map(block => block.trim())
-            .filter(block => block.length > 0)
-            .map(block => {
-                const [metadataLine, ...fileLines] = block
-                    .split('\n')
-                    .map(line => line.trim())
-                    .filter(line => line.length > 0);
-
-                if (!metadataLine) {
-                    return null;
-                }
-
-                const parts = metadataLine.split('|');
-                if (parts.length < 5) {
-                    return null;
-                }
-
-                const author: GitAuthor = {
-                    name: parts[1],
-                    email: parts[2]
-                };
-
-                return {
-                    sha: parts[0],
-                    author,
-                    message: parts.slice(4).join('|'),
-                    date: parts[3],
-                    files: fileLines,
-                };
-            })
-            .filter((commit): commit is GitCommit => commit !== null);
+        return parseCommitLogWithFiles(output);
     }
 
     private normalizeGitPath(filePath: string): string {
@@ -172,8 +124,7 @@ export class GitService {
     async getCommits(limit: number = 500, sinceDate?: string): Promise<GitCommit[]> {
         const args = [
             'log',
-            '--pretty=format:%H|%an|%ae|%ad|%s',
-            '--date=iso',
+            `--pretty=format:${COMMIT_LOG_FORMAT}`,
             '-n',
             String(Math.max(1, Math.min(limit, 1000))) // Clamp between 1 and 1000
         ];
@@ -196,8 +147,7 @@ export class GitService {
         const args = [
             'log',
             `--author=${email}`,  // No quotes needed with execFile
-            '--pretty=format:%H|%an|%ae|%ad|%s',
-            '--date=iso',
+            `--pretty=format:${COMMIT_LOG_FORMAT}`,
             '-n',
             String(Math.max(1, Math.min(limit, 100)))
         ];
@@ -211,7 +161,9 @@ export class GitService {
      * @returns Array of contributors with commit counts
      */
     async getContributors(): Promise<GitContributor[]> {
-        const args = ['shortlog', '-sne', '--all'];
+        // HEAD (not --all): stays consistent with the commit history the
+        // analysis uses and avoids walking every remote ref on large repos
+        const args = ['shortlog', '-sne', 'HEAD'];
 
         const output = await this.executeGitCommand(args);
 
@@ -318,8 +270,7 @@ export class GitService {
         const args = [
             'log',
             `--since=${sinceDate}`,  // No quotes needed with execFile
-            '--pretty=format:%H|%an|%ae|%ad|%s',
-            '--date=iso',
+            `--pretty=format:${COMMIT_LOG_FORMAT}`,
             '-n',
             String(Math.max(1, Math.min(limit, 1000)))
         ];
@@ -340,8 +291,7 @@ export class GitService {
             'log',
             '--follow',
             '--name-only',
-            '--pretty=format:__TEAMXRAY_COMMIT__%n%H|%an|%ae|%ad|%s',
-            '--date=iso',
+            `--pretty=format:${COMMIT_LOG_FORMAT_WITH_FILES}`,
             '-n',
             String(Math.max(1, Math.min(limit, 1000))),
             '--',

@@ -55,14 +55,23 @@ Copilot SDK session (default or BYOK override) → GitHub Models API → Reduced
 
 BYOK is a Copilot session configuration, not a separate fallback tier. If the configured Copilot/BYOK session fails, Team X-Ray falls through to GitHub Models, then to the reduced local fallback.
 
-## Bot Detection
+## Agent & Bot Detection
 
-The `detectBot()` helper identifies automated contributors (Dependabot, Renovate, GitHub Actions bots, Copilot) by matching name and email patterns against known bot signatures.
+`classifyContributor()` (in `utils/bot-detection.ts`) classifies every contributor into one of four kinds using two signal layers:
 
-Detected bots get:
-- Gray expertise bars (instead of colored)
-- A 🤖 badge next to their name
-- Separation from human contributors in management insights
+1. **Author identity** — name/email matched against a declarative table of known AI coding agents (Claude Code, Copilot, Cursor, Devin, Codex, Jules, Amazon Q, OpenCode, OpenHands, Aider) and automation bots (Dependabot, Renovate, GitHub Actions), plus generic `[bot]` patterns.
+2. **Commit trailers** — `Co-authored-by` lines, checkpoint/attribution trailers (`Entire-Checkpoint` / `Entire-Attribution`), and the aider subject marker. Git extracts these in the same `git log` call via `%(trailers:key=...)`, so most agent-assisted work committed under a *human's* identity is still detected.
+
+| Kind | Meaning | Rendering |
+|------|---------|-----------|
+| `human` | No bot/agent signals | Normal |
+| `ai-agent` | AI coding agent committing under its own identity | 🤖 badge, gray bars, excluded from human insights |
+| `automation-bot` | Dependency/CI automation | 🤖 badge; aggregated to a one-line summary instead of occupying contributor slots in the AI prompt |
+| `ai-assisted-human` | Human whose commits frequently carry agent co-author trailers | 🤝 badge; stays in all human-focused insights, with an AI-assist rate |
+
+The analysis also rolls commit-level signals up into a repository **AI attribution summary** (share of AI-assisted commits, breakdown by agent) shown as a pill in the webview/report header and fed into the AI prompt.
+
+Detection is user-extensible via two settings: `teamxray.additionalBotPatterns` (extra identities to treat as bots) and `teamxray.humanOverrides` (emails never classified as bots). The legacy boolean `detectBotContributor()` remains as a thin wrapper for backwards compatibility.
 
 ## Worker Thread
 
