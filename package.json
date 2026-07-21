@@ -3,7 +3,7 @@
   "name": "teamxray",
   "displayName": "Team X-Ray",
   "description": "Human discovery through code analysis - reveal team expertise, communication styles, and hidden strengths using the Copilot SDK and git history",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "publisher": "AndreaGriffiths",
   "author": {
     "name": "alacolombiadev"
