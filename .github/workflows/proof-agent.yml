@@ -20,7 +20,7 @@ jobs:
           fetch-depth: 0  # Need full history for git diff
       
       - name: Run Proof Agent verification
-        uses: AndreaGriffiths11/proof-agent@v1.0.2
+        uses: AndreaGriffiths11/proof-agent@v1.1.2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           base-ref: origin/main
