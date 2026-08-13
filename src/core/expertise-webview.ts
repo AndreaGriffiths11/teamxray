@@ -1,6 +1,15 @@
 import * as vscode from 'vscode';
 import { Expert } from '../types/expert';
 import { ExpertiseAnalysis } from './expertise-analyzer';
+import {
+    escapeCsvCell,
+    escapeHtml,
+    indexFilesByExpert,
+    normalizeCount,
+    normalizePercentage,
+    normalizeRatio,
+    serializeForInlineScript,
+} from './report-utils';
 
 type WebviewCommand = 'showExpertDetails' | 'getExpertActivity' | 'openFile' | 'refreshAnalysis' | 'exportAnalysis';
 
@@ -152,33 +161,33 @@ export class ExpertiseWebviewProvider {
      * Extracts GitHub username from email or name
      */
     private getGitHubUsername(email: string, name: string): string {
+        let candidate = '';
+
         // First try to extract from email (common patterns)
         if (email.includes('@github.com') || email.includes('@users.noreply.github.com')) {
             // Handle GitHub noreply emails like: username@users.noreply.github.com
             // Also handle: 12345+username@users.noreply.github.com
             const match = email.match(/^(?:\d+\+)?([^@]+)@(users\.noreply\.)?github\.com$/);
             if (match) {
-                return match[1];
+                candidate = match[1];
             }
         }
         
         // Try to extract from common email patterns
-        if (email.includes('@')) {
-            const username = email.split('@')[0];
-            // Clean up common patterns and remove numbers prefix from GitHub noreply
-            const cleanUsername = username.replace(/^\d+\+/, '').replace(/[^a-zA-Z0-9\-]/g, '').toLowerCase();
-            
-            // Only use if it looks like a valid GitHub username
-            if (cleanUsername.length >= 1 && cleanUsername.length <= 39) {
-                return cleanUsername;
-            }
+        if (!candidate && email.includes('@')) {
+            candidate = email.split('@')[0];
         }
-        
-        // Fallback to name-based username
-        return name.toLowerCase()
-            .replace(/\s+/g, '')
-            .replace(/[^a-zA-Z0-9\-]/g, '')
-            .slice(0, 39); // GitHub username max length
+
+        return this.normalizeGitHubUsername(candidate || name);
+    }
+
+    private normalizeGitHubUsername(value: string): string {
+        return value
+            .replace(/^\d+\+/, '')
+            .toLowerCase()
+            .replace(/[^a-z0-9-]/g, '')
+            .replace(/^-+|-+$/g, '')
+            .slice(0, 39);
     }
 
     /**
@@ -220,18 +229,6 @@ export class ExpertiseWebviewProvider {
     }
 
     /**
-     * Escapes text for safe use inside HTML attributes.
-     */
-    private escapeHtmlAttribute(value: string): string {
-        return value
-            .replace(/&/g, '&amp;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
-    }
-
-    /**
      * Generates a nonce for webview script execution.
      */
     private generateNonce(length: number = 32): string {
@@ -259,21 +256,21 @@ export class ExpertiseWebviewProvider {
         return `
             <div class="management-grid">
                 ${analysis.managementInsights.map(insight => `
-                    <div class="management-card ${insight.category.toLowerCase()}">
+                    <div class="management-card ${escapeHtml(insight.category.toLowerCase())}">
                         <div class="management-header">
-                            <span class="management-category ${insight.category.toLowerCase()}">${insight.category}</span>
-                            <span class="management-priority ${insight.priority.toLowerCase()}">${insight.priority}</span>
+                            <span class="management-category ${escapeHtml(insight.category.toLowerCase())}">${escapeHtml(insight.category)}</span>
+                            <span class="management-priority ${escapeHtml(insight.priority.toLowerCase())}">${escapeHtml(insight.priority)}</span>
                         </div>
-                        <h4>${insight.title}</h4>
-                        <p>${insight.description}</p>
+                        <h4>${escapeHtml(insight.title)}</h4>
+                        <p>${escapeHtml(insight.description)}</p>
                         <div class="management-actions">
-                            <h5>Action Items (${insight.timeline}):</h5>
+                            <h5>Action Items (${escapeHtml(insight.timeline)}):</h5>
                             <ul>
-                                ${insight.actionItems.map(action => `<li>${action}</li>`).join('')}
+                                ${insight.actionItems.map(action => `<li>${escapeHtml(action)}</li>`).join('')}
                             </ul>
                         </div>
                         <div class="management-impact">
-                            <strong>Expected Impact:</strong> ${insight.impact}
+                            <strong>Expected Impact:</strong> ${escapeHtml(insight.impact)}
                         </div>
                     </div>
                 `).join('')}
@@ -293,32 +290,36 @@ export class ExpertiseWebviewProvider {
         }
 
         const metrics = analysis.teamHealthMetrics;
+        const knowledgeRiskScore = normalizePercentage(metrics.knowledgeDistribution.riskScore);
+        const crossTeamWork = normalizePercentage(metrics.collaborationMetrics.crossTeamWork);
+        const codeReviewParticipation = normalizePercentage(metrics.collaborationMetrics.codeReviewParticipation);
+        const knowledgeSharing = normalizePercentage(metrics.collaborationMetrics.knowledgeSharing);
         
         return `
             <div class="health-metrics-grid">
                 <!-- Knowledge Distribution -->
                 <div class="health-metric-card">
                     <h4>🧠 Knowledge Distribution</h4>
-                    <div class="risk-score ${this.getRiskLevel(metrics.knowledgeDistribution.riskScore)}">
-                        Risk Score: ${metrics.knowledgeDistribution.riskScore}/100
+                    <div class="risk-score ${this.getRiskLevel(knowledgeRiskScore)}">
+                        Risk Score: ${knowledgeRiskScore}/100
                     </div>
                     <div class="metric-details">
                         <div class="metric-item critical">
                             <strong>Critical Areas:</strong>
                             <ul>
-                                ${metrics.knowledgeDistribution.criticalAreas.map(area => `<li>${area}</li>`).join('')}
+                                ${metrics.knowledgeDistribution.criticalAreas.map(area => `<li>${escapeHtml(area)}</li>`).join('')}
                             </ul>
                         </div>
                         <div class="metric-item warning">
                             <strong>Single Points of Failure:</strong>
                             <ul>
-                                ${metrics.knowledgeDistribution.singlePointsOfFailure.map(spof => `<li>${spof}</li>`).join('')}
+                                ${metrics.knowledgeDistribution.singlePointsOfFailure.map(spof => `<li>${escapeHtml(spof)}</li>`).join('')}
                             </ul>
                         </div>
                         <div class="metric-item positive">
                             <strong>Well Distributed:</strong>
                             <ul>
-                                ${metrics.knowledgeDistribution.wellDistributed.map(area => `<li>${area}</li>`).join('')}
+                                ${metrics.knowledgeDistribution.wellDistributed.map(area => `<li>${escapeHtml(area)}</li>`).join('')}
                             </ul>
                         </div>
                     </div>
@@ -329,15 +330,15 @@ export class ExpertiseWebviewProvider {
                     <h4>🤝 Collaboration Health</h4>
                     <div class="collaboration-stats">
                         <div class="collab-stat">
-                            <span class="stat-value">${metrics.collaborationMetrics.crossTeamWork}%</span>
+                            <span class="stat-value">${crossTeamWork}%</span>
                             <span class="stat-label">Cross-team Work</span>
                         </div>
                         <div class="collab-stat">
-                            <span class="stat-value">${metrics.collaborationMetrics.codeReviewParticipation}%</span>
+                            <span class="stat-value">${codeReviewParticipation}%</span>
                             <span class="stat-label">Code Review Participation</span>
                         </div>
                         <div class="collab-stat">
-                            <span class="stat-value">${metrics.collaborationMetrics.knowledgeSharing}%</span>
+                            <span class="stat-value">${knowledgeSharing}%</span>
                             <span class="stat-label">Knowledge Sharing</span>
                         </div>
                     </div>
@@ -345,7 +346,7 @@ export class ExpertiseWebviewProvider {
                         <div class="metric-item warning">
                             <strong>Siloed Members:</strong>
                             <ul>
-                                ${metrics.collaborationMetrics.siloedMembers.map(member => `<li>${member}</li>`).join('')}
+                                ${metrics.collaborationMetrics.siloedMembers.map(member => `<li>${escapeHtml(member)}</li>`).join('')}
                             </ul>
                         </div>
                     ` : ''}
@@ -357,18 +358,18 @@ export class ExpertiseWebviewProvider {
                     <div class="performance-stats">
                         <div class="perf-stat">
                             <span class="stat-label">Average Review Time</span>
-                            <span class="stat-value">${metrics.performanceIndicators.averageReviewTime}</span>
+                            <span class="stat-value">${escapeHtml(metrics.performanceIndicators.averageReviewTime)}</span>
                         </div>
                         <div class="perf-stat">
                             <span class="stat-label">Deployment Frequency</span>
-                            <span class="stat-value">${metrics.performanceIndicators.deploymentFrequency}</span>
+                            <span class="stat-value">${escapeHtml(metrics.performanceIndicators.deploymentFrequency)}</span>
                         </div>
                     </div>
                     ${metrics.performanceIndicators.blockers.length > 0 ? `
                         <div class="metric-item critical">
                             <strong>Current Blockers:</strong>
                             <ul>
-                                ${metrics.performanceIndicators.blockers.map(blocker => `<li>${blocker}</li>`).join('')}
+                                ${metrics.performanceIndicators.blockers.map(blocker => `<li>${escapeHtml(blocker)}</li>`).join('')}
                             </ul>
                         </div>
                     ` : ''}
@@ -546,70 +547,82 @@ export class ExpertiseWebviewProvider {
         const analysis = this.currentAnalysis;
         const categoryColors: Record<string, string> = { RISK: '#ef4444', OPPORTUNITY: '#10b981', EFFICIENCY: '#3b82f6', GROWTH: '#f59e0b' };
         const priorityDots: Record<string, string> = { HIGH: '●●●', MEDIUM: '●●○', LOW: '●○○' };
+        const totalFiles = normalizeCount(analysis.totalFiles);
+        const assistedCommits = normalizeCount(analysis.aiAttribution?.assistedCommits);
+        const assistedShare = normalizeRatio(analysis.aiAttribution?.assistedShare);
         return `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Team X-Ray Analysis Report - ${analysis.repository}</title>
+    <title>Team X-Ray Analysis Report - ${escapeHtml(analysis.repository)}</title>
     <style>
+:root{--bg:#0a0a0f;--surface:#12121a;--border:#1e293b;--border-hover:#2d3748;--text:#e2e8f0;--text-soft:#94a3b8;--text-muted:#64748b;--text-faint:#475569;--accent:#06b6d4;--accent-2:#8b5cf6;--header-bg:#0a0a0f;--h1-color:#e2e8f0;--h1-glow:0 0 20px rgba(6,182,212,0.4),0 0 40px rgba(6,182,212,0.15);--scan:rgba(6,182,212,0.03)}
+@media (prefers-color-scheme:light){:root:not(.theme-dark){--bg:#eef1f5;--surface:#ffffff;--border:#d0d7de;--border-hover:#afb8c1;--text:#1f2328;--text-soft:#3d444d;--text-muted:#59636e;--text-faint:#818b98;--accent:#0e7490;--accent-2:#7c3aed;--header-bg:#ffffff;--h1-color:#0e7490;--h1-glow:none;--scan:rgba(8,145,178,0.06)}}
+:root.theme-light{--bg:#eef1f5;--surface:#ffffff;--border:#d0d7de;--border-hover:#afb8c1;--text:#1f2328;--text-soft:#3d444d;--text-muted:#59636e;--text-faint:#818b98;--accent:#0e7490;--accent-2:#7c3aed;--header-bg:#ffffff;--h1-color:#0e7490;--h1-glow:none;--scan:rgba(8,145,178,0.06)}
+.theme-toggle{position:fixed;top:16px;right:16px;z-index:20;display:grid;width:40px;height:40px;place-items:center;padding:0;border-radius:999px;border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit;font-size:1.1em;cursor:pointer;transition:border-color .2s,background .2s,color .2s}
+.theme-toggle:hover{border-color:var(--accent);color:var(--accent)}
+.theme-toggle:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px}
+
         *{box-sizing:border-box;margin:0;padding:0}
-        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Roboto',sans-serif;line-height:1.6;color:#e2e8f0;max-width:1200px;margin:0 auto;padding:20px;background:#0a0a0f}
-        .header{background:#0a0a0f;background-image:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(6,182,212,0.03) 2px,rgba(6,182,212,0.03) 4px);padding:48px 40px;border:1px solid #1e293b;border-radius:12px;text-align:center;margin-bottom:30px}
-        .header h1{font-size:2.5em;font-weight:800;letter-spacing:0.08em;color:#e2e8f0;text-shadow:0 0 20px rgba(6,182,212,0.4),0 0 40px rgba(6,182,212,0.15);margin-bottom:8px}
-        .header .repo{font-family:'SF Mono',SFMono-Regular,Consolas,'Liberation Mono',Menlo,monospace;color:#06b6d4;font-size:1.1em;margin-bottom:16px}
+        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Roboto',sans-serif;line-height:1.6;color:var(--text);max-width:1200px;margin:0 auto;padding:20px;background:var(--bg)}
+        .header{background:var(--header-bg);background-image:repeating-linear-gradient(0deg,transparent,transparent 2px,var(--scan) 2px,var(--scan) 4px);padding:48px 40px;border:1px solid var(--border);border-radius:12px;text-align:center;margin-bottom:30px}
+        .header h1{font-size:2.5em;font-weight:800;letter-spacing:0.08em;color:var(--h1-color);text-shadow:var(--h1-glow);margin-bottom:8px}
+        .header .repo{font-family:'SF Mono',SFMono-Regular,Consolas,'Liberation Mono',Menlo,monospace;color:var(--accent);font-size:1.1em;margin-bottom:16px}
         .header .stats{display:flex;justify-content:center;gap:12px;flex-wrap:wrap}
-        .pill{display:inline-block;padding:4px 14px;border:1px solid #1e293b;border-radius:999px;font-size:0.85em;color:#64748b}
-        .pill strong{color:#e2e8f0}
-        .section{background:#12121a;border:1px solid #1e293b;border-radius:12px;padding:30px;margin-bottom:30px}
-        .section h2{color:#e2e8f0;font-size:1.4em;border-bottom:2px solid #1e293b;padding-bottom:10px;margin-bottom:20px}
-        .section h2 .accent{color:#06b6d4}
+        .pill{display:inline-block;padding:4px 14px;border:1px solid var(--border);border-radius:999px;font-size:0.85em;color:var(--text-muted)}
+        .pill strong{color:var(--text)}
+        .section{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:30px;margin-bottom:30px}
+        .section h2{color:var(--text);font-size:1.4em;border-bottom:2px solid var(--border);padding-bottom:10px;margin-bottom:20px}
+        .section h2 .accent{color:var(--accent)}
         .expert-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px}
-        .expert-card{background:#12121a;border:1px solid #1e293b;border-radius:8px;padding:20px;transition:box-shadow 0.2s}
-        .expert-card.high{border-left:3px solid #06b6d4;box-shadow:inset 4px 0 12px -4px rgba(6,182,212,0.15)}
+        .expert-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;transition:box-shadow 0.2s}
+        .expert-card.high{border-color:var(--accent)}
         .expert-card.low{opacity:0.6}
         .expert-card.bot{opacity:0.65}
-        .expert-name{font-weight:700;font-size:1.15em;color:#e2e8f0;margin-bottom:2px}
-        .expert-email{font-size:0.85em;color:#64748b;margin-bottom:12px}
-        .role-badge{display:inline-block;font-size:0.7em;text-transform:uppercase;letter-spacing:0.08em;color:#8b5cf6;border:1px solid rgba(139,92,246,0.3);border-radius:4px;padding:2px 8px;margin-left:8px;vertical-align:middle}
+        .expert-name{font-weight:700;font-size:1.15em;color:var(--text);margin-bottom:2px}
+        .expert-email{font-size:0.85em;color:var(--text-muted);margin-bottom:12px}
+        .role-badge{display:inline-block;font-size:0.7em;text-transform:uppercase;letter-spacing:0.08em;color:var(--accent-2);border:1px solid rgba(139,92,246,0.3);border-radius:4px;padding:2px 8px;margin-left:8px;vertical-align:middle}
         .bar-chart{width:100%;margin:10px 0}
         .bar-chart svg{width:100%;height:24px;border-radius:4px;overflow:hidden}
         .expert-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}
-        .stat{text-align:center;padding:8px;background:#0a0a0f;border-radius:6px;border:1px solid #1e293b}
-        .stat-value{font-weight:700;font-size:1.05em;color:#06b6d4}
-        .stat-label{font-size:0.78em;color:#64748b}
+        .stat{text-align:center;padding:8px;background:var(--bg);border-radius:6px;border:1px solid var(--border)}
+        .stat-value{font-weight:700;font-size:1.05em;color:var(--accent)}
+        .stat-label{font-size:0.78em;color:var(--text-muted)}
         .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
-        .chip{font-size:0.75em;padding:3px 10px;background:#0a0a0f;border:1px solid #1e293b;border-radius:999px;color:#64748b}
+        .chip{font-size:0.75em;padding:3px 10px;background:var(--bg);border:1px solid var(--border);border-radius:999px;color:var(--text-muted)}
         .mgmt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(350px,1fr));gap:20px}
-        .mgmt-card{background:#12121a;border:1px solid #1e293b;border-radius:8px;padding:20px;border-top:6px solid}
-        .mgmt-card h3{color:#e2e8f0;margin-bottom:6px;font-size:1.1em}
-        .mgmt-meta{font-size:0.85em;color:#64748b;margin-bottom:10px}
+        .mgmt-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px}
+        .mgmt-card h3{color:var(--text);margin-bottom:6px;font-size:1.1em}
+        .mgmt-meta{font-size:0.85em;color:var(--text-muted);margin-bottom:10px}
+        .mgmt-cat{font-weight:700;letter-spacing:0.03em}
         .mgmt-meta .dots{margin-left:6px}
-        .mgmt-card p{color:#94a3b8;font-size:0.95em;margin-bottom:12px}
-        .action-box{background:#0a0a0f;border:1px solid #1e293b;border-radius:6px;padding:14px;margin-top:10px}
-        .action-box .label{font-size:0.8em;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;margin-bottom:8px}
+        .mgmt-card p{color:var(--text-soft);font-size:0.95em;margin-bottom:12px}
+        .action-box{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:14px;margin-top:10px}
+        .action-box .label{font-size:0.8em;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin-bottom:8px}
         .action-box ul{list-style:none;padding:0}
-        .action-box li{padding:4px 0;color:#94a3b8;font-size:0.9em}
-        .action-box li::before{content:'›';color:#06b6d4;margin-right:8px;font-weight:bold}
-        .impact{font-size:0.85em;color:#64748b;margin-top:10px}
-        .impact strong{color:#e2e8f0}
-        .insight-item{display:flex;align-items:baseline;gap:14px;padding:14px 0;border-bottom:1px solid #1e293b}
+        .action-box li{padding:4px 0;color:var(--text-soft);font-size:0.9em}
+        .action-box li::before{content:'›';color:var(--accent);margin-right:8px;font-weight:bold}
+        .impact{font-size:0.85em;color:var(--text-muted);margin-top:10px}
+        .impact strong{color:var(--text)}
+        .insight-item{display:flex;align-items:baseline;gap:14px;padding:14px 0;border-bottom:1px solid var(--border)}
         .insight-item:last-child{border-bottom:none}
-        .insight-num{font-size:1.3em;font-weight:800;color:#06b6d4;min-width:28px;text-align:right}
-        .insight-text{color:#94a3b8;font-size:0.95em}
-        .footer{text-align:center;padding:24px 0;margin-top:20px;font-family:'SF Mono',SFMono-Regular,Consolas,monospace;font-size:0.8em;color:#64748b;border-top:1px solid #1e293b}
-        @media print{body{background:#fff;color:#1a1a1a}.header{background:#fff;border-color:#ddd}.header h1{color:#1a1a1a;text-shadow:none}.header .repo{color:#0891b2}.section{background:#fff;border-color:#ddd;box-shadow:none}.expert-card{background:#fff;border-color:#ddd;opacity:1!important;box-shadow:none!important}.stat{background:#f5f5f5;border-color:#ddd}.stat-value{color:#0891b2}.chip{background:#f5f5f5;border-color:#ddd;color:#555}.mgmt-card{background:#fff;border-color:#ddd}.action-box{background:#f5f5f5;border-color:#ddd}.footer{color:#999;border-color:#ddd}.insight-text{color:#444}.pill{border-color:#ddd;color:#666}}
+        .insight-num{font-size:1.3em;font-weight:800;color:var(--accent);min-width:28px;text-align:right}
+        .insight-text{color:var(--text-soft);font-size:0.95em}
+        .footer{text-align:center;padding:24px 0;margin-top:20px;font-family:'SF Mono',SFMono-Regular,Consolas,monospace;font-size:0.8em;color:var(--text-muted);border-top:1px solid var(--border)}
+        @media print{.theme-toggle{display:none}body{background:#fff;color:#1a1a1a}.header{background:#fff;border-color:#ddd}.header h1{color:#1a1a1a;text-shadow:none}.header .repo{color:#0891b2}.section{background:#fff;border-color:#ddd;box-shadow:none}.expert-card{background:#fff;border-color:#ddd;opacity:1!important;box-shadow:none!important}.stat{background:#f5f5f5;border-color:#ddd}.stat-value{color:#0891b2}.chip{background:#f5f5f5;border-color:#ddd;color:#555}.mgmt-card{background:#fff;border-color:#ddd}.action-box{background:#f5f5f5;border-color:#ddd}.footer{color:#999;border-color:#ddd}.insight-text{color:#444}.pill{border-color:#ddd;color:#666}}
     </style>
 </head>
 <body>
+    <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch between light and dark theme" title="Switch between light and dark theme">🌓</button>
     <div class="header">
         <h1>TEAM X-RAY</h1>
-        <div class="repo">${analysis.repository}</div>
+        <div class="repo">${escapeHtml(analysis.repository)}</div>
         <div class="stats">
             <span class="pill">Generated <strong>${this.safeFormatDate(analysis.generatedAt)}</strong></span>
-            <span class="pill"><strong>${analysis.totalFiles}</strong> files scanned</span>
+            <span class="pill"><strong>${totalFiles}</strong> files scanned</span>
             <span class="pill"><strong>${analysis.expertProfiles.filter((e: any) => !e.isBot).length}</strong> humans · <strong>${analysis.expertProfiles.filter((e: any) => e.isBot).length}</strong> agents</span>
-            ${analysis.aiAttribution?.assistedCommits ? `<span class="pill">🤝 <strong>${Math.round(analysis.aiAttribution.assistedShare * 100)}%</strong> AI-assisted commits</span>` : ''}
+            ${assistedCommits > 0 ? `<span class="pill">🤝 <strong>${Math.round(assistedShare * 100)}%</strong> AI-assisted commits</span>` : ''}
         </div>
     </div>
 
@@ -617,18 +630,26 @@ export class ExpertiseWebviewProvider {
         <h2><span class="accent">▸</span> Expert Profiles</h2>
         <div class="expert-grid">
             ${analysis.expertProfiles.map((expert: any) => {
-                const barColor = expert.isBot ? '#374151' : (expert.expertise >= 20 ? '#06b6d4' : '#374151');
-                const cardClass = expert.isBot ? 'bot' : (expert.expertise >= 60 ? 'high' : expert.expertise < 20 ? 'low' : '');
+                const expertise = normalizePercentage(expert.expertise);
+                const contributions = normalizeCount(expert.contributions);
+                const barColor = expert.isBot ? '#374151' : (expertise >= 20 ? '#06b6d4' : '#374151');
+                const cardClass = expert.isBot ? 'bot' : (expertise >= 60 ? 'high' : expertise < 20 ? 'low' : '');
+                const expertName = escapeHtml(expert.name);
+                const expertEmail = escapeHtml(expert.email);
+                const teamRole = expert.teamRole ? `<span class="role-badge">${escapeHtml(expert.teamRole)}</span>` : '';
+                const specializations = (expert.specializations || [])
+                    .map((specialization: string) => `<span class="chip">${escapeHtml(specialization)}</span>`)
+                    .join('');
                 return `<div class="expert-card ${cardClass}">
-                    <div class="expert-name">${expert.isBot ? '🤖 ' : expert.contributorKind === 'ai-assisted-human' ? '🤝 ' : ''}${expert.name}${expert.teamRole ? `<span class="role-badge">${expert.teamRole}</span>` : ''}</div>
-                    <div class="expert-email">${expert.email}</div>
-                    <div class="bar-chart"><svg viewBox="0 0 400 24"><rect width="400" height="24" fill="#1e293b"/><rect width="${expert.expertise * 4}" height="24" fill="${barColor}"/><text x="${Math.max(expert.expertise * 4 - 8, 30)}" y="17" text-anchor="end" fill="#fff" font-size="12" font-weight="bold" font-family="sans-serif">${expert.expertise}%</text></svg></div>
+                    <div class="expert-name">${expert.isBot ? '🤖 ' : expert.contributorKind === 'ai-assisted-human' ? '🤝 ' : ''}${expertName}${teamRole}</div>
+                    <div class="expert-email">${expertEmail}</div>
+                    <div class="bar-chart"><svg viewBox="0 0 400 24"><rect width="400" height="24" fill="var(--border)"/><rect width="${expertise * 4}" height="24" fill="${barColor}"/><text x="${Math.max(expertise * 4 - 8, 30)}" y="17" text-anchor="end" fill="#fff" font-size="12" font-weight="bold" font-family="sans-serif">${expertise}%</text></svg></div>
                     <div class="expert-stats">
-                        <div class="stat"><div class="stat-value">${expert.expertise}%</div><div class="stat-label">Expertise</div></div>
-                        <div class="stat"><div class="stat-value">${expert.contributions}</div><div class="stat-label">Commits</div></div>
+                        <div class="stat"><div class="stat-value">${expertise}%</div><div class="stat-label">Expertise</div></div>
+                        <div class="stat"><div class="stat-value">${contributions}</div><div class="stat-label">Commits</div></div>
                         <div class="stat"><div class="stat-value">${this.calculateDaysAgo(expert.lastCommit)}</div><div class="stat-label">Days Ago</div></div>
                     </div>
-                    ${expert.specializations?.length ? `<div class="chips">${expert.specializations.map((s: string) => `<span class="chip">${s}</span>`).join('')}</div>` : ''}
+                    ${expert.specializations?.length ? `<div class="chips">${specializations}</div>` : ''}
                 </div>`;
             }).join('')}
         </div>
@@ -639,15 +660,15 @@ export class ExpertiseWebviewProvider {
             <h2><span class="accent">▸</span> Management Insights</h2>
             <div class="mgmt-grid">
                 ${analysis.managementInsights.map((insight: any) => `
-                    <div class="mgmt-card" style="border-top-color:${categoryColors[insight.category] || '#06b6d4'}">
-                        <h3>${insight.title}</h3>
-                        <div class="mgmt-meta">${insight.category}<span class="dots" style="color:${categoryColors[insight.category] || '#64748b'}"> ${priorityDots[insight.priority] || '●○○'}</span></div>
-                        <p>${insight.description}</p>
+                    <div class="mgmt-card">
+                        <h3>${escapeHtml(insight.title)}</h3>
+                        <div class="mgmt-meta"><span class="mgmt-cat" style="color:${categoryColors[insight.category] || 'var(--accent)'}">${escapeHtml(insight.category)}</span><span class="dots" style="color:${categoryColors[insight.category] || '#64748b'}"> ${priorityDots[insight.priority] || '●○○'}</span></div>
+                        <p>${escapeHtml(insight.description)}</p>
                         <div class="action-box">
-                            <div class="label">Action Items · ${insight.timeline}</div>
-                            <ul>${insight.actionItems.map((action: string) => `<li>${action}</li>`).join('')}</ul>
+                            <div class="label">Action Items · ${escapeHtml(insight.timeline)}</div>
+                            <ul>${insight.actionItems.map((action: string) => `<li>${escapeHtml(action)}</li>`).join('')}</ul>
                         </div>
-                        <div class="impact"><strong>Impact:</strong> ${insight.impact}</div>
+                        <div class="impact"><strong>Impact:</strong> ${escapeHtml(insight.impact)}</div>
                     </div>
                 `).join('')}
             </div>
@@ -656,15 +677,59 @@ export class ExpertiseWebviewProvider {
 
     <div class="section">
         <h2><span class="accent">▸</span> Key Insights</h2>
-        ${analysis.insights.map((insight: any, i: number) => `
-            <div class="insight-item">
-                <div class="insight-num">${i + 1}</div>
-                <div class="insight-text">${typeof insight === 'string' ? insight : insight.description}</div>
-            </div>
-        `).join('')}
+        ${analysis.insights.map((insight: any, i: number) => {
+            const text = typeof insight === 'string' ? insight : insight.description;
+            return `
+                <div class="insight-item">
+                    <div class="insight-num">${i + 1}</div>
+                    <div class="insight-text">${escapeHtml(text)}</div>
+                </div>
+            `;
+        }).join('')}
     </div>
 
     <div class="footer">Generated by Team X-Ray · ${this.safeFormatDate(analysis.generatedAt)}</div>
+    <script>
+        (function () {
+            var root = document.documentElement;
+            var key = 'teamxray-theme';
+            var saved = localStorage.getItem(key);
+            var button = document.getElementById('theme-toggle');
+
+            function isLightTheme() {
+                return root.classList.contains('theme-light') ||
+                    (!root.classList.contains('theme-dark') &&
+                        window.matchMedia('(prefers-color-scheme: light)').matches);
+            }
+
+            function updateThemeToggle() {
+                if (!button) { return; }
+                var lightTheme = isLightTheme();
+                var label = lightTheme ? 'Switch to dark theme' : 'Switch to light theme';
+                button.textContent = lightTheme ? '🌙' : '☀️';
+                button.setAttribute('aria-label', label);
+                button.setAttribute('title', label);
+            }
+
+            function applyTheme(theme, persist) {
+                var preference = theme === 'light' || theme === 'dark' ? theme : '';
+                root.classList.remove('theme-light', 'theme-dark');
+                if (preference) {
+                    root.classList.add('theme-' + preference);
+                }
+                if (persist) {
+                    localStorage.setItem(key, preference);
+                }
+                updateThemeToggle();
+            }
+
+            applyTheme(saved, false);
+            if (!button) { return; }
+            button.addEventListener('click', function () {
+                applyTheme(isLightTheme() ? 'dark' : 'light', true);
+            });
+        })();
+    </script>
 </body>
 </html>`;
     }
@@ -679,16 +744,16 @@ export class ExpertiseWebviewProvider {
         const expertsHeader = 'Name,Email,Expertise %,Contributions,Last Commit,Specializations,Team Role,Communication Style,Workload,Collaboration Style\n';
         const expertsRows = analysis.expertProfiles.map((expert: any) => {
             return [
-                `"${expert.name}"`,
-                `"${expert.email}"`,
-                expert.expertise,
-                expert.contributions,
-                `"${this.safeFormatDate(expert.lastCommit)}"`,
-                `"${(expert.specializations || []).join('; ')}"`,
-                `"${expert.teamRole || ''}"`,
-                `"${expert.communicationStyle || ''}"`,
-                `"${expert.workloadIndicator || ''}"`,
-                `"${expert.collaborationStyle || ''}"`
+                escapeCsvCell(expert.name),
+                escapeCsvCell(expert.email),
+                normalizePercentage(expert.expertise),
+                normalizeCount(expert.contributions),
+                escapeCsvCell(this.safeFormatDate(expert.lastCommit)),
+                escapeCsvCell((expert.specializations || []).join('; ')),
+                escapeCsvCell(expert.teamRole || ''),
+                escapeCsvCell(expert.communicationStyle || ''),
+                escapeCsvCell(expert.workloadIndicator || ''),
+                escapeCsvCell(expert.collaborationStyle || '')
             ].join(',');
         }).join('\n');
         
@@ -697,11 +762,11 @@ export class ExpertiseWebviewProvider {
         const filesRows = analysis.fileExpertise.map((file: any) => {
             const primaryExpert = file.experts[0];
             return [
-                `"${file.fileName}"`,
-                `"${file.filePath}"`,
+                escapeCsvCell(file.fileName),
+                escapeCsvCell(file.filePath),
                 file.experts.length,
-                `"${primaryExpert?.name || 'Unknown'}"`,
-                file.changeFrequency
+                escapeCsvCell(primaryExpert?.name || 'Unknown'),
+                normalizeCount(file.changeFrequency)
             ].join(',');
         }).join('\n');
 
@@ -715,13 +780,13 @@ export class ExpertiseWebviewProvider {
             const insightsHeader = 'Category,Priority,Title,Description,Timeline,Impact,Action Items\n';
             const insightsRows = analysis.managementInsights.map((insight: any) => {
                 return [
-                    `"${insight.category}"`,
-                    `"${insight.priority}"`,
-                    `"${insight.title}"`,
-                    `"${insight.description}"`,
-                    `"${insight.timeline}"`,
-                    `"${insight.impact}"`,
-                    `"${insight.actionItems.join('; ')}"`
+                    escapeCsvCell(insight.category),
+                    escapeCsvCell(insight.priority),
+                    escapeCsvCell(insight.title),
+                    escapeCsvCell(insight.description),
+                    escapeCsvCell(insight.timeline),
+                    escapeCsvCell(insight.impact),
+                    escapeCsvCell(insight.actionItems.join('; '))
                 ].join(',');
             }).join('\n');
             
@@ -834,13 +899,16 @@ export class ExpertiseWebviewProvider {
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource} 'nonce-${nonce}'; script-src 'nonce-${nonce}'; img-src ${cspSource}; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';">
     <title>Team X-Ray Streaming Analysis</title>
     <style nonce="${nonce}">
+:root{--bg:#0a0a0f;--surface:#12121a;--border:#1e293b;--border-hover:#2d3748;--text:#e2e8f0;--text-soft:#94a3b8;--text-muted:#64748b;--text-faint:#475569;--accent:#06b6d4;--accent-2:#8b5cf6;--header-bg:#0a0a0f;--h1-color:#e2e8f0;--h1-glow:0 0 20px rgba(6,182,212,0.4),0 0 40px rgba(6,182,212,0.15);--scan:rgba(6,182,212,0.03)}
+body.vscode-light,body.vscode-high-contrast-light{--bg:#eef1f5;--surface:#ffffff;--border:#d0d7de;--border-hover:#afb8c1;--text:#1f2328;--text-soft:#3d444d;--text-muted:#59636e;--text-faint:#818b98;--accent:#0e7490;--accent-2:#7c3aed;--header-bg:#ffffff;--h1-color:#0e7490;--h1-glow:none;--scan:rgba(8,145,178,0.06)}
+
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
             font-size: 14px;
             line-height: 1.6;
-            color: #e2e8f0;
-            background: #0a0a0f;
+            color: var(--text);
+            background: var(--bg);
             padding: 0;
             margin: 0;
             min-height: 100vh;
@@ -851,9 +919,9 @@ export class ExpertiseWebviewProvider {
             padding: 32px 24px;
         }
         .header {
-            background: #0a0a0f;
+            background: var(--bg);
             padding: 48px 40px;
-            border: 1px solid #1e293b;
+            border: 1px solid var(--border);
             border-radius: 12px;
             text-align: center;
             margin-bottom: 30px;
@@ -862,15 +930,15 @@ export class ExpertiseWebviewProvider {
             font-size: 32px;
             font-weight: 700;
             margin-bottom: 16px;
-            color: #06b6d4;
+            color: var(--accent);
         }
         .header p {
             font-size: 16px;
-            color: #94a3b8;
+            color: var(--text-soft);
         }
         .stream-area {
             background: #0f172a;
-            border: 1px solid #1e293b;
+            border: 1px solid var(--border);
             border-radius: 8px;
             padding: 20px;
             font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
@@ -888,8 +956,8 @@ export class ExpertiseWebviewProvider {
             display: inline-block;
             width: 16px;
             height: 16px;
-            border: 2px solid #1e293b;
-            border-top-color: #06b6d4;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent);
             border-radius: 50%;
             animation: spin 0.6s linear infinite;
             margin-left: 8px;
@@ -898,7 +966,7 @@ export class ExpertiseWebviewProvider {
             to { transform: rotate(360deg); }
         }
         .status {
-            color: #94a3b8;
+            color: var(--text-soft);
             font-size: 12px;
             margin-top: 12px;
             display: flex;
@@ -910,7 +978,7 @@ export class ExpertiseWebviewProvider {
     <div class="container">
         <div class="header">
             <h1>🔬 Team X-Ray</h1>
-            <p>Analyzing repository: <strong>${this.escapeHtmlAttribute(repositoryName)}</strong></p>
+            <p>Analyzing repository: <strong>${escapeHtml(repositoryName)}</strong></p>
         </div>
 
         <div class="stream-area" id="streamOutput"></div>
@@ -927,8 +995,24 @@ export class ExpertiseWebviewProvider {
         // literally. Only bound the length here; escaping would double-encode the
         // stream because the server already normalized it (e.g. "<" -> "&amp;lt;").
         const toDisplayText = (value) => (typeof value === 'string' ? value.slice(0, 20000) : '');
-        const appendStreamText = (element, value) => {
-            element.appendChild(document.createTextNode(toDisplayText(value)));
+        const pendingStreamChunks = [];
+        let streamFlushScheduled = false;
+        const flushStreamText = () => {
+            streamFlushScheduled = false;
+            if (pendingStreamChunks.length === 0) {
+                return;
+            }
+
+            streamOutput.appendChild(document.createTextNode(pendingStreamChunks.join('')));
+            pendingStreamChunks.length = 0;
+            streamOutput.scrollTop = streamOutput.scrollHeight;
+        };
+        const appendStreamText = (value) => {
+            pendingStreamChunks.push(toDisplayText(value));
+            if (!streamFlushScheduled) {
+                streamFlushScheduled = true;
+                requestAnimationFrame(flushStreamText);
+            }
         };
         const setStreamText = (element, value) => {
             element.replaceChildren(document.createTextNode(toDisplayText(value)));
@@ -941,15 +1025,14 @@ export class ExpertiseWebviewProvider {
             }
             
             if (message.type === 'chunk') {
-                appendStreamText(streamOutput, message.content);
-                streamOutput.scrollTop = streamOutput.scrollHeight;
+                appendStreamText(message.content);
             } else if (message.type === 'status') {
                 setStreamText(statusText, message.text);
             } else if (message.type === 'error') {
                 const errorText = toDisplayText(message.text);
                 setStreamText(statusText, '❌ Error: ' + errorText);
                 streamOutput.style.color = '#ef4444';
-                appendStreamText(streamOutput, '\\n\\nAnalysis failed: ' + errorText);
+                appendStreamText('\\n\\nAnalysis failed: ' + errorText);
             }
         });
     </script>
@@ -962,6 +1045,10 @@ export class ExpertiseWebviewProvider {
      */
     private getWebviewContent(analysis: ExpertiseAnalysis, cspSource: string): string {
         const nonce = this.generateNonce();
+        const filesByExpert = indexFilesByExpert(analysis.fileExpertise);
+        const totalFiles = normalizeCount(analysis.totalFiles);
+        const assistedCommits = normalizeCount(analysis.aiAttribution?.assistedCommits);
+        const assistedShare = normalizeRatio(analysis.aiAttribution?.assistedShare);
         return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -970,40 +1057,48 @@ export class ExpertiseWebviewProvider {
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${cspSource} https://github.com https://avatars.githubusercontent.com data:;">
     <title>Team X-Ray Analysis</title>
     <style>
+:root{--bg:#0a0a0f;--surface:#12121a;--border:#1e293b;--border-hover:#2d3748;--text:#e2e8f0;--text-soft:#94a3b8;--text-muted:#64748b;--text-faint:#475569;--accent:#06b6d4;--accent-2:#8b5cf6;--header-bg:#0a0a0f;--h1-color:#e2e8f0;--h1-glow:0 0 20px rgba(6,182,212,0.4),0 0 40px rgba(6,182,212,0.15);--scan:rgba(6,182,212,0.03)}
+body.vscode-light,body.vscode-high-contrast-light{--bg:#eef1f5;--surface:#ffffff;--border:#d0d7de;--border-hover:#afb8c1;--text:#1f2328;--text-soft:#3d444d;--text-muted:#59636e;--text-faint:#818b98;--accent:#0e7490;--accent-2:#7c3aed;--header-bg:#ffffff;--h1-color:#0e7490;--h1-glow:none;--scan:rgba(8,145,178,0.06)}
+body.theme-light{--bg:#eef1f5;--surface:#ffffff;--border:#d0d7de;--border-hover:#afb8c1;--text:#1f2328;--text-soft:#3d444d;--text-muted:#59636e;--text-faint:#818b98;--accent:#0e7490;--accent-2:#7c3aed;--header-bg:#ffffff;--h1-color:#0e7490;--h1-glow:none;--scan:rgba(8,145,178,0.06)}
+body.theme-dark{--bg:#0a0a0f;--surface:#12121a;--border:#1e293b;--border-hover:#2d3748;--text:#e2e8f0;--text-soft:#94a3b8;--text-muted:#64748b;--text-faint:#475569;--accent:#06b6d4;--accent-2:#8b5cf6;--header-bg:#0a0a0f;--h1-color:#e2e8f0;--h1-glow:0 0 20px rgba(6,182,212,0.4),0 0 40px rgba(6,182,212,0.15);--scan:rgba(6,182,212,0.03)}
+.theme-toggle{display:grid;width:40px;height:40px;place-items:center;margin:0 0 16px auto;padding:0;border-radius:999px;border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit;font-size:1.1em;cursor:pointer;transition:border-color .2s,background .2s,color .2s}
+.theme-toggle:hover{border-color:var(--accent);color:var(--accent)}
+.theme-toggle:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px}
+
         *{box-sizing:border-box;margin:0;padding:0}
-        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Roboto',sans-serif;font-size:14px;line-height:1.6;color:#e2e8f0;background:#0a0a0f;padding:0;margin:0;min-height:100vh}
+        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Roboto',sans-serif;font-size:14px;line-height:1.6;color:var(--text);background:var(--bg);padding:0;margin:0;min-height:100vh}
         .container{max-width:1200px;margin:0 auto;padding:32px 24px}
 
         /* Header with scan-line pattern */
-        .header{background:#0a0a0f;background-image:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(6,182,212,0.03) 2px,rgba(6,182,212,0.03) 4px);padding:48px 40px;border:1px solid #1e293b;border-radius:12px;text-align:center;margin-bottom:30px}
-        .header h1{font-size:2.5em;font-weight:800;letter-spacing:0.08em;color:#e2e8f0;text-shadow:0 0 20px rgba(6,182,212,0.4),0 0 40px rgba(6,182,212,0.15);margin-bottom:8px}
-        .header .repo{font-family:'SF Mono',SFMono-Regular,Consolas,'Liberation Mono',Menlo,monospace;color:#06b6d4;font-size:1.1em;margin-bottom:16px}
+        .header{background:var(--header-bg);background-image:repeating-linear-gradient(0deg,transparent,transparent 2px,var(--scan) 2px,var(--scan) 4px);padding:48px 40px;border:1px solid var(--border);border-radius:12px;text-align:center;margin-bottom:30px}
+        .header h1{font-size:2.5em;font-weight:800;letter-spacing:0.08em;color:var(--h1-color);text-shadow:var(--h1-glow);margin-bottom:8px}
+        .header .repo{font-family:'SF Mono',SFMono-Regular,Consolas,'Liberation Mono',Menlo,monospace;color:var(--accent);font-size:1.1em;margin-bottom:16px}
         .header .stats{display:flex;justify-content:center;gap:12px;flex-wrap:wrap}
-        .pill{display:inline-block;padding:4px 14px;border:1px solid #1e293b;border-radius:999px;font-size:0.85em;color:#64748b}
-        .pill strong{color:#e2e8f0}
+        .pill{display:inline-block;padding:4px 14px;border:1px solid var(--border);border-radius:999px;font-size:0.85em;color:var(--text-muted)}
+        .pill strong{color:var(--text)}
 
         /* Sections */
-        .section{background:#12121a;border:1px solid #1e293b;border-radius:12px;padding:30px;margin-bottom:30px}
-        .section h2{color:#e2e8f0;font-size:1.4em;border-bottom:2px solid #1e293b;padding-bottom:10px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;cursor:default}
+        .section{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:30px;margin-bottom:30px}
+        .section h2{color:var(--text);font-size:1.4em;border-bottom:2px solid var(--border);padding-bottom:10px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;cursor:default}
         .section h2.collapsible-header{cursor:pointer}
-        .section h2 .accent{color:#06b6d4}
+        .section h2 .accent{color:var(--accent)}
 
         /* Expert grid & cards */
         .experts-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px}
-        .expert-card{background:#12121a;border:1px solid #1e293b;border-radius:8px;padding:20px;transition:box-shadow 0.2s,border-color 0.2s;display:flex;flex-direction:column;position:relative;overflow:hidden}
-        .expert-card.high{border-left:3px solid #06b6d4;box-shadow:inset 4px 0 12px -4px rgba(6,182,212,0.15)}
+        .expert-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;transition:box-shadow 0.2s,border-color 0.2s;display:flex;flex-direction:column;position:relative;overflow:hidden}
+        .expert-card.high{border-color:var(--accent)}
         .expert-card.low{opacity:0.6}
         .expert-card.bot{opacity:0.65}
-        .expert-card:hover{border-color:#1e293b}
+        .expert-card:hover{border-color:var(--border)}
 
         .expert-header{display:flex;align-items:center;margin-bottom:12px}
         .expert-avatar{width:40px;height:40px;border-radius:8px;margin-right:12px;overflow:hidden;position:relative;flex-shrink:0}
         .expert-avatar img{width:100%;height:100%;object-fit:cover;position:relative;z-index:2}
-        .expert-avatar-fallback{width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#06b6d4,#8b5cf6);color:white;font-size:14px;font-weight:600;position:absolute;top:0;left:0;z-index:1}
+        .expert-avatar-fallback{width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:white;font-size:14px;font-weight:600;position:absolute;top:0;left:0;z-index:1}
         .expert-info{flex:1;min-width:0}
-        .expert-info h3{margin:0 0 2px 0;font-size:1.15em;font-weight:700;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-        .role-badge{display:inline-block;font-size:0.7em;text-transform:uppercase;letter-spacing:0.08em;color:#8b5cf6;border:1px solid rgba(139,92,246,0.3);border-radius:4px;padding:2px 8px;margin-left:8px;vertical-align:middle}
-        .expert-email{font-size:0.85em;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .expert-info h3{margin:0 0 2px 0;font-size:1.15em;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .role-badge{display:inline-block;font-size:0.7em;text-transform:uppercase;letter-spacing:0.08em;color:var(--accent-2);border:1px solid rgba(139,92,246,0.3);border-radius:4px;padding:2px 8px;margin-left:8px;vertical-align:middle}
+        .expert-email{font-size:0.85em;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
         /* SVG bar chart */
         .bar-chart{width:100%;margin:10px 0}
@@ -1011,45 +1106,42 @@ export class ExpertiseWebviewProvider {
 
         /* Stats row */
         .expert-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}
-        .stat{text-align:center;padding:8px;background:#0a0a0f;border-radius:6px;border:1px solid #1e293b}
-        .stat-value{font-weight:700;font-size:1.05em;color:#06b6d4;display:block}
-        .stat-label{font-size:0.78em;color:#64748b;text-transform:uppercase;letter-spacing:0.5px}
+        .stat{text-align:center;padding:8px;background:var(--bg);border-radius:6px;border:1px solid var(--border)}
+        .stat-value{font-weight:700;font-size:1.05em;color:var(--accent);display:block}
+        .stat-label{font-size:0.78em;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px}
 
         /* Specialization chips */
         .chips,.specializations{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
-        .chip,.specialization-tag{font-size:0.75em;padding:3px 10px;background:#0a0a0f;border:1px solid #1e293b;border-radius:999px;color:#64748b}
+        .chip,.specialization-tag{font-size:0.75em;padding:3px 10px;background:var(--bg);border:1px solid var(--border);border-radius:999px;color:var(--text-muted)}
 
         /* Expert file list */
         .expert-files{margin:12px 0;border-radius:6px;overflow:hidden}
-        .expert-files-header{padding:8px 12px;display:flex;justify-content:space-between;align-items:center;color:#e2e8f0;font-size:13px;background:#0a0a0f;border:1px solid #1e293b;border-radius:6px;cursor:pointer}
-        .expert-files-header:hover{background:#12121a}
-        .expert-files-content{max-height:500px;opacity:1;transition:all 0.3s ease;background:#0a0a0f}
-        .expert-files-content.collapsed{max-height:0;opacity:0;overflow:hidden}
-        .expert-file-item{padding:8px 12px;border-bottom:1px solid #1e293b;display:flex;justify-content:space-between;align-items:center;font-size:12px;cursor:pointer}
+        .expert-files-header{padding:8px 12px;display:flex;justify-content:space-between;align-items:center;color:var(--text);font-size:13px;background:var(--bg);border:1px solid var(--border);border-radius:6px;cursor:pointer}
+        .expert-files-header:hover{background:var(--surface)}
+        .expert-files-content{display:grid;grid-template-rows:1fr;opacity:1;transition:grid-template-rows 0.3s ease,opacity 0.3s ease;background:var(--bg)}
+        .expert-files-content.collapsed{grid-template-rows:0fr;opacity:0}
+        .expert-files-content>.ef-inner{overflow:hidden;min-height:0}
+        .expert-file-item{padding:8px 12px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:12px;cursor:pointer}
         .expert-file-item:hover{background:rgba(6,182,212,0.05)}
-        .expert-file-item .file-name{color:#06b6d4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70%}
-        .expert-file-item .file-changes{color:#64748b;font-size:11px}
-        .expert-file-item.more-files{text-align:center;color:#64748b;font-size:11px;cursor:default}
+        .expert-file-item .file-name{color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70%}
+        .expert-file-item .file-changes{color:var(--text-muted);font-size:11px}
+        .expert-file-item.more-files{text-align:center;color:var(--text-muted);font-size:11px;cursor:default}
 
         /* Expert action buttons */
         .expert-actions{display:flex;gap:8px;margin-top:auto}
-        .expert-button{flex:1;padding:8px 12px;font-size:12px;border-radius:6px;background:transparent;border:1px solid #1e293b;color:#e2e8f0;cursor:pointer;transition:all 0.2s ease;display:flex;align-items:center;justify-content:center;gap:6px}
-        .expert-button:hover{background:rgba(6,182,212,0.1);border-color:#06b6d4}
-        .expert-button.primary{background:rgba(6,182,212,0.15);border:1px solid #06b6d4;color:#06b6d4}
+        .expert-button{flex:1;padding:8px 12px;font-size:12px;border-radius:6px;background:transparent;border:1px solid var(--border);color:var(--text);cursor:pointer;transition:all 0.2s ease;display:flex;align-items:center;justify-content:center;gap:6px}
+        .expert-button:hover{background:rgba(6,182,212,0.1);border-color:var(--accent)}
+        .expert-button.primary{background:rgba(6,182,212,0.15);border:1px solid var(--accent);color:var(--accent)}
         .expert-button.primary:hover{background:rgba(6,182,212,0.25)}
 
         /* Management Insights - used by renderManagementInsights() */
-        .management-empty,.health-empty{text-align:center;padding:48px 24px;color:#64748b}
+        .management-empty,.health-empty{text-align:center;padding:48px 24px;color:var(--text-muted)}
         .management-empty .empty-state-icon,.health-empty .empty-state-icon{font-size:48px;margin-bottom:16px;opacity:0.5}
         .management-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(350px,1fr));gap:20px;margin-bottom:24px}
-        .management-card{background:#12121a;border:1px solid #1e293b;border-radius:8px;padding:20px;border-top:6px solid #1e293b;transition:border-color 0.2s}
-        .management-card.risk{border-top-color:#ef4444}
-        .management-card.opportunity{border-top-color:#10b981}
-        .management-card.efficiency{border-top-color:#3b82f6}
-        .management-card.growth{border-top-color:#f59e0b}
-        .management-card:hover{border-color:#2d3748}
-        .management-card h4{color:#e2e8f0;margin:0 0 6px 0;font-size:1.1em}
-        .management-card p{color:#94a3b8;font-size:0.95em;margin-bottom:12px}
+        .management-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;transition:border-color 0.2s}
+        .management-card:hover{border-color:var(--border-hover)}
+        .management-card h4{color:var(--text);margin:0 0 6px 0;font-size:1.1em}
+        .management-card p{color:var(--text-soft);font-size:0.95em;margin-bottom:12px}
         .management-header{display:flex;justify-content:space-between;margin-bottom:12px}
         .management-category{padding:4px 8px;border-radius:4px;font-size:12px;font-weight:600;text-transform:uppercase}
         .management-category.risk{background:rgba(239,68,68,0.15);color:#ef4444}
@@ -1060,81 +1152,85 @@ export class ExpertiseWebviewProvider {
         .management-priority.high{color:#ef4444}
         .management-priority.medium{color:#f59e0b}
         .management-priority.low{color:#10b981}
-        .management-actions{background:#0a0a0f;border:1px solid #1e293b;border-radius:6px;padding:14px;margin:12px 0}
-        .management-actions h5{margin:0 0 8px 0;font-size:0.8em;text-transform:uppercase;letter-spacing:0.06em;color:#64748b}
+        .management-actions{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:14px;margin:12px 0}
+        .management-actions h5{margin:0 0 8px 0;font-size:0.8em;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted)}
         .management-actions ul{margin:0;padding:0;list-style:none}
-        .management-actions li{padding:4px 0;color:#94a3b8;font-size:0.9em}
-        .management-actions li::before{content:'›';color:#06b6d4;margin-right:8px;font-weight:bold}
-        .management-impact{font-size:0.85em;color:#64748b;margin-top:10px}
-        .management-impact strong{color:#e2e8f0}
+        .management-actions li{padding:4px 0;color:var(--text-soft);font-size:0.9em}
+        .management-actions li::before{content:'›';color:var(--accent);margin-right:8px;font-weight:bold}
+        .management-impact{font-size:0.85em;color:var(--text-muted);margin-top:10px}
+        .management-impact strong{color:var(--text)}
 
         /* Team Health Metrics - used by renderTeamHealthMetrics() */
         .health-metrics-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;margin-bottom:24px}
-        .health-metric-card{background:#12121a;border:1px solid #1e293b;border-radius:8px;padding:20px}
-        .health-metric-card h4{margin:0 0 16px 0;color:#e2e8f0;font-size:1.1em}
+        .health-metric-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px}
+        .health-metric-card h4{margin:0 0 16px 0;color:var(--text);font-size:1.1em}
         .risk-score{padding:8px 16px;border-radius:8px;font-weight:600;margin-bottom:16px;text-align:center}
         .risk-score.high-risk{background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3)}
         .risk-score.medium-risk{background:rgba(245,158,11,0.15);color:#f59e0b;border:1px solid rgba(245,158,11,0.3)}
         .risk-score.low-risk{background:rgba(16,185,129,0.15);color:#10b981;border:1px solid rgba(16,185,129,0.3)}
         .metric-details{margin-top:12px}
         .metric-item{margin-bottom:12px;padding:12px;border-radius:6px}
-        .metric-item.critical{background:rgba(239,68,68,0.08);border-left:3px solid #ef4444}
-        .metric-item.warning{background:rgba(245,158,11,0.08);border-left:3px solid #f59e0b}
-        .metric-item.positive{background:rgba(16,185,129,0.08);border-left:3px solid #10b981}
-        .metric-item strong{display:block;margin-bottom:8px;color:#e2e8f0}
-        .metric-item ul{margin:0;padding-left:16px;color:#94a3b8}
+        .metric-item.critical{background:rgba(239,68,68,0.08)}
+        .metric-item.warning{background:rgba(245,158,11,0.08)}
+        .metric-item.positive{background:rgba(16,185,129,0.08)}
+        .metric-item.critical strong{color:#ef4444}
+        .metric-item.warning strong{color:#f59e0b}
+        .metric-item.positive strong{color:#10b981}
+        .metric-item strong{display:block;margin-bottom:8px;color:var(--text)}
+        .metric-item ul{margin:0;padding-left:16px;color:var(--text-soft)}
         .collaboration-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:16px}
-        .collab-stat{background:#0a0a0f;border:1px solid #1e293b;padding:12px;border-radius:6px;text-align:center}
-        .collab-stat .stat-value{display:block;font-size:1.4em;font-weight:700;color:#06b6d4;margin-bottom:4px}
-        .collab-stat .stat-label{font-size:0.78em;color:#64748b}
+        .collab-stat{background:var(--bg);border:1px solid var(--border);padding:12px;border-radius:6px;text-align:center}
+        .collab-stat .stat-value{display:block;font-size:1.4em;font-weight:700;color:var(--accent);margin-bottom:4px}
+        .collab-stat .stat-label{font-size:0.78em;color:var(--text-muted)}
         .performance-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
-        .perf-stat{background:#0a0a0f;border:1px solid #1e293b;padding:12px;border-radius:6px}
-        .perf-stat .stat-label{display:block;font-size:0.78em;color:#64748b;margin-bottom:4px}
-        .perf-stat .stat-value{font-size:1.1em;font-weight:600;color:#06b6d4}
+        .perf-stat{background:var(--bg);border:1px solid var(--border);padding:12px;border-radius:6px}
+        .perf-stat .stat-label{display:block;font-size:0.78em;color:var(--text-muted);margin-bottom:4px}
+        .perf-stat .stat-value{font-size:1.1em;font-weight:600;color:var(--accent)}
 
         /* Key insights */
-        .insight-item{display:flex;align-items:baseline;gap:14px;padding:14px 0;border-bottom:1px solid #1e293b}
+        .insight-item{display:flex;align-items:baseline;gap:14px;padding:14px 0;border-bottom:1px solid var(--border)}
         .insight-item:last-child{border-bottom:none}
-        .insight-num{font-size:1.3em;font-weight:800;color:#06b6d4;min-width:28px;text-align:right}
-        .insight-text{color:#94a3b8;font-size:0.95em}
+        .insight-num{font-size:1.3em;font-weight:800;color:var(--accent);min-width:28px;text-align:right}
+        .insight-text{color:var(--text-soft);font-size:0.95em}
 
         /* Action buttons */
         .action-buttons{display:flex;gap:16px;justify-content:center;margin-top:32px;flex-wrap:wrap}
         .refresh-button,.export-button{border:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:all 0.2s ease;display:flex;align-items:center;justify-content:center;gap:8px;min-width:180px}
-        .refresh-button{background:rgba(6,182,212,0.15);border:1px solid #06b6d4;color:#06b6d4}
+        .refresh-button{background:rgba(6,182,212,0.15);border:1px solid var(--accent);color:var(--accent)}
         .refresh-button:hover{background:rgba(6,182,212,0.25)}
-        .export-button{background:rgba(139,92,246,0.15);border:1px solid #8b5cf6;color:#8b5cf6}
+        .export-button{background:rgba(139,92,246,0.15);border:1px solid var(--accent-2);color:var(--accent-2)}
         .export-button:hover{background:rgba(139,92,246,0.25)}
 
         /* Collapsible */
         .collapsible-header{cursor:pointer;user-select:none}
         .collapsible-header:hover{opacity:0.8}
-        .toggle-icon{font-size:14px;transition:transform 0.3s ease;margin-left:12px;color:#64748b}
+        .toggle-icon{font-size:14px;transition:transform 0.3s ease;margin-left:12px;color:var(--text-muted)}
         .toggle-icon.collapsed{transform:rotate(-90deg)}
-        .collapsible-content{overflow:hidden;transition:all 0.4s ease;max-height:5000px;opacity:1;margin-top:16px}
-        .collapsible-content.collapsed{max-height:0;opacity:0;margin:0}
+        .collapsible-content{display:grid;grid-template-rows:1fr;opacity:1;transition:grid-template-rows 0.4s ease,opacity 0.4s ease;margin-top:16px}
+        .collapsible-content.collapsed{grid-template-rows:0fr;opacity:0;margin-top:0}
+        .collapsible-content>.cc-inner{overflow:hidden;min-height:0}
 
         /* Footer */
-        .footer{text-align:center;padding:24px 0;margin-top:20px;font-family:'SF Mono',SFMono-Regular,Consolas,monospace;font-size:0.8em;color:#64748b;border-top:1px solid #1e293b}
+        .footer{text-align:center;padding:24px 0;margin-top:20px;font-family:'SF Mono',SFMono-Regular,Consolas,monospace;font-size:0.8em;color:var(--text-muted);border-top:1px solid var(--border)}
 
         /* Animations */
         @keyframes slideInUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
 
         /* Contributor table */
         .table-controls{margin-bottom:16px}
-        .filter-input{width:100%;padding:10px 14px;background:#0a0a0f;border:1px solid #1e293b;border-radius:8px;color:#e2e8f0;font-size:14px;outline:none;transition:border-color 0.2s}
-        .filter-input:focus{border-color:#06b6d4}
-        .filter-input::placeholder{color:#475569}
+        .filter-input{width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;outline:none;transition:border-color 0.2s}
+        .filter-input:focus{border-color:var(--accent)}
+        .filter-input::placeholder{color:var(--text-faint)}
         .contributor-table{width:100%;border-collapse:collapse;margin-bottom:24px}
-        .contributor-table th,.contributor-table td{padding:10px 14px;text-align:left;border-bottom:1px solid #1e293b;font-size:0.9em}
-        .contributor-table th{color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;font-size:0.78em;position:sticky;top:0;background:#12121a;z-index:1}
+        .contributor-table th,.contributor-table td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--border);font-size:0.9em}
+        .contributor-table th{color:var(--text-soft);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;font-size:0.78em;position:sticky;top:0;background:var(--surface);z-index:1}
         .contributor-table th.sortable{cursor:pointer;user-select:none}
-        .contributor-table th.sortable:hover{color:#06b6d4}
+        .contributor-table th.sortable:hover{color:var(--accent)}
         .contributor-table tbody tr:hover{background:rgba(6,182,212,0.05)}
-        .contributor-table .email-cell{color:#64748b;font-size:0.85em}
-        .sort-arrow{font-size:0.8em;margin-left:4px;color:#06b6d4}
-        .mini-bar{display:inline-block;width:60px;height:8px;background:#1e293b;border-radius:4px;vertical-align:middle;margin-right:6px;overflow:hidden}
-        .mini-bar-fill{height:100%;background:#06b6d4;border-radius:4px;transition:width 0.3s}
+        .contributor-table .email-cell{color:var(--text-muted);font-size:0.85em}
+        .sort-arrow{font-size:0.8em;margin-left:4px;color:var(--accent)}
+        .mini-bar{display:inline-block;width:60px;height:8px;background:var(--border);border-radius:4px;vertical-align:middle;margin-right:6px;overflow:hidden}
+        .mini-bar-fill{height:100%;background:var(--accent);border-radius:4px}
         .expert-card{animation:slideInUp 0.4s ease forwards}
         .expert-card:nth-child(1){animation-delay:0.05s}
         .expert-card:nth-child(2){animation-delay:0.1s}
@@ -1146,14 +1242,15 @@ export class ExpertiseWebviewProvider {
 </head>
 <body>
 <div class="container">
+    <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch between light and dark theme" title="Switch between light and dark theme">🌓</button>
     <div class="header">
         <h1>TEAM X-RAY</h1>
-        <div class="repo">${analysis.repository}</div>
+        <div class="repo">${escapeHtml(analysis.repository)}</div>
         <div class="stats">
             <span class="pill">Generated <strong>${this.safeFormatDate(analysis.generatedAt)}</strong></span>
-            <span class="pill"><strong>${analysis.totalFiles}</strong> files scanned</span>
+            <span class="pill"><strong>${totalFiles}</strong> files scanned</span>
             <span class="pill"><strong>${analysis.expertProfiles.filter((e: any) => !e.isBot).length}</strong> humans · <strong>${analysis.expertProfiles.filter((e: any) => e.isBot).length}</strong> agents</span>
-            ${analysis.aiAttribution?.assistedCommits ? `<span class="pill">🤝 <strong>${Math.round(analysis.aiAttribution.assistedShare * 100)}%</strong> AI-assisted commits</span>` : ''}
+            ${assistedCommits > 0 ? `<span class="pill">🤝 <strong>${Math.round(assistedShare * 100)}%</strong> AI-assisted commits</span>` : ''}
             <span class="pill"><strong>${analysis.insights.length}</strong> insights</span>
         </div>
     </div>
@@ -1164,6 +1261,7 @@ export class ExpertiseWebviewProvider {
             <span class="toggle-icon" id="expert-profiles-icon">▼</span>
         </h2>
         <div class="collapsible-content" id="expert-profiles-content">
+            <div class="cc-inner">
             <div class="table-controls">
                 <input type="text" id="contributor-filter" placeholder="Filter by name, email, or specialization..." class="filter-input">
             </div>
@@ -1179,77 +1277,95 @@ export class ExpertiseWebviewProvider {
                     </tr>
                 </thead>
                 <tbody>
-                    ${analysis.expertProfiles.map(expert => `
-                    <tr data-name="${(expert.name || '').replace(/"/g, '&quot;')}" data-email="${(expert.email || '').replace(/"/g, '&quot;')}" data-expertise="${expert.expertise}" data-contributions="${expert.contributions}" data-lastcommit="${this.toSafeIsoDate(expert.lastCommit)}" data-specs="${(expert.specializations || []).join(', ')}">
-                        <td>${expert.isBot ? '🤖 ' : expert.contributorKind === 'ai-assisted-human' ? '🤝 ' : ''}${expert.name}${expert.teamRole ? ` <span class="role-badge">${expert.teamRole}</span>` : ''}</td>
-                        <td class="email-cell">${expert.email}</td>
-                        <td><div class="mini-bar"><div class="mini-bar-fill" style="width:${expert.expertise}%"></div></div> ${expert.expertise}%</td>
-                        <td>${expert.contributions}</td>
-                        <td>${this.safeFormatDate(expert.lastCommit)}</td>
-                        <td><div class="chips">${(expert.specializations || []).map(s => `<span class="chip">${s}</span>`).join('')}</div></td>
-                    </tr>
-                    `).join('')}
+                    ${analysis.expertProfiles.map(expert => {
+                        const expertise = normalizePercentage(expert.expertise);
+                        const contributions = normalizeCount(expert.contributions);
+                        const expertName = escapeHtml(expert.name);
+                        const expertEmail = escapeHtml(expert.email);
+                        const teamRole = expert.teamRole ? ` <span class="role-badge">${escapeHtml(expert.teamRole)}</span>` : '';
+                        const specializations = (expert.specializations || [])
+                            .map(specialization => `<span class="chip">${escapeHtml(specialization)}</span>`)
+                            .join('');
+                        return `
+                        <tr data-name="${expertName}" data-email="${expertEmail}" data-expertise="${expertise}" data-contributions="${contributions}" data-lastcommit="${this.toSafeIsoDate(expert.lastCommit)}" data-specs="${escapeHtml((expert.specializations || []).join(', '))}">
+                            <td>${expert.isBot ? '🤖 ' : expert.contributorKind === 'ai-assisted-human' ? '🤝 ' : ''}${expertName}${teamRole}</td>
+                            <td class="email-cell">${expertEmail}</td>
+                            <td><div class="mini-bar"><div class="mini-bar-fill" style="width:${expertise}%"></div></div> ${expertise}%</td>
+                            <td>${contributions}</td>
+                            <td>${this.safeFormatDate(expert.lastCommit)}</td>
+                            <td><div class="chips">${specializations}</div></td>
+                        </tr>
+                        `;
+                    }).join('')}
                 </tbody>
             </table>
             <h2 style="margin-top:30px"><span class="accent">▸</span> Expert Cards</h2>
             <div class="experts-grid">
                 ${analysis.expertProfiles.map((expert, expertIndex) => {
-                    const barColor = expert.isBot ? '#374151' : (expert.expertise >= 20 ? '#06b6d4' : '#374151');
-                    const cardClass = expert.isBot ? 'bot' : (expert.expertise >= 60 ? 'high' : expert.expertise < 20 ? 'low' : '');
+                const expertise = normalizePercentage(expert.expertise);
+                const contributions = normalizeCount(expert.contributions);
+                const barColor = expert.isBot ? '#374151' : (expertise >= 20 ? '#06b6d4' : '#374151');
+                const cardClass = expert.isBot ? 'bot' : (expertise >= 60 ? 'high' : expertise < 20 ? 'low' : '');
                     const expertDomId = `${this.toSafeDomId(expert.name || 'expert')}-${expertIndex}`;
-                    const escapedExpertName = this.escapeHtmlAttribute(expert.name || 'Unknown');
+                    const expertFiles = filesByExpert.get(expert.name) || [];
+                    const escapedExpertName = escapeHtml(expert.name || 'Unknown');
+                    const escapedExpertEmail = escapeHtml(expert.email);
+                    const avatarUsername = escapeHtml(this.getGitHubUsername(expert.email, expert.name));
+                    const teamRole = expert.teamRole ? `<span class="role-badge">${escapeHtml(expert.teamRole)}</span>` : '';
+                    const initials = escapeHtml(expert.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2));
+                    const specializations = (expert.specializations || [])
+                        .map(specialization => `<span class="chip">${escapeHtml(specialization)}</span>`)
+                        .join('');
                     return `
                     <div class="expert-card ${cardClass}">
                         <div class="expert-header">
                             <div class="expert-avatar">
-                                <img src="https://github.com/${this.getGitHubUsername(expert.email, expert.name)}.png?size=96" 
+                                <img src="https://github.com/${avatarUsername}.png?size=96"
                                      alt="${escapedExpertName}"
+                                     width="40"
+                                     height="40"
+                                     loading="lazy"
+                                     decoding="async"
                                      class="expert-avatar-img">
                                 <div class="expert-avatar-fallback">
-                                    ${expert.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                                    ${initials}
                                 </div>
                             </div>
                             <div class="expert-info">
-                                <h3>${expert.isBot ? '🤖 ' : expert.contributorKind === 'ai-assisted-human' ? '🤝 ' : ''}${expert.name}${expert.teamRole ? `<span class="role-badge">${expert.teamRole}</span>` : ''}</h3>
-                                <div class="expert-email">${expert.email}</div>
+                                <h3>${expert.isBot ? '🤖 ' : expert.contributorKind === 'ai-assisted-human' ? '🤝 ' : ''}${escapedExpertName}${teamRole}</h3>
+                                <div class="expert-email">${escapedExpertEmail}</div>
                             </div>
                         </div>
 
-                        <div class="bar-chart"><svg viewBox="0 0 400 24"><rect width="400" height="24" fill="#1e293b"/><rect width="${expert.expertise * 4}" height="24" fill="${barColor}"/><text x="${Math.max(expert.expertise * 4 - 8, 30)}" y="17" text-anchor="end" fill="#fff" font-size="12" font-weight="bold" font-family="sans-serif">${expert.expertise}%</text></svg></div>
+                        <div class="bar-chart"><svg viewBox="0 0 400 24"><rect width="400" height="24" fill="var(--border)"/><rect width="${expertise * 4}" height="24" fill="${barColor}"/><text x="${Math.max(expertise * 4 - 8, 30)}" y="17" text-anchor="end" fill="#fff" font-size="12" font-weight="bold" font-family="sans-serif">${expertise}%</text></svg></div>
 
                         <div class="expert-stats">
-                            <div class="stat"><div class="stat-value">${expert.expertise}%</div><div class="stat-label">Expertise</div></div>
-                            <div class="stat"><div class="stat-value">${expert.contributions}</div><div class="stat-label">Commits</div></div>
+                            <div class="stat"><div class="stat-value">${expertise}%</div><div class="stat-label">Expertise</div></div>
+                            <div class="stat"><div class="stat-value">${contributions}</div><div class="stat-label">Commits</div></div>
                             <div class="stat"><div class="stat-value">${this.calculateDaysAgo(expert.lastCommit)}</div><div class="stat-label">Days Ago</div></div>
                         </div>
 
-                        ${(expert.specializations || []).length ? `<div class="chips">${(expert.specializations || []).map(spec => `<span class="chip">${spec}</span>`).join('')}</div>` : ''}
+                        ${(expert.specializations || []).length ? `<div class="chips">${specializations}</div>` : ''}
 
                         <div class="expert-files">
                             <div class="expert-files-header" data-expert-id="${expertDomId}">
-                                <span>📁 Key Files (${analysis.fileExpertise.filter(file => 
-                                    file.experts.some(e => e.name === expert.name)
-                                ).length})</span>
+                                <span>📁 Key Files (${expertFiles.length})</span>
                                 <span class="toggle-icon collapsed" id="${expertDomId}-icon">▶</span>
                             </div>
                             <div class="expert-files-content collapsed" id="${expertDomId}-content">
-                                ${analysis.fileExpertise.filter(file => 
-                                    file.experts.some(e => e.name === expert.name)
-                                ).slice(0, 5).map(file => `
-                                    <div class="expert-file-item" data-file-path="${this.escapeHtmlAttribute(file.filePath)}">
-                                        <div class="file-name">${file.fileName}</div>
-                                        <div class="file-changes">🔄 ${file.changeFrequency}</div>
+                                <div class="ef-inner">
+                                ${expertFiles.slice(0, 5).map(file => `
+                                    <div class="expert-file-item" data-file-path="${escapeHtml(file.filePath)}">
+                                        <div class="file-name">${escapeHtml(file.fileName)}</div>
+                                        <div class="file-changes">🔄 ${normalizeCount(file.changeFrequency)}</div>
                                     </div>
                                 `).join('')}
-                                ${analysis.fileExpertise.filter(file => 
-                                    file.experts.some(e => e.name === expert.name)
-                                ).length > 5 ? `
+                                ${expertFiles.length > 5 ? `
                                     <div class="expert-file-item more-files">
-                                        <em>+ ${analysis.fileExpertise.filter(file => 
-                                            file.experts.some(e => e.name === expert.name)
-                                        ).length - 5} more files</em>
+                                        <em>+ ${expertFiles.length - 5} more files</em>
                                     </div>
                                 ` : ''}
+                                </div>
                             </div>
                         </div>
 
@@ -1264,6 +1380,7 @@ export class ExpertiseWebviewProvider {
                     </div>`;
                 }).join('')}
             </div>
+            </div>
         </div>
     </div>
 
@@ -1273,7 +1390,7 @@ export class ExpertiseWebviewProvider {
             <span class="toggle-icon" id="management-icon">▼</span>
         </h2>
         <div class="collapsible-content" id="management-content">
-            ${this.renderManagementInsights(analysis)}
+            <div class="cc-inner">${this.renderManagementInsights(analysis)}</div>
         </div>
     </div>
 
@@ -1283,7 +1400,7 @@ export class ExpertiseWebviewProvider {
             <span class="toggle-icon" id="health-icon">▼</span>
         </h2>
         <div class="collapsible-content" id="health-content">
-            ${this.renderTeamHealthMetrics(analysis)}
+            <div class="cc-inner">${this.renderTeamHealthMetrics(analysis)}</div>
         </div>
     </div>
 
@@ -1293,12 +1410,15 @@ export class ExpertiseWebviewProvider {
             <span class="toggle-icon" id="ai-insights-icon">▼</span>
         </h2>
         <div class="collapsible-content" id="ai-insights-content">
-            ${analysis.insights.map((insight, i) => `
-                <div class="insight-item">
-                    <div class="insight-num">${i + 1}</div>
-                    <div class="insight-text">${typeof insight === 'string' ? insight : insight.description}</div>
-                </div>
-            `).join('')}
+            <div class="cc-inner">${analysis.insights.map((insight, i) => {
+                const text = typeof insight === 'string' ? insight : insight.description;
+                return `
+                    <div class="insight-item">
+                        <div class="insight-num">${i + 1}</div>
+                        <div class="insight-text">${escapeHtml(text)}</div>
+                    </div>
+                `;
+            }).join('')}</div>
         </div>
     </div>
 
@@ -1316,7 +1436,51 @@ export class ExpertiseWebviewProvider {
 
     <script nonce="${nonce}">
         const vscode = acquireVsCodeApi();
-        const experts = ${JSON.stringify(analysis.expertProfiles)};
+        const experts = ${serializeForInlineScript(analysis.expertProfiles)};
+        const themeToggle = document.getElementById('theme-toggle');
+
+        function isLightTheme() {
+            return document.body.classList.contains('theme-light') ||
+                (!document.body.classList.contains('theme-dark') &&
+                    (document.body.classList.contains('vscode-light') ||
+                        document.body.classList.contains('vscode-high-contrast-light')));
+        }
+
+        function updateThemeToggle() {
+            if (!themeToggle) {
+                return;
+            }
+            const lightTheme = isLightTheme();
+            const label = lightTheme ? 'Switch to dark theme' : 'Switch to light theme';
+            themeToggle.textContent = lightTheme ? '🌙' : '☀️';
+            themeToggle.setAttribute('aria-label', label);
+            themeToggle.setAttribute('title', label);
+        }
+
+        function setThemePreference(value) {
+            const preference = value === 'light' || value === 'dark' ? value : '';
+            document.body.classList.remove('theme-light', 'theme-dark');
+            if (preference) {
+                document.body.classList.add('theme-' + preference);
+            }
+            updateThemeToggle();
+            vscode.setState({
+                ...(vscode.getState() || {}),
+                themePreference: preference,
+            });
+        }
+
+        const savedState = vscode.getState() || {};
+        if (savedState.themePreference === 'light' || savedState.themePreference === 'dark') {
+            setThemePreference(savedState.themePreference);
+        } else {
+            updateThemeToggle();
+        }
+        if (themeToggle) {
+            themeToggle.addEventListener('click', () => {
+                setThemePreference(isLightTheme() ? 'dark' : 'light');
+            });
+        }
 
         function showExpertDetails(expertName) {
             const expert = experts.find(e => e.name === expertName);

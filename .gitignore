@@ -3,6 +3,7 @@ dist
 node_modules
 .vscode-test/
 *.vsix
+.impeccable/
 
 # Environment files (contain sensitive tokens)
 .env
@@ -14,4 +15,3 @@ node_modules
 *.pem
 .DS_Store
 .vscodeignore
-

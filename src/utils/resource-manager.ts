@@ -11,10 +11,8 @@ export class ResourceManager {
     private disposables: vscode.Disposable[] = [];
     private outputChannel: vscode.OutputChannel | null = null;
 
-    private constructor() {
-        // Register cleanup on extension deactivation
-        this.registerCleanupHandlers();
-    }
+    // VS Code owns process-level error handling for its shared extension host.
+    private constructor() {}
 
     static getInstance(): ResourceManager {
         if (!ResourceManager.instance) {
@@ -216,32 +214,6 @@ export class ResourceManager {
                 this.outputChannel.appendLine(`Stderr: ${stderr.substring(0, 1000)}${stderr.length > 1000 ? '...' : ''}`);
             }
         }
-    }
-
-    /**
-     * Registers cleanup handlers
-     */
-    private registerCleanupHandlers(): void {
-        // Handle process exit
-        process.on('exit', () => {
-            this.cleanup();
-        });
-
-        // Handle uncaught exceptions
-        process.on('uncaughtException', (error) => {
-            if (this.outputChannel) {
-                this.outputChannel.appendLine(`Uncaught exception: ${error.message}`);
-            }
-            this.cleanup();
-        });
-
-        // Handle unhandled promise rejections
-        process.on('unhandledRejection', (reason, _promise) => {
-            if (this.outputChannel) {
-                this.outputChannel.appendLine(`Unhandled promise rejection: ${reason}`);
-            }
-            this.cleanup();
-        });
     }
 
     /**
