@@ -560,8 +560,9 @@ export class ExpertiseWebviewProvider {
 :root{--bg:#0a0a0f;--surface:#12121a;--border:#1e293b;--border-hover:#2d3748;--text:#e2e8f0;--text-soft:#94a3b8;--text-muted:#64748b;--text-faint:#475569;--accent:#06b6d4;--accent-2:#8b5cf6;--header-bg:#0a0a0f;--h1-color:#e2e8f0;--h1-glow:0 0 20px rgba(6,182,212,0.4),0 0 40px rgba(6,182,212,0.15);--scan:rgba(6,182,212,0.03)}
 @media (prefers-color-scheme:light){:root:not(.theme-dark){--bg:#eef1f5;--surface:#ffffff;--border:#d0d7de;--border-hover:#afb8c1;--text:#1f2328;--text-soft:#3d444d;--text-muted:#59636e;--text-faint:#818b98;--accent:#0e7490;--accent-2:#7c3aed;--header-bg:#ffffff;--h1-color:#0e7490;--h1-glow:none;--scan:rgba(8,145,178,0.06)}}
 :root.theme-light{--bg:#eef1f5;--surface:#ffffff;--border:#d0d7de;--border-hover:#afb8c1;--text:#1f2328;--text-soft:#3d444d;--text-muted:#59636e;--text-faint:#818b98;--accent:#0e7490;--accent-2:#7c3aed;--header-bg:#ffffff;--h1-color:#0e7490;--h1-glow:none;--scan:rgba(8,145,178,0.06)}
-.theme-toggle{position:fixed;top:16px;right:16px;z-index:20;padding:8px 14px;border-radius:999px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85em;font-weight:600;cursor:pointer;transition:border-color .2s,background .2s}
+.theme-toggle{position:fixed;top:16px;right:16px;z-index:20;display:grid;width:40px;height:40px;place-items:center;padding:0;border-radius:999px;border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit;font-size:1.1em;cursor:pointer;transition:border-color .2s,background .2s,color .2s}
 .theme-toggle:hover{border-color:var(--accent);color:var(--accent)}
+.theme-toggle:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px}
 
         *{box-sizing:border-box;margin:0;padding:0}
         body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Roboto',sans-serif;line-height:1.6;color:var(--text);max-width:1200px;margin:0 auto;padding:20px;background:var(--bg)}
@@ -609,11 +610,11 @@ export class ExpertiseWebviewProvider {
         .insight-num{font-size:1.3em;font-weight:800;color:var(--accent);min-width:28px;text-align:right}
         .insight-text{color:var(--text-soft);font-size:0.95em}
         .footer{text-align:center;padding:24px 0;margin-top:20px;font-family:'SF Mono',SFMono-Regular,Consolas,monospace;font-size:0.8em;color:var(--text-muted);border-top:1px solid var(--border)}
-        @media print{body{background:#fff;color:#1a1a1a}.header{background:#fff;border-color:#ddd}.header h1{color:#1a1a1a;text-shadow:none}.header .repo{color:#0891b2}.section{background:#fff;border-color:#ddd;box-shadow:none}.expert-card{background:#fff;border-color:#ddd;opacity:1!important;box-shadow:none!important}.stat{background:#f5f5f5;border-color:#ddd}.stat-value{color:#0891b2}.chip{background:#f5f5f5;border-color:#ddd;color:#555}.mgmt-card{background:#fff;border-color:#ddd}.action-box{background:#f5f5f5;border-color:#ddd}.footer{color:#999;border-color:#ddd}.insight-text{color:#444}.pill{border-color:#ddd;color:#666}}
+        @media print{.theme-toggle{display:none}body{background:#fff;color:#1a1a1a}.header{background:#fff;border-color:#ddd}.header h1{color:#1a1a1a;text-shadow:none}.header .repo{color:#0891b2}.section{background:#fff;border-color:#ddd;box-shadow:none}.expert-card{background:#fff;border-color:#ddd;opacity:1!important;box-shadow:none!important}.stat{background:#f5f5f5;border-color:#ddd}.stat-value{color:#0891b2}.chip{background:#f5f5f5;border-color:#ddd;color:#555}.mgmt-card{background:#fff;border-color:#ddd}.action-box{background:#f5f5f5;border-color:#ddd}.footer{color:#999;border-color:#ddd}.insight-text{color:#444}.pill{border-color:#ddd;color:#666}}
     </style>
 </head>
 <body>
-    <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch between light and dark theme">🌓 Theme</button>
+    <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch between light and dark theme" title="Switch between light and dark theme">🌓</button>
     <div class="header">
         <h1>TEAM X-RAY</h1>
         <div class="repo">${escapeHtml(analysis.repository)}</div>
@@ -693,19 +694,39 @@ export class ExpertiseWebviewProvider {
             var root = document.documentElement;
             var key = 'teamxray-theme';
             var saved = localStorage.getItem(key);
-            if (saved === 'light' || saved === 'dark') {
-                root.classList.add('theme-' + saved);
+            var button = document.getElementById('theme-toggle');
+
+            function isLightTheme() {
+                return root.classList.contains('theme-light') ||
+                    (!root.classList.contains('theme-dark') &&
+                        window.matchMedia('(prefers-color-scheme: light)').matches);
             }
-            var btn = document.getElementById('theme-toggle');
-            if (!btn) { return; }
-            btn.addEventListener('click', function () {
-                var prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
-                var isLight = root.classList.contains('theme-light') ||
-                    (!root.classList.contains('theme-dark') && prefersLight);
-                var next = isLight ? 'dark' : 'light';
+
+            function updateThemeToggle() {
+                if (!button) { return; }
+                var lightTheme = isLightTheme();
+                var label = lightTheme ? 'Switch to dark theme' : 'Switch to light theme';
+                button.textContent = lightTheme ? '🌙' : '☀️';
+                button.setAttribute('aria-label', label);
+                button.setAttribute('title', label);
+            }
+
+            function applyTheme(theme, persist) {
+                var preference = theme === 'light' || theme === 'dark' ? theme : '';
                 root.classList.remove('theme-light', 'theme-dark');
-                root.classList.add('theme-' + next);
-                localStorage.setItem(key, next);
+                if (preference) {
+                    root.classList.add('theme-' + preference);
+                }
+                if (persist) {
+                    localStorage.setItem(key, preference);
+                }
+                updateThemeToggle();
+            }
+
+            applyTheme(saved, false);
+            if (!button) { return; }
+            button.addEventListener('click', function () {
+                applyTheme(isLightTheme() ? 'dark' : 'light', true);
             });
         })();
     </script>
@@ -1038,6 +1059,11 @@ body.vscode-light,body.vscode-high-contrast-light{--bg:#eef1f5;--surface:#ffffff
     <style>
 :root{--bg:#0a0a0f;--surface:#12121a;--border:#1e293b;--border-hover:#2d3748;--text:#e2e8f0;--text-soft:#94a3b8;--text-muted:#64748b;--text-faint:#475569;--accent:#06b6d4;--accent-2:#8b5cf6;--header-bg:#0a0a0f;--h1-color:#e2e8f0;--h1-glow:0 0 20px rgba(6,182,212,0.4),0 0 40px rgba(6,182,212,0.15);--scan:rgba(6,182,212,0.03)}
 body.vscode-light,body.vscode-high-contrast-light{--bg:#eef1f5;--surface:#ffffff;--border:#d0d7de;--border-hover:#afb8c1;--text:#1f2328;--text-soft:#3d444d;--text-muted:#59636e;--text-faint:#818b98;--accent:#0e7490;--accent-2:#7c3aed;--header-bg:#ffffff;--h1-color:#0e7490;--h1-glow:none;--scan:rgba(8,145,178,0.06)}
+body.theme-light{--bg:#eef1f5;--surface:#ffffff;--border:#d0d7de;--border-hover:#afb8c1;--text:#1f2328;--text-soft:#3d444d;--text-muted:#59636e;--text-faint:#818b98;--accent:#0e7490;--accent-2:#7c3aed;--header-bg:#ffffff;--h1-color:#0e7490;--h1-glow:none;--scan:rgba(8,145,178,0.06)}
+body.theme-dark{--bg:#0a0a0f;--surface:#12121a;--border:#1e293b;--border-hover:#2d3748;--text:#e2e8f0;--text-soft:#94a3b8;--text-muted:#64748b;--text-faint:#475569;--accent:#06b6d4;--accent-2:#8b5cf6;--header-bg:#0a0a0f;--h1-color:#e2e8f0;--h1-glow:0 0 20px rgba(6,182,212,0.4),0 0 40px rgba(6,182,212,0.15);--scan:rgba(6,182,212,0.03)}
+.theme-toggle{display:grid;width:40px;height:40px;place-items:center;margin:0 0 16px auto;padding:0;border-radius:999px;border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit;font-size:1.1em;cursor:pointer;transition:border-color .2s,background .2s,color .2s}
+.theme-toggle:hover{border-color:var(--accent);color:var(--accent)}
+.theme-toggle:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px}
 
         *{box-sizing:border-box;margin:0;padding:0}
         body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Roboto',sans-serif;font-size:14px;line-height:1.6;color:var(--text);background:var(--bg);padding:0;margin:0;min-height:100vh}
@@ -1216,6 +1242,7 @@ body.vscode-light,body.vscode-high-contrast-light{--bg:#eef1f5;--surface:#ffffff
 </head>
 <body>
 <div class="container">
+    <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch between light and dark theme" title="Switch between light and dark theme">🌓</button>
     <div class="header">
         <h1>TEAM X-RAY</h1>
         <div class="repo">${escapeHtml(analysis.repository)}</div>
@@ -1410,6 +1437,50 @@ body.vscode-light,body.vscode-high-contrast-light{--bg:#eef1f5;--surface:#ffffff
     <script nonce="${nonce}">
         const vscode = acquireVsCodeApi();
         const experts = ${serializeForInlineScript(analysis.expertProfiles)};
+        const themeToggle = document.getElementById('theme-toggle');
+
+        function isLightTheme() {
+            return document.body.classList.contains('theme-light') ||
+                (!document.body.classList.contains('theme-dark') &&
+                    (document.body.classList.contains('vscode-light') ||
+                        document.body.classList.contains('vscode-high-contrast-light')));
+        }
+
+        function updateThemeToggle() {
+            if (!themeToggle) {
+                return;
+            }
+            const lightTheme = isLightTheme();
+            const label = lightTheme ? 'Switch to dark theme' : 'Switch to light theme';
+            themeToggle.textContent = lightTheme ? '🌙' : '☀️';
+            themeToggle.setAttribute('aria-label', label);
+            themeToggle.setAttribute('title', label);
+        }
+
+        function setThemePreference(value) {
+            const preference = value === 'light' || value === 'dark' ? value : '';
+            document.body.classList.remove('theme-light', 'theme-dark');
+            if (preference) {
+                document.body.classList.add('theme-' + preference);
+            }
+            updateThemeToggle();
+            vscode.setState({
+                ...(vscode.getState() || {}),
+                themePreference: preference,
+            });
+        }
+
+        const savedState = vscode.getState() || {};
+        if (savedState.themePreference === 'light' || savedState.themePreference === 'dark') {
+            setThemePreference(savedState.themePreference);
+        } else {
+            updateThemeToggle();
+        }
+        if (themeToggle) {
+            themeToggle.addEventListener('click', () => {
+                setThemePreference(isLightTheme() ? 'dark' : 'light');
+            });
+        }
 
         function showExpertDetails(expertName) {
             const expert = experts.find(e => e.name === expertName);

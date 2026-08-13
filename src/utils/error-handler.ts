@@ -100,16 +100,30 @@ export class ErrorHandler {
         try {
             return await operation();
         } catch (error) {
-            const teamXRayError = ErrorHandler.createError(
-                'VALIDATION_ERROR',
-                error instanceof Error ? error.message : String(error),
-                `Failed to ${errorContext}. Please try again.`,
-                true,
-                { operation: errorContext }
-            );
+            const teamXRayError = ErrorHandler.isTeamXRayError(error)
+                ? error
+                : ErrorHandler.createError(
+                    'VALIDATION_ERROR',
+                    error instanceof Error ? error.message : String(error),
+                    `Failed to ${errorContext}. Please try again.`,
+                    true,
+                    { operation: errorContext }
+                );
             ErrorHandler.handleError(teamXRayError);
             return null;
         }
+    }
+
+    private static isTeamXRayError(error: unknown): error is TeamXRayError {
+        if (!error || typeof error !== 'object') {
+            return false;
+        }
+
+        const candidate = error as Partial<TeamXRayError>;
+        return typeof candidate.code === 'string' &&
+            typeof candidate.message === 'string' &&
+            typeof candidate.userMessage === 'string' &&
+            typeof candidate.recoverable === 'boolean';
     }
 
     /**

@@ -139,6 +139,22 @@ describe('report utilities', () => {
         expect(filesByExpert.get('Bob')).toEqual([sharedFile]);
     });
 
+    it('renders a compact theme toggle in standalone and webview reports', () => {
+        const provider = new ExpertiseWebviewProvider({} as vscode.ExtensionContext);
+        const internals = getInternals(provider);
+        const analysis = makeAnalysis('safe');
+
+        provider.setCurrentAnalysis(analysis);
+        const standaloneReport = internals.generateStandaloneHTML();
+        const webviewReport = internals.getWebviewContent(analysis, 'vscode-webview://test');
+        for (const report of [standaloneReport, webviewReport]) {
+            expect(report).toContain('id="theme-toggle"');
+            expect(report).toContain('>🌓</button>');
+            expect(report).not.toContain('🌓 Theme');
+            expect(report).toContain('Switch between light and dark theme');
+        }
+    });
+
     it('escapes untrusted report content in standalone and webview output', () => {
         const payload = '</script><script>window.pwned=true</script>';
         const analysis = makeAnalysis(payload);
