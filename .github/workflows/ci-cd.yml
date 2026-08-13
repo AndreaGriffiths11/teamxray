@@ -30,6 +30,15 @@ jobs:
     - name: Install dependencies
       run: npm ci
 
+    - name: Type-check extension
+      run: npm run compile-tests
+
+    - name: Run linting
+      run: npm run lint
+
+    - name: Compile TypeScript
+      run: npm run compile
+
     - name: Run test suite
       run: npm test
 

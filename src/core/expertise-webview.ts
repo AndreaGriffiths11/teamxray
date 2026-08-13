@@ -161,33 +161,33 @@ export class ExpertiseWebviewProvider {
      * Extracts GitHub username from email or name
      */
     private getGitHubUsername(email: string, name: string): string {
+        let candidate = '';
+
         // First try to extract from email (common patterns)
         if (email.includes('@github.com') || email.includes('@users.noreply.github.com')) {
             // Handle GitHub noreply emails like: username@users.noreply.github.com
             // Also handle: 12345+username@users.noreply.github.com
             const match = email.match(/^(?:\d+\+)?([^@]+)@(users\.noreply\.)?github\.com$/);
             if (match) {
-                return match[1];
+                candidate = match[1];
             }
         }
         
         // Try to extract from common email patterns
-        if (email.includes('@')) {
-            const username = email.split('@')[0];
-            // Clean up common patterns and remove numbers prefix from GitHub noreply
-            const cleanUsername = username.replace(/^\d+\+/, '').replace(/[^a-zA-Z0-9\-]/g, '').toLowerCase();
-            
-            // Only use if it looks like a valid GitHub username
-            if (cleanUsername.length >= 1 && cleanUsername.length <= 39) {
-                return cleanUsername;
-            }
+        if (!candidate && email.includes('@')) {
+            candidate = email.split('@')[0];
         }
-        
-        // Fallback to name-based username
-        return name.toLowerCase()
-            .replace(/\s+/g, '')
-            .replace(/[^a-zA-Z0-9\-]/g, '')
-            .slice(0, 39); // GitHub username max length
+
+        return this.normalizeGitHubUsername(candidate || name);
+    }
+
+    private normalizeGitHubUsername(value: string): string {
+        return value
+            .replace(/^\d+\+/, '')
+            .toLowerCase()
+            .replace(/[^a-z0-9-]/g, '')
+            .replace(/^-+|-+$/g, '')
+            .slice(0, 39);
     }
 
     /**
@@ -1283,6 +1283,7 @@ body.vscode-light,body.vscode-high-contrast-light{--bg:#eef1f5;--surface:#ffffff
                     const expertFiles = filesByExpert.get(expert.name) || [];
                     const escapedExpertName = escapeHtml(expert.name || 'Unknown');
                     const escapedExpertEmail = escapeHtml(expert.email);
+                    const avatarUsername = escapeHtml(this.getGitHubUsername(expert.email, expert.name));
                     const teamRole = expert.teamRole ? `<span class="role-badge">${escapeHtml(expert.teamRole)}</span>` : '';
                     const initials = escapeHtml(expert.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2));
                     const specializations = (expert.specializations || [])
@@ -1292,7 +1293,7 @@ body.vscode-light,body.vscode-high-contrast-light{--bg:#eef1f5;--surface:#ffffff
                     <div class="expert-card ${cardClass}">
                         <div class="expert-header">
                             <div class="expert-avatar">
-                                <img src="https://github.com/${this.getGitHubUsername(expert.email, expert.name)}.png?size=96" 
+                                <img src="https://github.com/${avatarUsername}.png?size=96"
                                      alt="${escapedExpertName}"
                                      width="40"
                                      height="40"

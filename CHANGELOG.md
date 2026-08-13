@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Made the Team X-Ray webview follow the active VS Code light or dark theme, and added system-aware theming plus a manual toggle to exported HTML reports.
 - Escaped Git- and AI-derived report content before writing HTML or CSV exports.
 - Normalized untrusted numeric report values before using them in HTML, SVG, CSS, attributes, or CSV fields.
+- Sanitized GitHub avatar usernames before constructing their image URLs.
 - Repaired the release asset upload step so published Marketplace releases can attach their VSIX.
 - Prevented release tags from being parsed as shell syntax during VSIX upload.
 

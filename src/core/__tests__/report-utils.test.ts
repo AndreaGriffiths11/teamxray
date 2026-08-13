@@ -193,4 +193,28 @@ describe('report utilities', () => {
         expect(csv.experts).toContain(',0,0,');
         expect(csv.files).toContain(',1,"Alice",0');
     });
+
+    it('constrains avatar usernames derived from GitHub-style email addresses', () => {
+        const expert = {
+            ...makeExpert('Alice'),
+            email: 'evil" onerror="alert(1)@github.com',
+        };
+        const baseAnalysis = makeAnalysis('safe');
+        const analysis: ExpertiseAnalysis = {
+            ...baseAnalysis,
+            experts: [expert],
+            expertProfiles: [expert],
+            fileExpertise: [{
+                ...baseAnalysis.fileExpertise[0],
+                experts: [expert],
+            }],
+        };
+        const provider = new ExpertiseWebviewProvider({} as vscode.ExtensionContext);
+        const internals = getInternals(provider);
+
+        const webviewReport = internals.getWebviewContent(analysis, 'vscode-webview://test');
+        const avatarSource = webviewReport.match(/<img src="([^"]*)"/)?.[1];
+
+        expect(avatarSource).toBe('https://github.com/evilonerroralert1.png?size=96');
+    });
 });
