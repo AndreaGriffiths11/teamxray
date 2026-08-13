@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.3] - 2026-08-12
+
+### 🐛 Bug Fixes
+- Made the Team X-Ray webview follow the active VS Code light or dark theme, and added system-aware theming plus a manual toggle to exported HTML reports.
+- Escaped Git- and AI-derived report content before writing HTML or CSV exports.
+- Repaired the release asset upload step so published Marketplace releases can attach their VSIX.
+
+### ⚡ Performance
+- Indexed file ownership once per report, batched streaming output updates, and deferred below-fold contributor avatars.
+
 ## [2.1.2] - 2026-07-21
 
 ### Dependencies
