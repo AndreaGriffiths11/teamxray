@@ -5,6 +5,9 @@ import {
     escapeCsvCell,
     escapeHtml,
     indexFilesByExpert,
+    normalizeCount,
+    normalizePercentage,
+    normalizeRatio,
     serializeForInlineScript,
 } from './report-utils';
 
@@ -287,14 +290,18 @@ export class ExpertiseWebviewProvider {
         }
 
         const metrics = analysis.teamHealthMetrics;
+        const knowledgeRiskScore = normalizePercentage(metrics.knowledgeDistribution.riskScore);
+        const crossTeamWork = normalizePercentage(metrics.collaborationMetrics.crossTeamWork);
+        const codeReviewParticipation = normalizePercentage(metrics.collaborationMetrics.codeReviewParticipation);
+        const knowledgeSharing = normalizePercentage(metrics.collaborationMetrics.knowledgeSharing);
         
         return `
             <div class="health-metrics-grid">
                 <!-- Knowledge Distribution -->
                 <div class="health-metric-card">
                     <h4>🧠 Knowledge Distribution</h4>
-                    <div class="risk-score ${this.getRiskLevel(metrics.knowledgeDistribution.riskScore)}">
-                        Risk Score: ${metrics.knowledgeDistribution.riskScore}/100
+                    <div class="risk-score ${this.getRiskLevel(knowledgeRiskScore)}">
+                        Risk Score: ${knowledgeRiskScore}/100
                     </div>
                     <div class="metric-details">
                         <div class="metric-item critical">
@@ -323,15 +330,15 @@ export class ExpertiseWebviewProvider {
                     <h4>🤝 Collaboration Health</h4>
                     <div class="collaboration-stats">
                         <div class="collab-stat">
-                            <span class="stat-value">${metrics.collaborationMetrics.crossTeamWork}%</span>
+                            <span class="stat-value">${crossTeamWork}%</span>
                             <span class="stat-label">Cross-team Work</span>
                         </div>
                         <div class="collab-stat">
-                            <span class="stat-value">${metrics.collaborationMetrics.codeReviewParticipation}%</span>
+                            <span class="stat-value">${codeReviewParticipation}%</span>
                             <span class="stat-label">Code Review Participation</span>
                         </div>
                         <div class="collab-stat">
-                            <span class="stat-value">${metrics.collaborationMetrics.knowledgeSharing}%</span>
+                            <span class="stat-value">${knowledgeSharing}%</span>
                             <span class="stat-label">Knowledge Sharing</span>
                         </div>
                     </div>
@@ -540,6 +547,9 @@ export class ExpertiseWebviewProvider {
         const analysis = this.currentAnalysis;
         const categoryColors: Record<string, string> = { RISK: '#ef4444', OPPORTUNITY: '#10b981', EFFICIENCY: '#3b82f6', GROWTH: '#f59e0b' };
         const priorityDots: Record<string, string> = { HIGH: '●●●', MEDIUM: '●●○', LOW: '●○○' };
+        const totalFiles = normalizeCount(analysis.totalFiles);
+        const assistedCommits = normalizeCount(analysis.aiAttribution?.assistedCommits);
+        const assistedShare = normalizeRatio(analysis.aiAttribution?.assistedShare);
         return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -609,9 +619,9 @@ export class ExpertiseWebviewProvider {
         <div class="repo">${escapeHtml(analysis.repository)}</div>
         <div class="stats">
             <span class="pill">Generated <strong>${this.safeFormatDate(analysis.generatedAt)}</strong></span>
-            <span class="pill"><strong>${analysis.totalFiles}</strong> files scanned</span>
+            <span class="pill"><strong>${totalFiles}</strong> files scanned</span>
             <span class="pill"><strong>${analysis.expertProfiles.filter((e: any) => !e.isBot).length}</strong> humans · <strong>${analysis.expertProfiles.filter((e: any) => e.isBot).length}</strong> agents</span>
-            ${analysis.aiAttribution?.assistedCommits ? `<span class="pill">🤝 <strong>${Math.round(analysis.aiAttribution.assistedShare * 100)}%</strong> AI-assisted commits</span>` : ''}
+            ${assistedCommits > 0 ? `<span class="pill">🤝 <strong>${Math.round(assistedShare * 100)}%</strong> AI-assisted commits</span>` : ''}
         </div>
     </div>
 
@@ -619,8 +629,10 @@ export class ExpertiseWebviewProvider {
         <h2><span class="accent">▸</span> Expert Profiles</h2>
         <div class="expert-grid">
             ${analysis.expertProfiles.map((expert: any) => {
-                const barColor = expert.isBot ? '#374151' : (expert.expertise >= 20 ? '#06b6d4' : '#374151');
-                const cardClass = expert.isBot ? 'bot' : (expert.expertise >= 60 ? 'high' : expert.expertise < 20 ? 'low' : '');
+                const expertise = normalizePercentage(expert.expertise);
+                const contributions = normalizeCount(expert.contributions);
+                const barColor = expert.isBot ? '#374151' : (expertise >= 20 ? '#06b6d4' : '#374151');
+                const cardClass = expert.isBot ? 'bot' : (expertise >= 60 ? 'high' : expertise < 20 ? 'low' : '');
                 const expertName = escapeHtml(expert.name);
                 const expertEmail = escapeHtml(expert.email);
                 const teamRole = expert.teamRole ? `<span class="role-badge">${escapeHtml(expert.teamRole)}</span>` : '';
@@ -630,10 +642,10 @@ export class ExpertiseWebviewProvider {
                 return `<div class="expert-card ${cardClass}">
                     <div class="expert-name">${expert.isBot ? '🤖 ' : expert.contributorKind === 'ai-assisted-human' ? '🤝 ' : ''}${expertName}${teamRole}</div>
                     <div class="expert-email">${expertEmail}</div>
-                    <div class="bar-chart"><svg viewBox="0 0 400 24"><rect width="400" height="24" fill="var(--border)"/><rect width="${expert.expertise * 4}" height="24" fill="${barColor}"/><text x="${Math.max(expert.expertise * 4 - 8, 30)}" y="17" text-anchor="end" fill="#fff" font-size="12" font-weight="bold" font-family="sans-serif">${expert.expertise}%</text></svg></div>
+                    <div class="bar-chart"><svg viewBox="0 0 400 24"><rect width="400" height="24" fill="var(--border)"/><rect width="${expertise * 4}" height="24" fill="${barColor}"/><text x="${Math.max(expertise * 4 - 8, 30)}" y="17" text-anchor="end" fill="#fff" font-size="12" font-weight="bold" font-family="sans-serif">${expertise}%</text></svg></div>
                     <div class="expert-stats">
-                        <div class="stat"><div class="stat-value">${expert.expertise}%</div><div class="stat-label">Expertise</div></div>
-                        <div class="stat"><div class="stat-value">${expert.contributions}</div><div class="stat-label">Commits</div></div>
+                        <div class="stat"><div class="stat-value">${expertise}%</div><div class="stat-label">Expertise</div></div>
+                        <div class="stat"><div class="stat-value">${contributions}</div><div class="stat-label">Commits</div></div>
                         <div class="stat"><div class="stat-value">${this.calculateDaysAgo(expert.lastCommit)}</div><div class="stat-label">Days Ago</div></div>
                     </div>
                     ${expert.specializations?.length ? `<div class="chips">${specializations}</div>` : ''}
@@ -713,8 +725,8 @@ export class ExpertiseWebviewProvider {
             return [
                 escapeCsvCell(expert.name),
                 escapeCsvCell(expert.email),
-                expert.expertise,
-                expert.contributions,
+                normalizePercentage(expert.expertise),
+                normalizeCount(expert.contributions),
                 escapeCsvCell(this.safeFormatDate(expert.lastCommit)),
                 escapeCsvCell((expert.specializations || []).join('; ')),
                 escapeCsvCell(expert.teamRole || ''),
@@ -733,7 +745,7 @@ export class ExpertiseWebviewProvider {
                 escapeCsvCell(file.filePath),
                 file.experts.length,
                 escapeCsvCell(primaryExpert?.name || 'Unknown'),
-                file.changeFrequency
+                normalizeCount(file.changeFrequency)
             ].join(',');
         }).join('\n');
 
@@ -1013,6 +1025,9 @@ body.vscode-light,body.vscode-high-contrast-light{--bg:#eef1f5;--surface:#ffffff
     private getWebviewContent(analysis: ExpertiseAnalysis, cspSource: string): string {
         const nonce = this.generateNonce();
         const filesByExpert = indexFilesByExpert(analysis.fileExpertise);
+        const totalFiles = normalizeCount(analysis.totalFiles);
+        const assistedCommits = normalizeCount(analysis.aiAttribution?.assistedCommits);
+        const assistedShare = normalizeRatio(analysis.aiAttribution?.assistedShare);
         return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1206,9 +1221,9 @@ body.vscode-light,body.vscode-high-contrast-light{--bg:#eef1f5;--surface:#ffffff
         <div class="repo">${escapeHtml(analysis.repository)}</div>
         <div class="stats">
             <span class="pill">Generated <strong>${this.safeFormatDate(analysis.generatedAt)}</strong></span>
-            <span class="pill"><strong>${analysis.totalFiles}</strong> files scanned</span>
+            <span class="pill"><strong>${totalFiles}</strong> files scanned</span>
             <span class="pill"><strong>${analysis.expertProfiles.filter((e: any) => !e.isBot).length}</strong> humans · <strong>${analysis.expertProfiles.filter((e: any) => e.isBot).length}</strong> agents</span>
-            ${analysis.aiAttribution?.assistedCommits ? `<span class="pill">🤝 <strong>${Math.round(analysis.aiAttribution.assistedShare * 100)}%</strong> AI-assisted commits</span>` : ''}
+            ${assistedCommits > 0 ? `<span class="pill">🤝 <strong>${Math.round(assistedShare * 100)}%</strong> AI-assisted commits</span>` : ''}
             <span class="pill"><strong>${analysis.insights.length}</strong> insights</span>
         </div>
     </div>
@@ -1236,6 +1251,8 @@ body.vscode-light,body.vscode-high-contrast-light{--bg:#eef1f5;--surface:#ffffff
                 </thead>
                 <tbody>
                     ${analysis.expertProfiles.map(expert => {
+                        const expertise = normalizePercentage(expert.expertise);
+                        const contributions = normalizeCount(expert.contributions);
                         const expertName = escapeHtml(expert.name);
                         const expertEmail = escapeHtml(expert.email);
                         const teamRole = expert.teamRole ? ` <span class="role-badge">${escapeHtml(expert.teamRole)}</span>` : '';
@@ -1243,11 +1260,11 @@ body.vscode-light,body.vscode-high-contrast-light{--bg:#eef1f5;--surface:#ffffff
                             .map(specialization => `<span class="chip">${escapeHtml(specialization)}</span>`)
                             .join('');
                         return `
-                        <tr data-name="${expertName}" data-email="${expertEmail}" data-expertise="${expert.expertise}" data-contributions="${expert.contributions}" data-lastcommit="${this.toSafeIsoDate(expert.lastCommit)}" data-specs="${escapeHtml((expert.specializations || []).join(', '))}">
+                        <tr data-name="${expertName}" data-email="${expertEmail}" data-expertise="${expertise}" data-contributions="${contributions}" data-lastcommit="${this.toSafeIsoDate(expert.lastCommit)}" data-specs="${escapeHtml((expert.specializations || []).join(', '))}">
                             <td>${expert.isBot ? '🤖 ' : expert.contributorKind === 'ai-assisted-human' ? '🤝 ' : ''}${expertName}${teamRole}</td>
                             <td class="email-cell">${expertEmail}</td>
-                            <td><div class="mini-bar"><div class="mini-bar-fill" style="width:${expert.expertise}%"></div></div> ${expert.expertise}%</td>
-                            <td>${expert.contributions}</td>
+                            <td><div class="mini-bar"><div class="mini-bar-fill" style="width:${expertise}%"></div></div> ${expertise}%</td>
+                            <td>${contributions}</td>
                             <td>${this.safeFormatDate(expert.lastCommit)}</td>
                             <td><div class="chips">${specializations}</div></td>
                         </tr>
@@ -1258,8 +1275,10 @@ body.vscode-light,body.vscode-high-contrast-light{--bg:#eef1f5;--surface:#ffffff
             <h2 style="margin-top:30px"><span class="accent">▸</span> Expert Cards</h2>
             <div class="experts-grid">
                 ${analysis.expertProfiles.map((expert, expertIndex) => {
-                    const barColor = expert.isBot ? '#374151' : (expert.expertise >= 20 ? '#06b6d4' : '#374151');
-                    const cardClass = expert.isBot ? 'bot' : (expert.expertise >= 60 ? 'high' : expert.expertise < 20 ? 'low' : '');
+                const expertise = normalizePercentage(expert.expertise);
+                const contributions = normalizeCount(expert.contributions);
+                const barColor = expert.isBot ? '#374151' : (expertise >= 20 ? '#06b6d4' : '#374151');
+                const cardClass = expert.isBot ? 'bot' : (expertise >= 60 ? 'high' : expertise < 20 ? 'low' : '');
                     const expertDomId = `${this.toSafeDomId(expert.name || 'expert')}-${expertIndex}`;
                     const expertFiles = filesByExpert.get(expert.name) || [];
                     const escapedExpertName = escapeHtml(expert.name || 'Unknown');
@@ -1290,11 +1309,11 @@ body.vscode-light,body.vscode-high-contrast-light{--bg:#eef1f5;--surface:#ffffff
                             </div>
                         </div>
 
-                        <div class="bar-chart"><svg viewBox="0 0 400 24"><rect width="400" height="24" fill="var(--border)"/><rect width="${expert.expertise * 4}" height="24" fill="${barColor}"/><text x="${Math.max(expert.expertise * 4 - 8, 30)}" y="17" text-anchor="end" fill="#fff" font-size="12" font-weight="bold" font-family="sans-serif">${expert.expertise}%</text></svg></div>
+                        <div class="bar-chart"><svg viewBox="0 0 400 24"><rect width="400" height="24" fill="var(--border)"/><rect width="${expertise * 4}" height="24" fill="${barColor}"/><text x="${Math.max(expertise * 4 - 8, 30)}" y="17" text-anchor="end" fill="#fff" font-size="12" font-weight="bold" font-family="sans-serif">${expertise}%</text></svg></div>
 
                         <div class="expert-stats">
-                            <div class="stat"><div class="stat-value">${expert.expertise}%</div><div class="stat-label">Expertise</div></div>
-                            <div class="stat"><div class="stat-value">${expert.contributions}</div><div class="stat-label">Commits</div></div>
+                            <div class="stat"><div class="stat-value">${expertise}%</div><div class="stat-label">Expertise</div></div>
+                            <div class="stat"><div class="stat-value">${contributions}</div><div class="stat-label">Commits</div></div>
                             <div class="stat"><div class="stat-value">${this.calculateDaysAgo(expert.lastCommit)}</div><div class="stat-label">Days Ago</div></div>
                         </div>
 
@@ -1310,7 +1329,7 @@ body.vscode-light,body.vscode-high-contrast-light{--bg:#eef1f5;--surface:#ffffff
                                 ${expertFiles.slice(0, 5).map(file => `
                                     <div class="expert-file-item" data-file-path="${escapeHtml(file.filePath)}">
                                         <div class="file-name">${escapeHtml(file.fileName)}</div>
-                                        <div class="file-changes">🔄 ${file.changeFrequency}</div>
+                                        <div class="file-changes">🔄 ${normalizeCount(file.changeFrequency)}</div>
                                     </div>
                                 `).join('')}
                                 ${expertFiles.length > 5 ? `

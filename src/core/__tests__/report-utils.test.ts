@@ -6,6 +6,9 @@ import {
     escapeCsvCell,
     escapeHtml,
     indexFilesByExpert,
+    normalizeCount,
+    normalizePercentage,
+    normalizeRatio,
     serializeForInlineScript,
 } from '../report-utils';
 import { ExpertiseWebviewProvider } from '../expertise-webview';
@@ -13,6 +16,7 @@ import { ExpertiseWebviewProvider } from '../expertise-webview';
 vi.mock('vscode', () => ({}));
 
 interface WebviewProviderInternals {
+    generateCSV(): { experts: string; files: string; managementInsights?: string };
     generateStandaloneHTML(): string;
     getWebviewContent(analysis: ExpertiseAnalysis, cspSource: string): string;
 }
@@ -103,6 +107,21 @@ describe('report utilities', () => {
         expect(escapeCsvCell('=SUM(A1:A2)')).toBe("\"'=SUM(A1:A2)\"");
     });
 
+    it('normalizes untrusted numeric values before rendering', () => {
+        expect(normalizePercentage('42.5')).toBe(42.5);
+        expect(normalizePercentage(-1)).toBe(0);
+        expect(normalizePercentage(101)).toBe(100);
+        expect(normalizePercentage('not-a-number')).toBe(0);
+
+        expect(normalizeCount('12.9')).toBe(12);
+        expect(normalizeCount(-1)).toBe(0);
+        expect(normalizeCount(Infinity)).toBe(0);
+
+        expect(normalizeRatio(0.25)).toBe(0.25);
+        expect(normalizeRatio(-1)).toBe(0);
+        expect(normalizeRatio(2)).toBe(1);
+    });
+
     it('indexes each file once for every associated expert', () => {
         const alice = makeExpert('Alice');
         const bob = makeExpert('Bob');
@@ -134,5 +153,44 @@ describe('report utilities', () => {
         expect(standaloneReport).toContain('&lt;/script&gt;&lt;script&gt;window.pwned=true&lt;/script&gt;');
         expect(webviewReport).not.toContain(payload);
         expect(webviewReport).toContain('\\u003c/script\\u003e');
+    });
+
+    it('normalizes malformed numeric values before generating report markup', () => {
+        const numericPayload = '0" onmouseover="window.pwned=true';
+        const expert = {
+            ...makeExpert('Alice'),
+            expertise: numericPayload,
+            contributions: numericPayload,
+        } as unknown as Expert;
+        const file = {
+            fileName: 'safe.ts',
+            filePath: 'src/safe.ts',
+            experts: [expert],
+            lastModified: new Date('2026-08-12T00:00:00Z'),
+            changeFrequency: numericPayload,
+        } as unknown as FileExpertise;
+        const analysis = {
+            ...makeAnalysis('safe'),
+            totalFiles: numericPayload,
+            experts: [expert],
+            expertProfiles: [expert],
+            fileExpertise: [file],
+        } as unknown as ExpertiseAnalysis;
+        const provider = new ExpertiseWebviewProvider({} as vscode.ExtensionContext);
+        const internals = getInternals(provider);
+
+        provider.setCurrentAnalysis(analysis);
+        const standaloneReport = internals.generateStandaloneHTML();
+        const webviewReport = internals.getWebviewContent(analysis, 'vscode-webview://test');
+        const csv = internals.generateCSV();
+
+        expect(standaloneReport).not.toContain(numericPayload);
+        expect(standaloneReport).toContain('<rect width="0"');
+        expect(webviewReport).toContain('data-expertise="0"');
+        expect(webviewReport).toContain('data-contributions="0"');
+        expect(webviewReport).toContain('style="width:0%"');
+        expect(webviewReport).toContain('🔄 0');
+        expect(csv.experts).toContain(',0,0,');
+        expect(csv.files).toContain(',1,"Alice",0');
     });
 });

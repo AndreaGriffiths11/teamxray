@@ -41,6 +41,42 @@ export function escapeCsvCell(value: unknown): string {
 }
 
 /**
+ * Normalizes a percentage used in report text, SVG, and CSS values.
+ */
+export function normalizePercentage(value: unknown): number {
+    const numberValue = Number(value);
+    if (!Number.isFinite(numberValue)) {
+        return 0;
+    }
+
+    return Math.min(100, Math.max(0, numberValue));
+}
+
+/**
+ * Normalizes a non-negative whole-number count before rendering it.
+ */
+export function normalizeCount(value: unknown): number {
+    const numberValue = Number(value);
+    if (!Number.isFinite(numberValue)) {
+        return 0;
+    }
+
+    return Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, Math.trunc(numberValue)));
+}
+
+/**
+ * Normalizes a 0–1 ratio before converting it to a displayed percentage.
+ */
+export function normalizeRatio(value: unknown): number {
+    const numberValue = Number(value);
+    if (!Number.isFinite(numberValue)) {
+        return 0;
+    }
+
+    return Math.min(1, Math.max(0, numberValue));
+}
+
+/**
  * Builds the file ownership lookup used by every expert card in a report.
  */
 export function indexFilesByExpert(files: readonly FileExpertise[]): Map<string, FileExpertise[]> {
