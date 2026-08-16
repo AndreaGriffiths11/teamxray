@@ -13,7 +13,7 @@ Rules for utility modules. These are shared across the extension — keep them n
 
 - All errors surface through this module — don't use `console.log` or `console.error` anywhere in `src/`
 - User-facing messages must be plain English, no stack traces
-- Log full error details to the extension output channel for debugging
+- Log full error details to the extension output channel for debugging — always redact tokens, API keys, and any value sourced from credentials or secrets before logging
 
 ## Testing
 
