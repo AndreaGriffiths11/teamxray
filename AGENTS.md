@@ -73,6 +73,26 @@ Agent can request:
 | `Team X-Ray: Set GitHub Token` | For GitHub Models fallback |
 | `Team X-Ray: Set BYOK API Key (Secure)` | For BYOK providers |
 
+## ⚠️ Runtime Guardrails — Read Before Touching These Areas
+
+These constraints are **invisible from the code**. Violations compile cleanly and break silently at runtime in VS Code.
+
+### Webview: No inline styles (CSP)
+The webview runs under a strict Content Security Policy. **Inline `style="..."` attributes are blocked at runtime** even though they compile fine.
+- ✅ Add CSS classes and rules to the stylesheet
+- ❌ Do not use `style="..."` on any HTML element in the webview
+
+### Copilot SDK: ESM bundling (webpackIgnore)
+`@github/copilot-sdk` is ESM-only and cannot be bundled by webpack as CJS. Always use:
+```typescript
+const sdk = await import(/* webpackIgnore: true */ '@github/copilot-sdk');
+```
+- ✅ Dynamic import with `webpackIgnore` comment
+- ❌ Do not add the package to webpack externals
+- ❌ Do not use static `import` — webpack will convert it to `require()` and it will fail at runtime
+
+If adding any other ESM-only package, apply the same pattern and whitelist it in `.vscodeignore`.
+
 ## Key Constraints
 
 - **No manual token pasting by default** — Copilot SDK auto-authenticates
@@ -125,7 +145,8 @@ Agent can request:
 - Don't add custom tools that mutate state — tools must be read-only
 - Don't skip bot detection — filtered bots skew analysis
 - Don't hardcode git limits — large repos need configurable thresholds
-- Don't use inline styles in webview — CSP blocks them
+- Don't use inline styles in webview — CSP blocks them (see Runtime Guardrails above)
+- Don't bundle ESM-only packages with webpack — use `webpackIgnore` dynamic import (see Runtime Guardrails above)
 
 ## Docs
 
