@@ -6,6 +6,14 @@ Transform your repository into a team expertise map. Discover who knows what, re
 
 [![VS Marketplace version](https://vsmarketplacebadges.dev/version-short/AndreaGriffiths.teamxray.svg)](https://marketplace.visualstudio.com/items?itemName=AndreaGriffiths.teamxray)
 
+## Explainer video
+
+A 90-second walkthrough of what Team X-Ray does, how the parts fit, and the fallback decision under the hood. Captions in English.
+
+<video src="https://github.com/user-attachments/assets/15f95123-0c58-4b4d-852f-ee3fcb0980a8" controls muted playsinline width="720">
+  Your browser does not support HTML5 video. <a href="https://github.com/user-attachments/assets/15f95123-0c58-4b4d-852f-ee3fcb0980a8">Download the explainer</a>.
+</video>
+
 ## Features
 
 - **🔍 File Expert Discovery** — Right-click any file to find who knows it best
