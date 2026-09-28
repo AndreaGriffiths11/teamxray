@@ -44,16 +44,18 @@ Each tool is defined with `defineTool` and validated with Zod schemas. The agent
 When you run an analysis, Team X-Ray uses this order:
 
 ```
-Copilot SDK session (default or BYOK override) → GitHub Models API → Reduced local fallback
+Copilot SDK session (default or BYOK override) → GitHub Models API (deprecated) → Reduced local fallback
 ```
 
 | Step | Condition to activate | What happens on failure |
 |------|----------------------|------------------------|
 | Copilot SDK session | CLI installed + authenticated; `teamxray.aiProvider` selects default Copilot or BYOK override | Falls through to GitHub Models |
-| GitHub Models | GitHub token with `models: read` | Falls through to reduced local fallback |
+| GitHub Models (deprecated) | GitHub token with `models: read` | Falls through to reduced local fallback |
 | Reduced local fallback | Always available | Returns git-derived analysis when AI output cannot be produced |
 
 BYOK is a Copilot session configuration, not a separate fallback tier. If the configured Copilot/BYOK session fails, Team X-Ray falls through to GitHub Models, then to the reduced local fallback.
+
+GitHub Models is deprecated. The step stays in the chain until the code path is removed; use BYOK for models outside Copilot.
 
 ## Agent & Bot Detection
 
