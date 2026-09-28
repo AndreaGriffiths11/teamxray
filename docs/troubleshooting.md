@@ -2,7 +2,7 @@
 
 ## "No AI provider available"
 
-Team X-Ray could not start the Copilot SDK and did not have a GitHub token available for the GitHub Models fallback. Your options:
+Team X-Ray could not start the Copilot SDK and did not have a GitHub token available for the deprecated GitHub Models fallback. Your options:
 
 1. Install and authenticate the Copilot CLI:
    ```bash
@@ -10,7 +10,7 @@ Team X-Ray could not start the Copilot SDK and did not have a GitHub token avail
    copilot auth login
    ```
 2. If the CLI is installed outside your PATH, set an absolute `teamxray.cliPath` in user or remote settings.
-3. Run `Team X-Ray: Set GitHub Token` from the Command Palette.
+3. Run `Team X-Ray: Set GitHub Token` from the Command Palette. This uses GitHub Models, which is deprecated; prefer options 1 and 2.
 
 ## Copilot SDK Not Detected
 
@@ -57,6 +57,8 @@ Almost always a `byokBaseUrl` mistake.
 If you're behind a corporate proxy or gateway, confirm the gateway path matches what the provider's SDK expects, not just the hostname.
 
 ## GitHub Models reports a model error
+
+GitHub Models is deprecated. For models outside Copilot, switch to BYOK (see [AI Providers](ai-providers.md#byok-provider-overrides)).
 
 The selected model ID is unavailable to your token or no longer appears in the catalog.
 

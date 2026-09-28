@@ -13,7 +13,7 @@ Rules for the core analysis engine. This is the most sensitive part of the codeb
 - Every function that processes git data needs a test in `__tests__/`
 - **80% coverage is required** — CI blocks PRs below this threshold, don't open one
 - Use real fixture data from actual git repos, not hand-crafted mocks that can't catch real edge cases
-- `copilot-service.ts` tests must cover the fallback chain: Copilot SDK → GitHub Models → local git-only
+- `copilot-service.ts` tests must cover the fallback chain: Copilot SDK → GitHub Models (deprecated, still in code) → local git-only
 
 ## Worker Threads
 

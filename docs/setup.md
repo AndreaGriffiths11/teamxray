@@ -19,7 +19,7 @@ Or search "Team X-Ray" in the Extensions sidebar.
 
 ## AI Provider Setup
 
-Team X-Ray gathers local git data first, then runs AI analysis through the Copilot SDK when available. GitHub Models is the non-Copilot fallback, and a reduced local analysis is used only when AI output cannot be produced.
+Team X-Ray gathers local git data first, then runs AI analysis through the Copilot SDK when available. For models outside Copilot, use BYOK. A reduced local analysis is used only when AI output cannot be produced. GitHub Models is deprecated but still runs as a fallback if a GitHub token is saved.
 
 ### Option 1: Copilot SDK (recommended)
 
@@ -40,7 +40,9 @@ Use BYOK to route analysis through your own OpenAI, Anthropic, or Azure OpenAI k
 
 See [AI Providers → BYOK provider overrides](ai-providers.md#byok-provider-overrides) for the full setup, provider-specific `byokBaseUrl` values, and an end-to-end example.
 
-### Option 3: GitHub Models
+### Option 3: GitHub Models (deprecated)
+
+> **Deprecated.** Use Option 2 (BYOK) for new setups. This option still works until the code path is removed.
 
 Open the Command Palette and run:
 
@@ -60,9 +62,9 @@ There is no separate "local-only" provider to configure in the normal success pa
 
 | Setting | Description | Default |
 |---------|-------------|---------|
-| `teamxray.aiProvider` | Provider setting: `copilot`, `byok-openai`, `byok-anthropic`, `byok-azure`, `github-models` | `copilot` |
+| `teamxray.aiProvider` | Provider setting: `copilot`, `byok-openai`, `byok-anthropic`, `byok-azure`, `github-models` (deprecated) | `copilot` |
 | `teamxray.cliPath` | Absolute path to the Copilot CLI executable when it is not available on your PATH; user or remote settings only | auto-detect |
 | `teamxray.copilotModel` | Optional Copilot model ID; leave empty to use the Copilot CLI default | — |
-| `teamxray.githubModelsModel` | GitHub Models catalog ID for direct or fallback analysis | `openai/gpt-4.1` |
+| `teamxray.githubModelsModel` | Deprecated. GitHub Models catalog ID for direct or fallback analysis | `openai/gpt-4.1` |
 | `teamxray.byokModel` | Required model override for BYOK providers (e.g. `gpt-4o`, `claude-sonnet-4-5-20250929`) | — |
 | `teamxray.byokBaseUrl` | Custom API endpoint for BYOK (useful for proxies or Azure deployments) | — |

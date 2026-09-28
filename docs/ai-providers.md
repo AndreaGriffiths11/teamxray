@@ -1,12 +1,12 @@
 # AI Providers
 
-Team X-Ray analyzes local git data and then chooses the AI path that the current implementation supports. The main flow is Copilot SDK first, GitHub Models fallback second, with a reduced local fallback only if AI output cannot be produced.
+Team X-Ray analyzes local git data and then chooses the AI path that the current implementation supports. The main flow is the Copilot SDK, with your Copilot subscription or your own key (BYOK), and a reduced local fallback only if AI output cannot be produced. GitHub Models is deprecated: it still runs as a fallback when the Copilot SDK fails and a GitHub token is saved.
 
 | Mode | Setting value | What it does | Requirements |
 |------|---------------|--------------|--------------|
 | Copilot SDK | `copilot` | Default analysis path with custom tools over local repo data | Copilot CLI installed + authenticated; set `teamxray.cliPath` if needed |
 | BYOK via Copilot SDK | `byok-openai`, `byok-anthropic`, `byok-azure` | Applies a provider override to the Copilot SDK session | Copilot CLI, `Team X-Ray: Set BYOK API Key (Secure)`, `teamxray.byokBaseUrl`, `teamxray.byokModel` |
-| GitHub Models | `github-models` | Uses your GitHub token directly when selected, or as the fallback when Copilot analysis fails | `Team X-Ray: Set GitHub Token` |
+| GitHub Models (deprecated) | `github-models` | Deprecated. Uses your GitHub token directly when selected, or as the fallback when Copilot analysis fails | `Team X-Ray: Set GitHub Token` |
 | Reduced local fallback | — | Builds a basic git-derived analysis if AI output fails | No extra setup |
 
 ## Copilot SDK
@@ -76,7 +76,9 @@ The `teamxray.byokApiKey` setting is deprecated because settings JSON is plainte
 
 The extension only reads API keys from SecretStorage.
 
-## GitHub Models
+## GitHub Models (deprecated)
+
+> **Deprecated.** GitHub Models is deprecated. For models outside Copilot, use [BYOK](#byok-provider-overrides) instead. This section describes the code path that still ships until it is removed.
 
 Set `teamxray.aiProvider` to `github-models` to use the GitHub Models API directly. With `copilot` or a `byok-*` value, GitHub Models remains the fallback when the Copilot SDK cannot complete analysis.
 

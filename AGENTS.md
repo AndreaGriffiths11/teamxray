@@ -48,10 +48,12 @@ Agent can request:
 | 2 | **BYOK OpenAI** | Set API key via command | `teamxray.byokBaseUrl`, `teamxray.byokModel` |
 | 3 | **BYOK Anthropic** | Set API key via command | `teamxray.byokBaseUrl`, `teamxray.byokModel` |
 | 4 | **BYOK Azure** | Set API key + endpoint | `teamxray.byokBaseUrl`, `teamxray.byokModel` |
-| 5 | **GitHub Models** | GitHub token (PAT) | Requires `teamxray.aiProvider = github-models` |
+| 5 | **GitHub Models (deprecated)** | GitHub token (PAT) | Still in code. Don't present it as an option for new users; point them to BYOK |
 | 6 | **Local git-only** | No AI | Reduced analysis (no insights, just ownership) |
 
-**Auto-fallback:** Copilot SDK → GitHub Models (if token set) → Local git-only
+**Auto-fallback:** Copilot SDK (default or BYOK) → GitHub Models (deprecated, only if a token is set) → Local git-only
+
+GitHub Models is deprecated. Docs describe it as deprecated; the code path stays until it is removed.
 
 ## Features
 
@@ -70,7 +72,7 @@ Agent can request:
 | `Team X-Ray: Show Team Expertise Overview` | Display cached analysis |
 | `Team X-Ray: Analyze This File` | File-specific ownership |
 | `Team X-Ray: Find Expert for This File` | Right-click context menu |
-| `Team X-Ray: Set GitHub Token` | For GitHub Models fallback |
+| `Team X-Ray: Set GitHub Token` | Deprecated. GitHub Models fallback only |
 | `Team X-Ray: Set BYOK API Key (Secure)` | For BYOK providers |
 
 ## ⚠️ Runtime Guardrails — Read Before Touching These Areas
@@ -124,7 +126,7 @@ If adding any other ESM-only package, apply the same pattern and whitelist it in
 | `teamxray.cliPath` | (auto) | Copilot CLI path (if not on PATH) |
 | `teamxray.aiProvider` | `copilot` | AI provider mode |
 | `teamxray.copilotModel` | (auto) | Optional Copilot model override |
-| `teamxray.githubModelsModel` | `openai/gpt-4.1` | GitHub Models catalog ID for direct or fallback analysis |
+| `teamxray.githubModelsModel` | `openai/gpt-4.1` | Deprecated. GitHub Models catalog ID for direct or fallback analysis |
 | `teamxray.byokBaseUrl` | (empty) | BYOK endpoint URL |
 | `teamxray.byokModel` | (empty) | BYOK model name |
 | `teamxray.maxCommits` | 1000 | Max commits to analyze |
