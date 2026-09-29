@@ -238,7 +238,7 @@
     "@vscode/vsce": "^3.7.1",
     "autoevals": "^0.0.132",
     "eslint": "^9.25.1",
-    "evalite": "^0.4.0",
+    "evalite": "^0.19.0",
     "mocha": "^11.3.0",
     "rimraf": "^6.0.1",
     "ts-loader": "^9.5.2",
@@ -248,7 +248,26 @@
     "webpack-cli": "^6.0.1"
   },
   "overrides": {
-    "serialize-javascript": "^7.0.5"
+    "serialize-javascript": "^7.0.5",
+    "@fastify/static": "^10.1.5",
+    "file-type": "^21.3.1",
+    "qs": "^6.16.0",
+    "undici": "^7.30.0",
+    "minimatch@3.1.5": {
+      "brace-expansion": "^1.1.21"
+    },
+    "minimatch@5.1.9": {
+      "brace-expansion": "^2.1.7"
+    },
+    "minimatch@9.0.9": {
+      "brace-expansion": "^2.1.7"
+    },
+    "minimatch@10.2.4": {
+      "brace-expansion": "^5.0.12"
+    },
+    "minimatch@10.2.5": {
+      "brace-expansion": "^5.0.12"
+    }
   },
   "dependencies": {
     "@github/copilot-sdk": "^0.1.32",
