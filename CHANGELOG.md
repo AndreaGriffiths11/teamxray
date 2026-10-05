@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.4] - 2026-10-05
+
+### 📝 Documentation
+- Added an explainer video to the README.
+- Marked the GitHub Models provider as deprecated across the README, `docs/`, and `AGENTS.md`, and pointed new users to BYOK. The existing fallback still runs when a GitHub token is saved.
+- Added scoped `AGENTS.md` files for `src/`, `src/core/`, `src/types/`, `src/utils/`, and `evals/`, and moved the runtime guardrails (webview CSP, Copilot SDK ESM import) to the top of the root `AGENTS.md`.
+
+### 🔧 Infrastructure
+- CI now runs `npm audit --include=dev --audit-level=moderate` as an enforced gate over the full dependency tree, replacing the production-only dry run.
+- Cleared all moderate and higher npm audit findings: upgraded Evalite to 0.19 and added scoped overrides for `brace-expansion`, `qs`, `undici`, `file-type`, and `@fastify/static`.
+
+### Dependencies
+- Updated Vitest and `@vitest/mocker` to 4.1.11.
+- Updated development dependencies `js-yaml` (4.3.2), `undici` (7.29.0), and `fast-uri` (3.1.5), and consolidated the September lockfile updates.
+
 ## [2.1.3] - 2026-08-12
 
 ### 🐛 Bug Fixes
