@@ -1,0 +1,53 @@
+name: Cache audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      enable-recommendations:
+        description: Send cache audit evidence to Copilot for read-only recommendations
+        type: boolean
+        default: false
+      lookback-runs:
+        description: Maximum completed repository runs to inspect
+        type: string
+        default: "50"
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Validate Copilot configuration
+        if: ${{ inputs.enable-recommendations }}
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+        run: |
+          if [[ -z "$COPILOT_GITHUB_TOKEN" ]]; then
+            echo "::error::Configure the COPILOT_GITHUB_TOKEN Actions secret before enabling recommendations."
+            exit 1
+          fi
+      - name: Set up Node.js
+        if: ${{ inputs.enable-recommendations }}
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Install pinned Copilot CLI
+        if: ${{ inputs.enable-recommendations }}
+        run: |
+          npm install --global @github/copilot@1.0.97 --no-audit --no-fund
+          copilot --no-auto-update --version
+      - name: Audit Team Xray caches
+        uses: AndreaGriffiths11/cache-xray@b93c6b40632f098d70d78a3c2ba3ed3a2c214d72
+        with:
+          github-token: ${{ github.token }}
+          lookback-runs: ${{ inputs.lookback-runs }}
+          enable-classification: "false"
+          enable-recommendations: ${{ inputs.enable-recommendations }}
+          report-mode: job-summary
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ inputs.enable-recommendations && secrets.COPILOT_GITHUB_TOKEN || '' }}
