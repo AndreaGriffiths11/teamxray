@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-10-28
+
+### 🔧 Infrastructure
+- Added a manually triggered Cache audit workflow that reports GitHub Actions cache usage in the job summary. It can optionally send the audit evidence to Copilot for read-only recommendations when the `COPILOT_GITHUB_TOKEN` secret is configured.
+
+### Dependencies
+- Updated development dependency `source-map-js` to 1.2.2.
+
 ## [2.1.4] - 2026-10-05
 
 ### 📝 Documentation
