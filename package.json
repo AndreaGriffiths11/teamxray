@@ -236,7 +236,7 @@
     "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "^4.0.0",
-    "autoevals": "^0.0.132",
+    "autoevals": "^0.4.1",
     "eslint": "^9.25.1",
     "evalite": "^0.19.0",
     "mocha": "^11.3.0",
