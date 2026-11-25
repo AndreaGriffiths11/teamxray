@@ -65,11 +65,26 @@ jobs:
         
     - name: Check for sensitive data
       run: |
-        # Check for potential secrets or API keys
-        if grep -r "ghp_\|github_pat_\|sk-" src/ --exclude-dir=node_modules || true; then
-          echo "⚠️  Potential secrets detected in source code"
-          echo "Please ensure no API keys are committed"
+        # Fail on secret-shaped tokens only. Code that merely mentions a prefix
+        # (validation.ts checks startsWith('ghp_'), the CSS class `risk-score`
+        # contains `sk-`) must not match, so each prefix is anchored on a word
+        # boundary and must be followed by a realistic token body:
+        #   gh[pousr]_  + 36+ [A-Za-z0-9]   GitHub classic PAT / OAuth / app tokens
+        #   github_pat_ + 80+ [A-Za-z0-9_]  GitHub fine-grained PAT
+        #   sk-         + 20+ [A-Za-z0-9_-] OpenAI / Anthropic style API keys
+        PATTERN='\b(gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{80,}|sk-[A-Za-z0-9_-]{20,})'
+        STATUS=0
+        MATCHES=$(grep -rEn "$PATTERN" src/ --exclude-dir=node_modules) || STATUS=$?
+        if [ "$STATUS" -eq 0 ]; then
+          echo "❌ Potential secrets detected in source code:"
+          echo "$MATCHES"
+          echo "Remove the credential from src/ and rotate it if it was ever valid."
+          exit 1
+        elif [ "$STATUS" -ne 1 ]; then
+          echo "❌ Secret scan failed to run (grep exit code $STATUS)"
+          exit "$STATUS"
         fi
+        echo "✅ No secret-shaped tokens found in src/"
         
     - name: Extension size check
       run: |
